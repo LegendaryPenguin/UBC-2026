@@ -114,6 +114,17 @@ export interface VenueOrder {
   createdAt: string;
 }
 
+export interface GeminiConnection {
+  accountId: string;
+  clientId: string;
+  accessTokenCiphertext: string;
+  refreshTokenCiphertext: string;
+  scopes: string[];
+  expiresAt: string;
+  connectedAt: string;
+  updatedAt: string;
+}
+
 export interface ExportJob {
   id: string;
   accountId: string;
@@ -147,6 +158,7 @@ export interface StoreShape {
   comments: Comment[];
   funding: FundingIntent[];
   orders: VenueOrder[];
+  geminiConnections: GeminiConnection[];
   exports: ExportJob[];
   maker: MakerPolicy;
   nonce: number;
@@ -174,6 +186,7 @@ function empty(): StoreShape {
     comments: [],
     funding: [],
     orders: [],
+    geminiConnections: [],
     exports: [],
     maker: { spreadBps: 400, paused: false, familyCaps: {} },
     nonce: 1,
@@ -194,6 +207,7 @@ function load(): StoreShape {
       ...stored,
       maker: { ...defaults.maker, ...(stored.maker || {}) },
       thesisHistory: stored.thesisHistory || [],
+      geminiConnections: stored.geminiConnections || [],
     };
   } catch {
     mem = empty();
