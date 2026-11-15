@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 
 const STATE_COOKIE = "gemini_oauth_state";
 const VERIFIER_COOKIE = "gemini_oauth_verifier";
+const ACCOUNT_COOKIE = "gemini_oauth_account";
 const FLOW_MAX_AGE = 600;
 
 function cookieOptions(maxAge: number) {
@@ -30,6 +31,7 @@ function cookieOptions(maxAge: number) {
 function clearFlowCookies() {
   cookies().set(STATE_COOKIE, "", cookieOptions(0));
   cookies().set(VERIFIER_COOKIE, "", cookieOptions(0));
+  cookies().set(ACCOUNT_COOKIE, "", cookieOptions(0));
 }
 
 function publicConnection(accountId: string) {
@@ -72,6 +74,7 @@ export async function POST(req: Request) {
       const authorizationUrl = buildAuthorizationUrl(state, verifier, access === "trade");
       cookies().set(STATE_COOKIE, state, cookieOptions(FLOW_MAX_AGE));
       cookies().set(VERIFIER_COOKIE, verifier, cookieOptions(FLOW_MAX_AGE));
+      cookies().set(ACCOUNT_COOKIE, ctx.account.id, cookieOptions(FLOW_MAX_AGE));
       return ok({ authorizationUrl, access });
     } catch (error) {
       return fail("GEMINI_OAUTH_NOT_CONFIGURED", error instanceof Error ? error.message : "Gemini OAuth is not configured", 503);
@@ -81,8 +84,9 @@ export async function POST(req: Request) {
   if (body.action === "callback") {
     const expectedState = cookies().get(STATE_COOKIE)?.value || "";
     const verifier = cookies().get(VERIFIER_COOKIE)?.value || "";
+    const expectedAccountId = cookies().get(ACCOUNT_COOKIE)?.value || "";
     clearFlowCookies();
-    if (!body.code || !body.state || !expectedState || !verifier) return fail("GEMINI_OAUTH_STATE", "The Gemini sign-in expired. Start the connection again.", 400);
+    if (!body.code || !body.state || !expectedState || !verifier || expectedAccountId !== ctx.account.id) return fail("GEMINI_OAUTH_STATE", "The Gemini sign-in expired or the signed-in account changed. Start the connection again.", 400);
     const expected = Buffer.from(expectedState);
     const actual = Buffer.from(body.state);
     if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {

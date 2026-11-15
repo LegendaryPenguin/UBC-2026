@@ -28,6 +28,18 @@ type GeminiOrder = {
   cancelledAt?: string | null;
   contractMetadata?: { eventName?: string; contractName?: string; expiryDate?: string | null };
 };
+type GeminiOrderIntent = {
+  id: string;
+  status: "submitting" | "unknown";
+  ticker: string;
+  symbol: string;
+  side: string;
+  outcome: string;
+  quantity: string;
+  price: string;
+  createdAt: string;
+  message: string;
+};
 
 const TABS: { id: Bucket; label: string }[] = [
   { id: "active", label: "Open / partial" },
@@ -40,6 +52,7 @@ export default function Orders() {
   const [connection, setConnection] = useState<ConnectionStatus | null>(null);
   const [bucket, setBucket] = useState<Bucket>("active");
   const [orders, setOrders] = useState<GeminiOrder[]>([]);
+  const [unresolvedIntents, setUnresolvedIntents] = useState<GeminiOrderIntent[]>([]);
   const [loadingConnection, setLoadingConnection] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [error, setError] = useState("");
@@ -56,14 +69,20 @@ export default function Orders() {
   useEffect(() => {
     if (!connection?.connection?.canReadOrders || bucket === "rejected") {
       setOrders([]);
+      setUnresolvedIntents([]);
       return;
     }
     let current = true;
     setLoadingOrders(true);
     setError("");
-    api<{ orders?: GeminiOrder[] }>(`/api/gemini/orders?bucket=${bucket}`)
-      .then((response) => { if (current) setOrders(response.orders || []); })
-      .catch((err) => { if (current) { setOrders([]); setError(err instanceof Error ? err.message : "Gemini orders could not be loaded"); } })
+    api<{ orders?: GeminiOrder[]; unresolvedIntents?: GeminiOrderIntent[] }>(`/api/gemini/orders?bucket=${bucket}`)
+      .then((response) => {
+        if (current) {
+          setOrders(response.orders || []);
+          setUnresolvedIntents(response.unresolvedIntents || []);
+        }
+      })
+      .catch((err) => { if (current) { setOrders([]); setUnresolvedIntents([]); setError(err instanceof Error ? err.message : "Gemini orders could not be loaded"); } })
       .finally(() => { if (current) setLoadingOrders(false); });
     return () => { current = false; };
   }, [connection, bucket]);
@@ -79,8 +98,9 @@ export default function Orders() {
         body: JSON.stringify({ action: "cancel", orderId }),
       });
       setNotice(response.message);
-      const refreshed = await api<{ orders?: GeminiOrder[] }>("/api/gemini/orders?bucket=active");
+      const refreshed = await api<{ orders?: GeminiOrder[]; unresolvedIntents?: GeminiOrderIntent[] }>("/api/gemini/orders?bucket=active");
       setOrders(refreshed.orders || []);
+      setUnresolvedIntents(refreshed.unresolvedIntents || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gemini could not cancel this order");
     } finally {
@@ -94,8 +114,9 @@ export default function Orders() {
     if (!connection?.connection?.canReadOrders || bucket === "rejected") return;
     setLoadingOrders(true);
     try {
-      const response = await api<{ orders?: GeminiOrder[] }>(`/api/gemini/orders?bucket=${bucket}`);
+      const response = await api<{ orders?: GeminiOrder[]; unresolvedIntents?: GeminiOrderIntent[] }>(`/api/gemini/orders?bucket=${bucket}`);
       setOrders(response.orders || []);
+      setUnresolvedIntents(response.unresolvedIntents || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gemini orders could not be refreshed");
     } finally {
@@ -138,6 +159,15 @@ export default function Orders() {
               Gemini's REST history endpoint exposes filled and canceled orders. Rejected order events require a live authenticated order stream, which this app has not yet qualified or persisted. No rejected orders are fabricated.
             </Empty>
           ) : null}
+          {bucket === "active" ? unresolvedIntents.map((intent) => (
+            <Card key={intent.id}>
+              <p className="text-xs uppercase tracking-wide text-muted">{intent.status === "unknown" ? "Submission status unknown" : "Submission in progress"} · {intent.ticker}</p>
+              <h2 className="mt-1 font-serif text-xl">{intent.side.toUpperCase()} {intent.outcome.toUpperCase()} · {intent.quantity} at {intent.price}</h2>
+              <p className="mt-1 break-all text-xs text-muted">{intent.symbol} · {formatTime(intent.createdAt)}</p>
+              <p className="mt-2 text-sm">{intent.message}</p>
+              <p className="mt-2 text-xs text-muted">Do not resubmit this intent. Check Gemini's active, filled, or canceled order history before taking another action.</p>
+            </Card>
+          )) : null}
           {bucket !== "rejected" && !loadingOrders && orders.length === 0 ? <Empty title="No orders in this view">Gemini returned no orders for this account and status.</Empty> : null}
 
           <div className="grid gap-3">

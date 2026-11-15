@@ -125,6 +125,22 @@ export interface GeminiConnection {
   updatedAt: string;
 }
 
+export interface GeminiOrderIntent {
+  id: string;
+  accountId: string;
+  symbol: string;
+  ticker: string;
+  side: "buy" | "sell";
+  outcome: "yes" | "no";
+  quantity: string;
+  price: string;
+  status: "submitting" | "accepted" | "rejected" | "unknown";
+  venueOrderId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  message: string;
+}
+
 export interface ExportJob {
   id: string;
   accountId: string;
@@ -159,6 +175,7 @@ export interface StoreShape {
   funding: FundingIntent[];
   orders: VenueOrder[];
   geminiConnections: GeminiConnection[];
+  geminiOrderIntents: GeminiOrderIntent[];
   exports: ExportJob[];
   maker: MakerPolicy;
   nonce: number;
@@ -187,6 +204,7 @@ function empty(): StoreShape {
     funding: [],
     orders: [],
     geminiConnections: [],
+    geminiOrderIntents: [],
     exports: [],
     maker: { spreadBps: 400, paused: false, familyCaps: {} },
     nonce: 1,
@@ -208,6 +226,7 @@ function load(): StoreShape {
       maker: { ...defaults.maker, ...(stored.maker || {}) },
       thesisHistory: stored.thesisHistory || [],
       geminiConnections: stored.geminiConnections || [],
+      geminiOrderIntents: stored.geminiOrderIntents || [],
     };
   } catch {
     mem = empty();

@@ -20,7 +20,7 @@ export async function geminiPrivateRequest<T>(
   let response: Response;
   try {
     response = await fetch(`${BASE}${path}`, {
-      method: path === "/v1/prediction-markets/terms/status" ? "GET" : "POST",
+      method: ["/v1/prediction-markets/terms", "/v1/prediction-markets/terms/status"].includes(path) ? "GET" : "POST",
       headers: {
         authorization: `Bearer ${token}`,
         "x-gemini-payload": payload,
