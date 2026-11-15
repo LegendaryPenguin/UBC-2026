@@ -113,7 +113,7 @@ export default function TopicPage() {
           ))}
         </div>
       </Card>
-      <VoicePanel slug={family.slug} />
+      <VoicePanel slug={family.slug} family={family} evidence={evidence} />
       <div className="flex flex-wrap gap-2">
         <Button onClick={formView} disabled={busy}>{busy ? "Saving draft…" : "Form my view"}</Button>
         <Button href={`/calendar`} kind="ghost">Deadlines</Button>

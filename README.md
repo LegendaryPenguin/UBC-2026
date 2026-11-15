@@ -9,7 +9,9 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Next.js. Choose **Replay** to inspect the recorded Gemini markets. To simulate a position, sign in with a throwaway email and the code shown by the local development app, select **Paper**, then open the BTC topic from Explore. Create and confirm a view, choose a maximum payout, request a simulated quote, inspect its terms, and accept it. Portfolio shows paper positions. To walk through settlement, repeat with the archived XRP topic and claim the paper payout after acceptance. The local store lives in `.data/`.
+Open the local URL printed by Next.js. Choose **Replay** to inspect the recorded Gemini markets. On a topic page, the voice panel can record a question, transcribe it with ElevenLabs, and read the written research reply aloud. Microphone permission is requested only when you start recording. Audio is sent to ElevenLabs for transcription and is not saved by this app. Provider logging follows your ElevenLabs account settings.
+
+To simulate a position, sign in with a throwaway email and the code shown by the local development app, select **Paper**, then open the BTC topic from Explore. Create and confirm a view, choose a maximum payout, request a simulated quote, inspect its terms, and accept it. Portfolio shows paper positions. To walk through settlement, repeat with the archived XRP topic and claim the paper payout after acceptance. The local store lives in `.data/`.
 
 ```sh
 npm run typecheck
@@ -25,7 +27,7 @@ A payoff table sets a USDC payout for each mutually exclusive outcome. The escro
 
 Arc testnet uses chain ID `5042002`. The verified USDC ERC-20 interface at `0x3600000000000000000000000000000000000000` uses six decimals. Native gas uses 18 decimals. The escrow address and end-to-end deployment remain unverified. [Arc testnet configuration](https://docs.arc.io/arc/references/connect-to-arc)
 
-Live quotes and position recording require a qualified Gemini family, a funded Arc escrow, and verified receipt reconciliation. The local walkthrough uses archived Gemini data and simulated positions. See [integration qualification](docs/qualification.md) for the verification record.
+Live quotes and position recording require a qualified Gemini family, a funded Arc escrow, and verified receipt reconciliation. The local walkthrough uses archived Gemini data and simulated positions. Voice requires `ELEVENLABS_API_KEY` in your ignored local `.env.local` file. The local integration uses ElevenLabs speech to text and text to speech, with editable transcripts and a written equivalent. See [integration qualification](docs/qualification.md) for the verification record.
 
 ## References
 
