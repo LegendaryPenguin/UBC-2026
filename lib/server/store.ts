@@ -150,6 +150,22 @@ export interface ExportJob {
   href: string;
 }
 
+export interface ResolutionReport {
+  id: string;
+  positionId: string;
+  action: "proposed" | "corrected" | "finalized" | "voided";
+  ticker: string;
+  sourceEventId: string;
+  sourceFetchedAt: string | null;
+  payloadHash: string | null;
+  evidenceHash: string | null;
+  scenarioIndex: number | null;
+  scenarioLabel: string | null;
+  transactionHash: string | null;
+  createdAt: string;
+  sourceSnapshot?: unknown;
+}
+
 export interface MakerPolicy {
   spreadBps: number;
   paused: boolean;
@@ -177,6 +193,9 @@ export interface StoreShape {
   geminiConnections: GeminiConnection[];
   geminiOrderIntents: GeminiOrderIntent[];
   exports: ExportJob[];
+  resolutionReports: ResolutionReport[];
+  streamNonces: { nonce: string; receivedAt: string }[];
+  streamEvents: { key: string; transactionHash: string; eventName: string; positionId: string; at: string }[];
   maker: MakerPolicy;
   nonce: number;
   incidents: { id: string; title: string; body: string; at: string; state: string }[];
@@ -206,6 +225,9 @@ function empty(): StoreShape {
     geminiConnections: [],
     geminiOrderIntents: [],
     exports: [],
+    resolutionReports: [],
+    streamNonces: [],
+    streamEvents: [],
     maker: { spreadBps: 400, paused: false, familyCaps: {} },
     nonce: 1,
     incidents: [],
@@ -227,6 +249,9 @@ function load(): StoreShape {
       thesisHistory: stored.thesisHistory || [],
       geminiConnections: stored.geminiConnections || [],
       geminiOrderIntents: stored.geminiOrderIntents || [],
+      resolutionReports: stored.resolutionReports || [],
+      streamNonces: stored.streamNonces || [],
+      streamEvents: stored.streamEvents || [],
     };
   } catch {
     mem = empty();

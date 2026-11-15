@@ -128,6 +128,8 @@ export default function QuotePage() {
             issuedAt: BigInt(fresh.quote.issuedAt),
             deadline: BigInt(fresh.quote.deadline),
             chainId: BigInt(fresh.quote.chainId),
+            longstop: BigInt(fresh.quote.longstop),
+            finalizationDelay: fresh.quote.finalizationDelay,
           },
           fresh.quote.payouts.map((payout) => BigInt(payout)),
           fresh.quote.signature,
@@ -204,6 +206,8 @@ export default function QuotePage() {
           <li>Maximum loss is that total if every scenario pays 0.</li>
           <li>Maximum payout {formatUsdc(BigInt(quote.maxPayout))} USDC if the winning scenario is fully funded.</li>
           <li>Deadline {new Date(quote.deadline * 1000).toISOString()}</li>
+          <li>Settlement longstop {quote.longstop ? new Date(quote.longstop * 1000).toISOString() : "not applicable to simulation"}.</li>
+          {quote.signature !== "0x" ? <li>A proposed result has a {Math.ceil(quote.finalizationDelay / 3600)} hour correction window. After the delay, anyone may finalize before the longstop; any still-open position is refundable at the longstop.</li> : null}
           {quote.signature === "0x" ? <li>Simulation using recorded market data.</li> : <li>Chain {quote.chainId} · escrow {quote.escrow}</li>}
         </ul>
         <table className="mt-4 w-full text-sm">

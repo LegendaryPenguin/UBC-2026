@@ -8,6 +8,7 @@ import { fail, ok, readJson } from "@/lib/server/http";
 import { currentSession, thesisOwner } from "@/lib/server/session";
 import { mutate, uid } from "@/lib/server/store";
 import { publicEscrow, publicUsdc, publicChainId } from "@/lib/chain";
+import { DEFAULT_FINALIZATION_DELAY_SECONDS } from "@/lib/escrow/policy";
 import type { SignedQuote } from "@/lib/domain/types";
 import { isAddress, zeroAddress } from "viem";
 
@@ -35,6 +36,8 @@ export async function POST(req: Request) {
   const live = body.mode === "live";
   const family = await getTopic(thesis.topicSlug, live ? "live" : "replay");
   if (!family) return fail("UNSUPPORTED_FAMILY", "Family unavailable");
+  const longstop = family.longstopTime ? Math.floor(Date.parse(family.longstopTime) / 1000) : 0;
+  const finalizationDelay = DEFAULT_FINALIZATION_DELAY_SECONDS;
   const escrow = publicEscrow();
   const key = process.env.MAKER_PRIVATE_KEY as `0x${string}` | undefined;
   if (live) {
@@ -43,6 +46,9 @@ export async function POST(req: Request) {
     }
     if (!family.quotesAvailable || family.freshness !== "fresh") {
       return fail("UNAVAILABLE", "This market's settlement rules and current quote eligibility have not been verified.", 503);
+    }
+    if (!Number.isFinite(longstop) || longstop <= Math.floor(Date.now() / 1000) + finalizationDelay) {
+      return fail("SOURCE_UNRESOLVED", "This market has no future settlement longstop with enough time for the correction window.", 503);
     }
     if (!escrow || !key) return fail("UNAVAILABLE", capabilities().maker.reason, 503);
   }
@@ -82,6 +88,8 @@ export async function POST(req: Request) {
         nonce,
         payouts: spec.rows.map((r) => r.payout),
         scenarioLabels: spec.rows.map((r) => r.label),
+        longstop,
+        finalizationDelay,
       });
     } else {
       quote = {
@@ -100,6 +108,8 @@ export async function POST(req: Request) {
         issuedAt: Math.floor(Date.now() / 1000),
         deadline: Math.floor(Date.now() / 1000) + 600,
         chainId: publicChainId(),
+        longstop,
+        finalizationDelay,
         signature: "0x",
         payouts: spec.rows.map((r) => r.payout.toString()),
         scenarioLabels: spec.rows.map((r) => r.label),

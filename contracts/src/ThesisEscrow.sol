@@ -20,8 +20,10 @@ contract ThesisEscrow {
     uint256 public nextId = 1;
 
     bytes32 public constant QUOTE_TYPEHASH = keccak256(
-        "Quote(address maker,address taker,address escrow,address token,bytes32 familyHash,bytes32 payoffHash,uint256 maxPayout,uint256 premium,uint256 fee,uint256 nonce,uint256 issuedAt,uint256 deadline,uint256 chainId)"
+        "Quote(address maker,address taker,address escrow,address token,bytes32 familyHash,bytes32 payoffHash,uint256 maxPayout,uint256 premium,uint256 fee,uint256 nonce,uint256 issuedAt,uint256 deadline,uint256 chainId,uint64 longstop,uint32 finalizationDelay)"
     );
+
+    uint32 public constant FINALIZATION_DELAY = 1 hours;
 
     struct Quote {
         address maker;
@@ -37,6 +39,8 @@ contract ThesisEscrow {
         uint256 issuedAt;
         uint256 deadline;
         uint256 chainId;
+        uint64 longstop;
+        uint32 finalizationDelay;
     }
 
     enum Status {
@@ -61,6 +65,11 @@ contract ThesisEscrow {
         uint32 scenarioIndex;
         Status status;
         uint256 payoutCount;
+        uint64 longstop;
+        uint32 finalizationDelay;
+        uint32 proposedScenarioIndex;
+        uint64 proposedAt;
+        bytes32 proposalEvidenceHash;
     }
 
     mapping(uint256 => Position) public positions;
@@ -73,7 +82,8 @@ contract ThesisEscrow {
     event CollateralDeposited(address indexed maker, uint256 amount);
     event CollateralWithdrawn(address indexed maker, uint256 amount);
     event QuoteAccepted(uint256 indexed id, address indexed maker, address indexed taker, bytes32 payoffHash, uint256 premium, uint256 maxPayout);
-    event Resolved(uint256 indexed id, uint32 scenarioIndex, uint256 buyerPayout);
+    event OutcomeProposed(uint256 indexed id, uint32 scenarioIndex, bytes32 evidenceHash, uint64 proposedAt, uint64 finalizesAt);
+    event Resolved(uint256 indexed id, uint32 scenarioIndex, uint256 buyerPayout, bytes32 evidenceHash);
     event Voided(uint256 indexed id);
     event Claimed(uint256 indexed id, address indexed to, uint256 amount);
     event BoughtBack(uint256 indexed id, uint256 proceeds);
@@ -94,6 +104,9 @@ contract ThesisEscrow {
     error WrongStatus();
     error TransferFailed();
     error NothingToClaim();
+    error SettlementNotReady();
+    error LongstopReached();
+    error BadEvidence();
 
     constructor(address token_, address resolver_, address operator_) {
         require(token_ != address(0) && resolver_ != address(0), "zero");
@@ -171,7 +184,9 @@ contract ThesisEscrow {
                         q.nonce,
                         q.issuedAt,
                         q.deadline,
-                        q.chainId
+                        q.chainId,
+                        q.longstop,
+                        q.finalizationDelay
                     )
                 )
             )
@@ -182,6 +197,10 @@ contract ThesisEscrow {
         if (q.escrow != address(this) || q.token != address(token) || q.chainId != block.chainid) revert BadQuote();
         if (q.taker != address(0) && q.taker != msg.sender) revert BadQuote();
         if (q.maxPayout == 0 || q.deadline < block.timestamp) revert Expired();
+        if (
+            q.finalizationDelay != FINALIZATION_DELAY ||
+            q.longstop <= block.timestamp + q.finalizationDelay || q.deadline >= q.longstop
+        ) revert BadQuote();
         if (usedNonce[q.maker][q.nonce]) revert UsedNonce();
         if (pausedMakers[q.maker]) revert Paused();
         if (schedule.length == 0) revert BadPayouts();
@@ -221,25 +240,42 @@ contract ThesisEscrow {
         p.acceptedAt = uint64(block.timestamp);
         p.status = Status.Open;
         p.payoutCount = schedule.length;
+        p.longstop = q.longstop;
+        p.finalizationDelay = q.finalizationDelay;
         for (uint256 i; i < schedule.length; i++) {
             payouts[id][i] = schedule[i];
         }
         emit QuoteAccepted(id, q.maker, msg.sender, q.payoffHash, q.premium, q.maxPayout);
     }
 
-    function resolve(uint256 id, uint32 scenarioIndex) external onlyResolver {
+    function proposeOutcome(uint256 id, uint32 scenarioIndex, bytes32 evidenceHash) external onlyResolver {
         Position storage p = positions[id];
         if (p.status != Status.Open) revert WrongStatus();
         if (scenarioIndex >= p.payoutCount) revert BadPayouts();
-        p.status = Status.Resolved;
-        p.scenarioIndex = scenarioIndex;
-        p.resolvedAt = uint64(block.timestamp);
-        emit Resolved(id, scenarioIndex, payouts[id][scenarioIndex]);
+        if (evidenceHash == bytes32(0)) revert BadEvidence();
+        uint256 finalizeAt = block.timestamp + p.finalizationDelay;
+        if (finalizeAt >= p.longstop) revert LongstopReached();
+        p.proposedScenarioIndex = scenarioIndex;
+        p.proposedAt = uint64(block.timestamp);
+        p.proposalEvidenceHash = evidenceHash;
+        emit OutcomeProposed(id, scenarioIndex, evidenceHash, p.proposedAt, uint64(finalizeAt));
     }
 
-    function voidPosition(uint256 id) external onlyResolver {
+    function finalizeOutcome(uint256 id) external {
         Position storage p = positions[id];
         if (p.status != Status.Open) revert WrongStatus();
+        if (p.proposedAt == 0 || block.timestamp < uint256(p.proposedAt) + p.finalizationDelay) revert SettlementNotReady();
+        if (block.timestamp >= p.longstop) revert LongstopReached();
+        p.status = Status.Resolved;
+        p.scenarioIndex = p.proposedScenarioIndex;
+        p.resolvedAt = uint64(block.timestamp);
+        emit Resolved(id, p.scenarioIndex, payouts[id][p.scenarioIndex], p.proposalEvidenceHash);
+    }
+
+    function voidPosition(uint256 id) external {
+        Position storage p = positions[id];
+        if (p.status != Status.Open) revert WrongStatus();
+        if (block.timestamp < p.longstop) revert SettlementNotReady();
         p.status = Status.Voided;
         p.resolvedAt = uint64(block.timestamp);
         emit Voided(id);

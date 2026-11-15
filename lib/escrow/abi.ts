@@ -18,6 +18,11 @@ export const escrowAbi = [
       { name: "scenarioIndex", type: "uint32" },
       { name: "status", type: "uint8" },
       { name: "payoutCount", type: "uint256" },
+      { name: "longstop", type: "uint64" },
+      { name: "finalizationDelay", type: "uint32" },
+      { name: "proposedScenarioIndex", type: "uint32" },
+      { name: "proposedAt", type: "uint64" },
+      { name: "proposalEvidenceHash", type: "bytes32" },
     ],
   },
   {
@@ -49,6 +54,8 @@ export const escrowAbi = [
           { name: "issuedAt", type: "uint256" },
           { name: "deadline", type: "uint256" },
           { name: "chainId", type: "uint256" },
+          { name: "longstop", type: "uint64" },
+          { name: "finalizationDelay", type: "uint32" },
         ],
       },
       { name: "schedule", type: "uint256[]" },
@@ -59,6 +66,38 @@ export const escrowAbi = [
   {
     type: "function",
     name: "claim",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "proposeOutcome",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "id", type: "uint256" },
+      { name: "scenarioIndex", type: "uint32" },
+      { name: "evidenceHash", type: "bytes32" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "finalizeOutcome",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "resolver",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "voidPosition",
     stateMutability: "nonpayable",
     inputs: [{ name: "id", type: "uint256" }],
     outputs: [],
@@ -96,6 +135,13 @@ export const escrowAbi = [
   },
   {
     type: "function",
+    name: "reservedCollateral",
+    stateMutability: "view",
+    inputs: [{ name: "maker", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "previewClaim",
     stateMutability: "view",
     inputs: [{ name: "id", type: "uint256" }],
@@ -118,11 +164,23 @@ export const escrowAbi = [
   },
   {
     type: "event",
+    name: "OutcomeProposed",
+    inputs: [
+      { name: "id", type: "uint256", indexed: true },
+      { name: "scenarioIndex", type: "uint32", indexed: false },
+      { name: "evidenceHash", type: "bytes32", indexed: false },
+      { name: "proposedAt", type: "uint64", indexed: false },
+      { name: "finalizesAt", type: "uint64", indexed: false },
+    ],
+  },
+  {
+    type: "event",
     name: "Resolved",
     inputs: [
       { name: "id", type: "uint256", indexed: true },
       { name: "scenarioIndex", type: "uint32", indexed: false },
       { name: "buyerPayout", type: "uint256", indexed: false },
+      { name: "evidenceHash", type: "bytes32", indexed: false },
     ],
   },
   {
@@ -132,6 +190,19 @@ export const escrowAbi = [
       { name: "id", type: "uint256", indexed: true },
       { name: "to", type: "address", indexed: true },
       { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Voided",
+    inputs: [{ name: "id", type: "uint256", indexed: true }],
+  },
+  {
+    type: "event",
+    name: "BoughtBack",
+    inputs: [
+      { name: "id", type: "uint256", indexed: true },
+      { name: "proceeds", type: "uint256", indexed: false },
     ],
   },
 ] as const;
@@ -198,5 +269,7 @@ export const quoteTypes = {
     { name: "issuedAt", type: "uint256" },
     { name: "deadline", type: "uint256" },
     { name: "chainId", type: "uint256" },
+    { name: "longstop", type: "uint64" },
+    { name: "finalizationDelay", type: "uint32" },
   ],
 } as const;

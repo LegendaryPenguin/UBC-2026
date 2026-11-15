@@ -19,6 +19,7 @@ type AcceptanceChainData = {
   status: PositionRecord["status"];
   scenarioIndex: number | null;
 };
+type ChainPosition = readonly [string, string, string, string, bigint, bigint, bigint, bigint, bigint, bigint, number, number, bigint, bigint, number, number, bigint, string];
 
 async function verifyArcAcceptance(quote: StoredQuote, txHash: string): Promise<AcceptanceChainData> {
   const escrow = publicEscrow();
@@ -56,13 +57,12 @@ async function verifyArcAcceptance(quote: StoredQuote, txHash: string): Promise<
     arcClient.readContract({ address: escrow, abi: escrowAbi, functionName: "positions", args: [id] }),
     arcClient.readContract({ address: escrow, abi: escrowAbi, functionName: "schedule", args: [id] }),
   ]);
-  const fields = position as unknown as readonly [
-    string, string, string, string, bigint, bigint, bigint, bigint, bigint, bigint, number, number, bigint,
-  ];
+  const fields = position as unknown as ChainPosition;
   if (fields[0].toLowerCase() !== quote.maker.toLowerCase() || fields[1].toLowerCase() !== quote.taker.toLowerCase() ||
     fields[2].toLowerCase() !== quote.familyHash.toLowerCase() || fields[3].toLowerCase() !== quote.payoffHash.toLowerCase() ||
     fields[4] !== BigInt(quote.maxPayout) || fields[5] !== BigInt(quote.premium) || fields[6] !== BigInt(quote.fee) ||
     fields[7] !== BigInt(quote.nonce) || fields[12] !== BigInt(quote.payouts.length) ||
+    fields[13] !== BigInt(quote.longstop) || fields[14] !== quote.finalizationDelay ||
     schedule.map(String).join(",") !== quote.payouts.join(",")) {
     throw new Error("The onchain position terms do not match the signed offer.");
   }
@@ -135,6 +135,8 @@ export async function POST(req: Request) {
         maxPayout: quote.maxPayout,
         premium: quote.premium,
         fee: quote.fee,
+        longstop: quote.longstop,
+        finalizationDelay: quote.finalizationDelay,
         familyId: thesis.familyId,
         topicSlug: thesis.topicSlug,
         createdAt: now,
@@ -212,6 +214,8 @@ export async function POST(req: Request) {
       maxPayout: quote.maxPayout,
       premium: quote.premium,
       fee: quote.fee,
+      longstop: quote.longstop,
+      finalizationDelay: quote.finalizationDelay,
       familyId: thesis.familyId,
       topicSlug: thesis.topicSlug,
       createdAt: new Date().toISOString(),

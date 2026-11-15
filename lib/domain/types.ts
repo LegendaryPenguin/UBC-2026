@@ -190,6 +190,8 @@ export interface SignedQuote {
   issuedAt: number;
   deadline: number;
   chainId: number;
+  longstop: number;
+  finalizationDelay: number;
   signature: `0x${string}`;
   payouts: string[];
   scenarioLabels: string[];
@@ -240,6 +242,8 @@ export interface PositionRecord {
   maxPayout: string;
   premium: string;
   fee: string;
+  longstop: number;
+  finalizationDelay: number;
   familyId: string;
   topicSlug: string;
   createdAt: string;

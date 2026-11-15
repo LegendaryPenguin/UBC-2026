@@ -46,7 +46,9 @@ contract ThesisEscrowTest is Test {
             nonce: nonce,
             issuedAt: block.timestamp,
             deadline: block.timestamp + 600,
-            chainId: block.chainid
+            chainId: block.chainid,
+            longstop: uint64(block.timestamp + 7 days),
+            finalizationDelay: 1 hours
         });
     }
 
@@ -66,7 +68,9 @@ contract ThesisEscrowTest is Test {
         bytes memory sig = _sign(q);
         vm.prank(taker);
         uint256 id = escrow.accept(q, schedule, sig);
-        escrow.resolve(id, 1);
+        escrow.proposeOutcome(id, 1, bytes32(uint256(101)));
+        vm.warp(block.timestamp + q.finalizationDelay);
+        escrow.finalizeOutcome(id);
         uint256 takerBefore = usdc.balanceOf(taker);
         uint256 makerBefore = usdc.balanceOf(maker);
         vm.prank(taker);
@@ -83,6 +87,7 @@ contract ThesisEscrowTest is Test {
         ThesisEscrow.Quote memory q = _quote(50e6, 10e6, 0, 2, payoffHash);
         vm.prank(taker);
         uint256 id = escrow.accept(q, schedule, _sign(q));
+        vm.warp(q.longstop);
         escrow.voidPosition(id);
         uint256 takerBefore = usdc.balanceOf(taker);
         vm.prank(taker);

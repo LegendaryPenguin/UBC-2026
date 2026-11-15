@@ -24,6 +24,8 @@ export async function signQuote(params: {
   nonce: bigint;
   payouts: bigint[];
   scenarioLabels: string[];
+  longstop: number;
+  finalizationDelay: number;
 }): Promise<SignedQuote> {
   const escrow = publicEscrow();
   if (!escrow) {
@@ -46,6 +48,8 @@ export async function signQuote(params: {
     issuedAt: BigInt(issuedAt),
     deadline: BigInt(deadline),
     chainId: BigInt(publicChainId()),
+    longstop: BigInt(params.longstop),
+    finalizationDelay: params.finalizationDelay,
   };
   const signature = await account.signTypedData({
     domain: quoteDomain(escrow),
@@ -75,6 +79,8 @@ export async function signQuote(params: {
     issuedAt,
     deadline,
     chainId: publicChainId(),
+    longstop: params.longstop,
+    finalizationDelay: params.finalizationDelay,
     signature,
     payouts: params.payouts.map((p) => p.toString()),
     scenarioLabels: params.scenarioLabels,

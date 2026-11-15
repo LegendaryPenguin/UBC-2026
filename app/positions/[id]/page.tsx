@@ -189,7 +189,13 @@ export default function PositionPage() {
       {tab === "rules" ? (
         <Card className="space-y-3">
           <h2 className="font-serif text-xl">Settlement boundary</h2>
-          <p className="text-sm">The escrow enforces this recorded payout schedule after an authorized resolver reports a scenario. Arc verifies the transaction and collateral; it does not independently verify Gemini’s offchain result.</p>
+          <p className="text-sm">The escrow enforces this recorded payout schedule after an authorized resolver proposes a scenario. Proposals can be corrected during the recorded window; anyone can finalize an unchanged proposal after that window. If the position remains open at longstop, the contract permits only a refund. Arc verifies the transaction and collateral; it does not independently verify Gemini’s offchain result.</p>
+          {position.mode === "live" ? (
+            <dl className="grid gap-2 text-sm sm:grid-cols-2">
+              <div><dt className="text-xs text-muted">Correction window</dt><dd>{Math.ceil(position.finalizationDelay / 3600)} hour after each proposal or correction</dd></div>
+              <div><dt className="text-xs text-muted">Refund longstop</dt><dd>{new Date(position.longstop * 1000).toISOString()}</dd></div>
+            </dl>
+          ) : <p className="text-xs text-muted">Paper simulation; no Arc outcome or refund is available.</p>}
           <p className="text-xs text-muted">Market family: {position.familyId} · topic: {position.topicSlug}</p>
           <Button href={`/topics/${position.topicSlug}`} kind="ghost">Review topic evidence and rules</Button>
         </Card>
