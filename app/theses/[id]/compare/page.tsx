@@ -3,15 +3,19 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, modeFromStorage } from "@/lib/client";
-import type { SignedQuote, ThesisRevision } from "@/lib/domain/types";
+import type { EvidenceItem, MarketFamily, SignedQuote, ThesisRevision } from "@/lib/domain/types";
 import { formatUsdc } from "@/lib/format";
 import { Button, Card, Field, inputCls } from "@/components/ui";
 import { useAccount } from "wagmi";
+import { VoicePanel } from "@/components/VoicePanel";
+import { evidenceForSlug } from "@/lib/evidence";
 
 export default function ComparePage() {
   const { id } = useParams<{ id: string }>();
   const { address } = useAccount();
   const [thesis, setThesis] = useState<ThesisRevision | null>(null);
+  const [family, setFamily] = useState<MarketFamily | null>(null);
+  const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [budget, setBudget] = useState("100");
   const [quote, setQuote] = useState<SignedQuote | null>(null);
   const [note, setNote] = useState("");
@@ -19,7 +23,13 @@ export default function ComparePage() {
   const [pending, setPending] = useState(false);
   useEffect(() => {
     setBudget(new URLSearchParams(window.location.search).get("maxPayout") || "100");
-    api<{ thesis: ThesisRevision }>(`/api/theses/${id}`).then((r) => setThesis(r.thesis)).catch((err) => setError(err.message));
+    api<{ thesis: ThesisRevision }>(`/api/theses/${id}`).then(async (r) => {
+      setThesis(r.thesis);
+      const mode = modeFromStorage() === "live" ? "live" : "replay";
+      const topic = await api<{ family: MarketFamily; evidence: EvidenceItem[] }>(`/api/topics/${r.thesis.topicSlug}?mode=${mode}`);
+      setFamily(topic.family);
+      setEvidence(topic.evidence);
+    }).catch((err) => setError(err.message));
   }, [id]);
   async function requestQuote() {
     setPending(true);
@@ -50,6 +60,14 @@ export default function ComparePage() {
       <Button onClick={requestQuote} disabled={pending || !thesis}>{pending ? "Requesting…" : "Request quotes"}</Button>
       {note ? <p className="text-sm text-muted">{note}</p> : null}
       {error ? <p className="text-bad text-sm">{error}</p> : null}
+      {thesis && family ? <VoicePanel
+        slug={family.slug}
+        family={family}
+        evidence={evidence.length ? evidence : evidenceForSlug(family.slug, family.mode)}
+        thesis={thesis}
+        context="compare"
+        maxPayout={budget}
+      /> : null}
       {quote ? (
         <Card>
           <h2 className="font-serif text-xl">{quote.signature === "0x" ? "Simulated quote" : "Arc maker offer"}</h2>

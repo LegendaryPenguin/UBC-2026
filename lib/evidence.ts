@@ -1,4 +1,4 @@
-import type { EvidenceItem } from "@/lib/domain/types";
+import type { DataMode, EvidenceItem } from "@/lib/domain/types";
 
 export const FEATURED_EVIDENCE: EvidenceItem[] = [
   {
@@ -36,7 +36,8 @@ export const FEATURED_EVIDENCE: EvidenceItem[] = [
   },
 ];
 
-export function evidenceForSlug(slug: string): EvidenceItem[] {
+export function evidenceForSlug(slug: string, mode: DataMode = "replay"): EvidenceItem[] {
+  if (mode !== "replay") return [];
   if (slug.includes("btc") || slug.includes("eth") || slug.includes("crypto")) return FEATURED_EVIDENCE;
   return FEATURED_EVIDENCE.slice(0, 2);
 }

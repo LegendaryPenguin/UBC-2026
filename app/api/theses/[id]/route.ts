@@ -89,12 +89,19 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       const now = new Date().toISOString();
       const copy = {
         ...thesis,
+        ...(body.template !== undefined ? { template: body.template } : {}),
+        ...(body.direction !== undefined ? { direction: body.direction } : {}),
+        ...(body.lowerThreshold !== undefined ? { lowerThreshold: body.lowerThreshold } : {}),
+        ...(body.upperThreshold !== undefined ? { upperThreshold: body.upperThreshold } : {}),
+        ...(body.rationale !== undefined ? { rationale: body.rationale } : {}),
+        ...(body.invalidation !== undefined ? { invalidation: body.invalidation } : {}),
+        ...(body.evidenceIds !== undefined ? { evidenceIds: [...body.evidenceIds] } : {}),
         id: uid("th"),
         status: "draft" as const,
         revision: 1,
         createdAt: now,
         updatedAt: now,
-        evidenceIds: [...thesis.evidenceIds],
+        evidenceIds: [...(body.evidenceIds ?? thesis.evidenceIds)],
       };
       state.theses.push(copy);
       recordThesisVersion(state, copy, accountId, `Copied from revision ${thesis.revision}`);

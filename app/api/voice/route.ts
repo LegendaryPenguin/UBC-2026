@@ -8,12 +8,18 @@ export async function POST(req: Request) {
   if (cap.state !== "available") {
     return fail("UNAVAILABLE", cap.reason, 501);
   }
-  const body = await readJson<{ text: string; voiceId?: string }>(req);
+  let body: { text?: unknown; voiceId?: unknown };
+  try {
+    body = await readJson<typeof body>(req);
+  } catch {
+    return fail("INVALID", "Provide text as a JSON request body.");
+  }
+  if (!body || typeof body !== "object") return fail("INVALID", "Provide text as a JSON request body.");
   const text = typeof body.text === "string" ? body.text.trim() : "";
   if (!text) return fail("INVALID", "Enter text to speak.");
   if (text.length > 3_000) return fail("INVALID", "Keep spoken replies under 3,000 characters.");
 
-  const voiceId = body.voiceId || process.env.ELEVENLABS_VOICE_ID || DEFAULT_VOICE_ID;
+  const voiceId = (typeof body.voiceId === "string" ? body.voiceId : process.env.ELEVENLABS_VOICE_ID) || DEFAULT_VOICE_ID;
   if (!/^[A-Za-z0-9_-]{10,64}$/.test(voiceId)) return fail("INVALID", "Unknown voice selection.");
 
   try {

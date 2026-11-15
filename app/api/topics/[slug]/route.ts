@@ -6,5 +6,5 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   const mode = new URL(req.url).searchParams.get("mode") === "replay" ? "replay" : "live";
   const family = await getTopic(params.slug, mode);
   if (!family) return fail("UNSUPPORTED_FAMILY", "Topic not found or not a compatible family.", 404);
-  return ok({ family, evidence: evidenceForSlug(params.slug) });
+  return ok({ family, evidence: evidenceForSlug(params.slug, mode) });
 }

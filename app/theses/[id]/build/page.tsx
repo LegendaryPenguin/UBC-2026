@@ -9,6 +9,8 @@ import { buildComparisons } from "@/lib/payoffs/compare";
 import { parseUsdc } from "@/lib/format";
 import { PayoffChart } from "@/components/PayoffChart";
 import { Button, Card, Field, inputCls } from "@/components/ui";
+import { VoicePanel } from "@/components/VoicePanel";
+import { evidenceForSlug } from "@/lib/evidence";
 
 export default function BuildPage() {
   const { id } = useParams<{ id: string }>();
@@ -59,6 +61,15 @@ export default function BuildPage() {
           ]}
         />
       </Card> : null}
+      {thesis && family ? <VoicePanel
+        slug={family.slug}
+        family={family}
+        evidence={evidenceForSlug(family.slug, family.mode)}
+        thesis={thesis}
+        context="payoff"
+        maxPayout={max}
+        title="Ask about these scenario payouts"
+      /> : null}
       <div className="flex gap-2">
         {comparisons ? <Button href={`/theses/${id}/compare?maxPayout=${encodeURIComponent(max)}`}>Compare offers</Button> : null}
         <Button href={`/theses/${id}`} kind="ghost">Edit view</Button>
