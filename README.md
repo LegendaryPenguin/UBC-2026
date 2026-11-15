@@ -1,0 +1,32 @@
+# Thesis
+
+Thesis turns a prediction-market view into an explicit payoff table. In the recorded walkthrough, you can compare a custom BTC range payoff with threshold tickets that can still pay above your upper bound.
+
+## Run locally
+
+```sh
+npm install
+npm run dev
+```
+
+Open the local URL printed by Next.js. Choose **Replay** to inspect the recorded Gemini markets. To simulate a position, sign in with a throwaway email and the code shown by the local development app, select **Paper**, then open the BTC topic from Explore. Create and confirm a view, enter a maximum payout in Compare, request a simulated quote, inspect its terms, and accept it. Portfolio shows paper positions. The local store lives in `.data/`.
+
+```sh
+npm run typecheck
+npm test
+npm run build
+```
+
+For the Solidity suite, use Foundry from `contracts/` with `forge-std` installed, then run `forge test`.
+
+## Economics and risk
+
+A payoff table sets a USDC payout for each mutually exclusive outcome. The escrow design locks the maker's maximum payout alongside the buyer's premium on acceptance. After resolution, the holder receives the recorded payout and the maker receives the residual and premium. Fees can increase the buyer's loss. The design relies on maker collateral and an authorized resolver reporting the source outcome. Early exit requires an available buyback offer.
+
+Arc testnet uses chain ID `5042002`. The verified USDC ERC-20 interface at `0x3600000000000000000000000000000000000000` uses six decimals. Native gas uses 18 decimals. The escrow address and end-to-end deployment remain unverified. [Arc testnet configuration](https://docs.arc.io/arc/references/connect-to-arc)
+
+Live quotes and position recording require a qualified Gemini family, a funded Arc escrow, and verified receipt reconciliation. The local walkthrough uses archived Gemini data and simulated positions. See [integration qualification](docs/qualification.md) for the verification record.
+
+## References
+
+[Project Lynx](https://github.com/edubizh/ETHNYC2026-project-lynx) and [Cumulant](https://github.com/notveiker/EG-Arc-Cumulant) informed the research and structured-payoff design.
