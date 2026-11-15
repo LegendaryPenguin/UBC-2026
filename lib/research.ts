@@ -1,14 +1,15 @@
-import type { MarketFamily, ThesisRevision } from "@/lib/domain/types";
+import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
 import { FEATURED_EVIDENCE } from "@/lib/evidence";
 
 export function researchReply(input: {
   question: string;
   family: MarketFamily | null;
   thesis?: ThesisRevision | null;
+  evidence?: EvidenceItem[];
 }): { answer: string; citations: { id: string; title: string }[]; proposed?: Partial<ThesisRevision> } {
   const q = input.question.trim();
   const family = input.family;
-  const citations = FEATURED_EVIDENCE.slice(0, 2).map((e) => ({ id: e.id, title: e.title }));
+  const citations = (input.evidence || FEATURED_EVIDENCE.slice(0, 2)).map((e) => ({ id: e.id, title: e.title }));
   if (!family) {
     return {
       answer:
