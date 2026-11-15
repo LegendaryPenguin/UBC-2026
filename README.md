@@ -11,6 +11,8 @@ npm run dev
 
 Open the local URL printed by Next.js. Choose **Replay** to inspect the recorded Gemini markets. On a topic page, the voice panel can record a question, transcribe it with ElevenLabs, and read the written research reply aloud. Microphone permission is requested only when you start recording. Audio is sent to ElevenLabs for transcription and is not saved by this app. Provider logging follows your ElevenLabs account settings.
 
+Open **Gemini markets** from the More menu to browse the public event, upcoming, and recently settled endpoints. Event detail pages show the Gemini response's contract instruments, reference prices, terms links, and any resolution metadata Gemini returned. Choose **Live data** in the header to request current data. If the public API cannot be reached, switch back to Replay for the recorded walkthrough. Gemini market prices are reference data and do not enable Arc quote acceptance.
+
 To simulate a position, sign in with a throwaway email and the code shown by the local development app, select **Paper**, then open the BTC topic from Explore. Create and confirm a view, choose a maximum payout, request a simulated quote, inspect its terms, and accept it. Portfolio shows paper positions. Saved and confirmed views appear in revision history, where an earlier version can be restored as a separate draft. To walk through settlement, repeat with the archived XRP topic and claim the paper payout after acceptance. The local store lives in `.data/`.
 
 ```sh

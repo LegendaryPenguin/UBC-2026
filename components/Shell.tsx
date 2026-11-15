@@ -15,6 +15,7 @@ const NAV = [
 ];
 
 const MORE = [
+  ["Gemini markets", "/gemini"],
   ["Activity", "/activity"],
   ["Reports", "/reports"],
   ["Help", "/help"],

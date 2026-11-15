@@ -1,56 +1,30 @@
 import crypto from "node:crypto";
+import type { GeminiCollection, GeminiEvent, GeminiListParams, GeminiListResponse, GeminiStatus } from "@/lib/gemini/types";
+
+export type {
+  GeminiCollection,
+  GeminiContract,
+  GeminiEvent,
+  GeminiListParams,
+  GeminiListResponse,
+  GeminiPrices,
+  GeminiStatus,
+} from "@/lib/gemini/types";
 
 const BASE = "https://api.gemini.com/v1/prediction-markets";
+let lastApiCheck: { at: string; failed: boolean } | null = null;
 
-export type GeminiStatus =
-  | "approved"
-  | "active"
-  | "closed"
-  | "under_review"
-  | "settled"
-  | "invalid";
-
-export interface GeminiPrices {
-  buy?: { yes?: string; no?: string };
-  sell?: { yes?: string; no?: string };
-  bestBid?: string;
-  bestAsk?: string;
-  lastTradePrice?: string;
+export function geminiApiHealth() {
+  const at = lastApiCheck?.at ?? null;
+  const fresh = at != null && Date.now() - Date.parse(at) < 5 * 60_000;
+  const state = !fresh ? "unqualified" : lastApiCheck?.failed ? "degraded" : "available";
+  const note = !at
+    ? "No live public API request has been recorded in this process."
+    : `${lastApiCheck?.failed ? "Most recent live request failed" : "Most recent live request succeeded"} at ${at}.`;
+  return { state, note };
 }
-
-export interface GeminiContract {
-  id: string;
-  label: string;
-  ticker?: string;
-  instrumentSymbol?: string;
-  status?: string;
-  expiryDate?: string | null;
-  effectiveDate?: string | null;
-  resolutionSide?: string | null;
-  resolvedAt?: string | null;
-  termsAndConditionsUrl?: string | null;
-  prices?: GeminiPrices | null;
-}
-
-export interface GeminiEvent {
-  id: string;
-  title: string;
-  slug?: string;
-  description?: string | null;
-  category?: string;
-  ticker: string;
-  status: string;
-  type?: string;
-  expiryDate?: string | null;
-  effectiveDate?: string | null;
-  termsLink?: string | null;
-  sourceDetails?: { agency?: string; index?: string } | null;
-  contracts?: GeminiContract[];
-}
-
-export interface GeminiListResponse {
-  data: GeminiEvent[];
-  pagination?: { limit: number; offset: number; total: number };
+function recordApiCheck(failed: boolean) {
+  lastApiCheck = { at: new Date().toISOString(), failed };
 }
 
 export function payloadHash(value: unknown): string {
@@ -64,27 +38,51 @@ export async function listEvents(params: {
   limit?: number;
   offset?: number;
 }): Promise<{ response: GeminiListResponse; fetchedAt: string; hash: string }> {
-  const url = new URL(`${BASE}/events`);
-  if (params.status) url.searchParams.set("status", params.status);
+  return listPublicEvents("events", params);
+}
+
+export async function listPublicEvents(
+  collection: GeminiCollection,
+  params: GeminiListParams = {},
+): Promise<{ response: GeminiListResponse; fetchedAt: string; hash: string }> {
+  const url = new URL(`${BASE}/${collection}`);
+  if (Array.isArray(params.status)) {
+    for (const status of params.status) url.searchParams.append("status", status);
+  } else if (params.status) {
+    url.searchParams.set("status", params.status);
+  }
   if (params.category) url.searchParams.set("category", params.category);
   if (params.search) url.searchParams.set("search", params.search);
   url.searchParams.set("limit", String(params.limit ?? 100));
   url.searchParams.set("offset", String(params.offset ?? 0));
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(12_000), cache: "no-store" });
-  if (!res.ok) throw new Error(`Gemini events ${res.status}`);
-  const json = (await res.json()) as GeminiListResponse;
-  const fetchedAt = new Date().toISOString();
-  return { response: json, fetchedAt, hash: payloadHash(json) };
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(12_000), cache: "no-store" });
+    if (!res.ok) throw new Error(`Gemini ${collection} ${res.status}`);
+    const json = (await res.json()) as GeminiListResponse;
+    if (!Array.isArray(json.data)) throw new Error("Gemini returned an invalid events response");
+    const fetchedAt = new Date().toISOString();
+    recordApiCheck(false);
+    return { response: json, fetchedAt, hash: payloadHash(json) };
+  } catch (error) {
+    recordApiCheck(true);
+    throw error;
+  }
 }
 
 export async function getEvent(ticker: string): Promise<{ event: GeminiEvent; fetchedAt: string; hash: string }> {
-  const res = await fetch(`${BASE}/events/${encodeURIComponent(ticker)}`, {
-    signal: AbortSignal.timeout(12_000),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`Gemini event ${res.status}`);
-  const event = (await res.json()) as GeminiEvent;
-  const fetchedAt = new Date().toISOString();
-  return { event, fetchedAt, hash: payloadHash(event) };
+  try {
+    const res = await fetch(`${BASE}/events/${encodeURIComponent(ticker)}`, {
+      signal: AbortSignal.timeout(12_000),
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`Gemini event ${res.status}`);
+    const event = (await res.json()) as GeminiEvent;
+    const fetchedAt = new Date().toISOString();
+    recordApiCheck(false);
+    return { event, fetchedAt, hash: payloadHash(event) };
+  } catch (error) {
+    recordApiCheck(true);
+    throw error;
+  }
 }

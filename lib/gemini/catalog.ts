@@ -2,7 +2,8 @@ import type { MarketFamily } from "@/lib/domain/types";
 import recorded from "@/fixtures/gemini-crypto-nov20.json";
 import settled from "@/fixtures/gemini-settled-binary.json";
 import { binaryFromEvent, familyFromEvent } from "@/lib/gemini/families";
-import { listEvents, type GeminiEvent } from "@/lib/gemini/client";
+import { listEvents } from "@/lib/gemini/client";
+import { flattenEvents, type GeminiEvent } from "@/lib/gemini/types";
 
 type Cache = {
   live: MarketFamily[];
@@ -34,8 +35,8 @@ export async function refreshLiveFamilies(): Promise<Cache> {
   try {
     const { response, fetchedAt } = await listEvents({ status: "active", limit: 100 });
     const families: MarketFamily[] = [];
-    for (const event of response.data) {
-      if (event.category !== "Crypto") continue;
+    for (const event of flattenEvents(response.data)) {
+      if (event.category?.toLowerCase() !== "crypto") continue;
       const family = familyFromEvent(event, fetchedAt, "live", true);
       if (family) families.push(family);
     }

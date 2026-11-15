@@ -1,3 +1,5 @@
+import { geminiApiHealth } from "@/lib/gemini/client";
+
 export type CapabilityState = "available" | "unavailable" | "degraded" | "unqualified";
 
 export interface Capability {
@@ -63,10 +65,11 @@ export function capabilities(): Record<string, Capability> {
 
 export function statusSnapshot() {
   const caps = capabilities();
+  const gemini = geminiApiHealth();
   return {
     updatedAt: new Date().toISOString(),
     services: [
-      { id: "gemini", label: "Gemini prediction markets", state: "available" as const, note: "Public market data endpoints" },
+      { id: "gemini", label: "Gemini prediction markets", state: gemini.state, note: gemini.note },
       { id: "research", label: "Research model", state: caps.grok.state, note: caps.grok.reason },
       { id: "voice", label: "Voice", state: caps.voice.state, note: caps.voice.reason },
       { id: "quotes", label: "Quote service", state: caps.maker.state, note: caps.maker.reason },

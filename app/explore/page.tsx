@@ -31,6 +31,7 @@ export default function Explore() {
       <div className="flex gap-2">
         <input className={inputCls()} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search topics" />
         <Button onClick={load}>Search</Button>
+        <Button href="/gemini" kind="ghost">Gemini markets</Button>
         <Button href="/calendar" kind="ghost">Calendar</Button>
       </div>
       {!data ? <p>Loading topics…</p> : null}
