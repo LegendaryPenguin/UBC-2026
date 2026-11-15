@@ -31,7 +31,7 @@ A payoff table sets a USDC payout for each mutually exclusive outcome. The escro
 
 Arc testnet uses chain ID `5042002`. The verified USDC ERC-20 interface at `0x3600000000000000000000000000000000000000` uses six decimals. Native gas uses 18 decimals. The escrow address and end-to-end deployment remain unverified. [Arc testnet configuration](https://docs.arc.io/arc/references/connect-to-arc)
 
-Live quotes and position recording require a qualified Gemini family, a funded Arc escrow, and verified receipt reconciliation. The local walkthrough uses archived Gemini data and simulated positions. Voice requires `ELEVENLABS_API_KEY` in your ignored local `.env.local` file. The local integration uses ElevenLabs speech to text and text to speech, with editable transcripts and a written equivalent. See [integration qualification](docs/qualification.md) for the verification record.
+Live quotes and position recording require a qualified Gemini family, a deployed and funded Arc escrow, and configured maker/resolver operations. The app verifies acceptance receipts against the signed quote and payout schedule, refreshes live position status from Arc, and records claims only after confirming the holder claim event. A confirmed transaction whose server sync fails can be reconciled by pasting its hash; the app never submits it again. The local walkthrough uses archived Gemini data and simulated positions. Voice requires `ELEVENLABS_API_KEY` in your ignored local `.env.local` file. The local integration uses ElevenLabs speech to text and text to speech, with editable transcripts and a written equivalent. See [integration qualification](docs/qualification.md) for the verification record.
 
 ## References
 

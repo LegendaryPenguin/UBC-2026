@@ -1,6 +1,34 @@
 export const escrowAbi = [
   {
     type: "function",
+    name: "positions",
+    stateMutability: "view",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [
+      { name: "maker", type: "address" },
+      { name: "holder", type: "address" },
+      { name: "familyHash", type: "bytes32" },
+      { name: "payoffHash", type: "bytes32" },
+      { name: "maxPayout", type: "uint256" },
+      { name: "premium", type: "uint256" },
+      { name: "fee", type: "uint256" },
+      { name: "nonce", type: "uint256" },
+      { name: "acceptedAt", type: "uint64" },
+      { name: "resolvedAt", type: "uint64" },
+      { name: "scenarioIndex", type: "uint32" },
+      { name: "status", type: "uint8" },
+      { name: "payoutCount", type: "uint256" },
+    ],
+  },
+  {
+    type: "function",
+    name: "schedule",
+    stateMutability: "view",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [{ name: "rows", type: "uint256[]" }],
+  },
+  {
+    type: "function",
     name: "accept",
     stateMutability: "nonpayable",
     inputs: [

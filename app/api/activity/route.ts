@@ -1,9 +1,9 @@
 import { ok } from "@/lib/server/http";
-import { currentSession } from "@/lib/server/session";
-import { mutate } from "@/lib/server/store";
+import { thesisOwner } from "@/lib/server/session";
+import { readStore } from "@/lib/server/store";
 
 export async function GET() {
-  const ctx = currentSession();
-  if (!ctx) return ok({ transactions: [] });
-  return ok({ transactions: mutate((s) => s.transactions.filter((t) => t.accountId === ctx.account.id)) });
+  const owner = thesisOwner();
+  if (!owner) return ok({ transactions: [] });
+  return ok({ transactions: readStore().transactions.filter((transaction) => transaction.accountId === owner) });
 }

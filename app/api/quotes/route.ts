@@ -28,6 +28,7 @@ export async function POST(req: Request) {
   if (body.mode !== "live" && body.mode !== "paper" && body.mode !== "replay") {
     return fail("INVALID", "Select live, paper, or replay mode.");
   }
+  if (body.mode === "live" && !ctx) return fail("AUTH", "Sign in before requesting an Arc quote.", 401);
   if (thesis.status !== "confirmed" && thesis.status !== "quoted") {
     return fail("INVALID", "Confirm the thesis before requesting a quote.");
   }
