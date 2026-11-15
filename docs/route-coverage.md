@@ -1,8 +1,8 @@
 # Route coverage
 
-The [corrected hackathon storyboard](hackathon-scope.md) governs the current build's navigation and journey. This table preserves the broader VFINAL route inventory as longer-term coverage; a route marked open is not implied to be in the core four-board demo.
+The [corrected storyboard](hackathon-scope.md) is the sole active acceptance scope. This route inventory preserves the broader original VFINAL routes as reference; rows outside the four boards are not a work queue and do not block completion. See the [plan progress register](plan-progress.md) for active work and [interaction checklist](interaction-checklist.md) for sequence-level acceptance.
 
-This inventory maps the existing routes to the final product contract. Routes listed as partial have an implementation or interface in the repository and still require acceptance testing.
+This inventory maps routes to the corrected storyboard and identifies supporting routes. Partial items within the storyboard still require implementation or acceptance testing; other VFINAL modules are not completion blockers for the current target.
 
 | Routes | Controls and backing code | Current coverage and remaining work |
 | --- | --- | --- |
@@ -18,4 +18,4 @@ This inventory maps the existing routes to the final product contract. Routes li
 | `/help/*`, `/support/*`, `/status` | Help articles, ticket API, integration status API | Partial. Support authorization, status evidence and incident lifecycle require completion. |
 | `/maker/*`, `/ops/*` | Operator-authenticated maker policy, source-backed Gemini outcome proposals/corrections, onchain finalization and longstop void, signed QuickNode webhook with RPC reconciliation | Code is implemented. A deployed escrow, funded maker/resolver account, operator secret, public webhook, configured Stream, and real provider/chain evidence are still required for qualification. |
 
-Automated tests currently cover payoff compilation and comparison. The [qualification record](qualification.md) tracks external evidence. The [product contract](PROJECT_SPEC.md) defines the remaining control-level acceptance requirements.
+Automated and external capability notes are maintained separately. The [qualification record](qualification.md) tracks evidence, while [PROJECT_SPEC.md](PROJECT_SPEC.md) is the VFINAL behavior reference. The corrected control-level acceptance requirements are in [hackathon-scope.md](hackathon-scope.md) and [interaction-checklist.md](interaction-checklist.md).

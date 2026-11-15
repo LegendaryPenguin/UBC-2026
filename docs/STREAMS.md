@@ -1,3 +1,7 @@
+# QuickNode Streams integration notes (reference only)
+
+This Arc operations pipeline supports the broader post-trade lifecycle and is outside the corrected four-board implementation scope in [hackathon-scope.md](hackathon-scope.md). It is not a completion gate for Explore, Research, Build, Compare, or the cancelable Review.
+
 QuickNode Streams is the intended Arc event pipeline.
 
 - Network: Arc testnet (chain id 5042002), subject to Streams support on the plan

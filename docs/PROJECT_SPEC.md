@@ -1,23 +1,23 @@
-# Thesis — VFINAL complete product specification
+# Thesis — VFINAL reference specification (superseded scope)
 
-> **Current hackathon implementation scope:** the user's corrected four-board storyboard is the active product direction for this build. Follow [the hackathon scope](hackathon-scope.md) for the Explore → speak/refine/confirm → inspect basket → compare journey, the three primary navigation items, and the persistent view. The broader VFINAL routes below remain product reference and release requirements where relevant; their full route breadth does not override the corrected hackathon scope.
+> **Active scope, set by the user's later correction:** build the four-board journey in [hackathon-scope.md](hackathon-scope.md): Explore a Gemini question → speak/refine and confirm a view → inspect its basket → compare constructions and review before choosing. Gemini is the priority bounty; ElevenLabs voice and the Arc custom-position path are pursued only as they strengthen these same boards. Use this VFINAL document for detailed behavior, validation, permissions, and recovery only where a feature is retained. Its broader F1–F20 catalog and original execution-to-claim goal are reference material, not the active plan.
 
-**Target: the fully shipped product, not an MVP.** This replaces the earlier hackathon-only scope. The final product contract below governs the complete user experience; the implementation supplement preserves the detailed financial model, repository references, architecture, and hackathon demonstration plan.
+**Active target: the corrected storyboard experience, ending at construction comparison and a review that can be canceled safely.** Execution after review, ongoing position management, settlement/claims, and standalone account, monitoring, support, and operations modules are outside the current acceptance target. A control retained in the four boards must still have complete behavior; a reference-only VFINAL module is not a completion blocker.
 
 Prepared November 14, 2026 (America/Chicago). Proposed product specification; implementation and external-provider availability remain to be verified.
 
-**How to use in Cursor:** Read F1–F20 first, then the implementation supplement. Build the complete route/control coverage matrix before implementation. Final capabilities supersede the supplement's old P0/P1/P2 exclusions. Never let scheduling labels silently shrink the requested final product.
+**Implementation guidance:** Follow the corrected storyboard first. Use relevant VFINAL sections to preserve complete interactions, validation, permissions, and loading/success/error/recovery behavior. Do not count deferred modules as blockers for this target.
 
 **Navigation:** F1 product · F2 roles · F3 routes · F4 interaction rules · F5 accounts/recovery · F6 discovery · F7 research · F8 voice · F9 payoff studio · F10 execution · F11 funds · F12 portfolio/exits · F13 alerts · F14 journal/sharing · F15 support/privacy · F16 QuickNode · F17 operations · F18 architecture · F19 acceptance · F20 Cursor handoff.
 
 
-# FINAL PRODUCT CONTRACT — complete shipped experience
+# Original VFINAL product contract — reference material only
 
-This section defines the complete product, including capabilities beyond the initial demonstration. It supersedes earlier scope exclusions, P0/P1/P2 labels, and hackathon cut lists wherever they conflict. Those labels describe implementation order only; they do not remove features from the final product. The financial safety rules, source-verification requirements, and separation of actual execution from estimates remain binding.
+This section records the earlier broader product scope, including capabilities beyond the corrected storyboard. The current user-approved storyboard supersedes this catalog where the requested scope differs. Its interaction, validation, financial-safety, source-verification, and recovery details remain applicable to features retained in the four-step journey.
 
 “Final” means the target product specification is complete enough to guide implementation and acceptance. It does not claim that integrations have been deployed, audited, approved, or made available by third parties. External capabilities have explicit release gates and unavailable states. Do not fill an unavailable integration with a simulated success.
 
-## F1. Final product promise and boundaries
+## F1. Original product promise and boundaries
 
 Thesis is a personal prediction-market research and execution workspace. A user can discover a question, investigate evidence, articulate a view by typing or speaking, compare the implications of different payoffs, seek real quotes, execute an approved position, monitor the reasons behind it, exit when liquidity exists, claim outcomes, and learn from their decisions.
 
@@ -458,15 +458,15 @@ A fully shipped real-fund product requires reviewed contract/oracle architecture
 
 Usability testing verifies that users can state the winning condition, maximum loss, fees, settlement source, and exit limitation. Accessibility testing covers nonvisual chart/voice equivalents. Privacy testing covers wallet switching, revoked collaboration, public snapshots, and transcript deletion. Recovery testing covers browser restart, indexer failure, webhook replay, and disconnected exchange authorization.
 
-## F20. Cursor handoff — FINAL specification instructions
+## F20. Cursor handoff — corrected active scope
 
-Use this document as the target for the fully shipped product. The earlier implementation supplement contains reference research, financial rules, and a hackathon demonstration sequence; its P0/P1/P2 labels are scheduling metadata only. Do not silently remove final features because they were originally postponed.
+Use the four-step storyboard in [hackathon-scope.md](hackathon-scope.md) as the active implementation target. This document remains a reference for detailed behavior when a feature is retained; its standalone modules are deferred unless the central journey depends on them.
 
-Start by creating a route/control coverage matrix from F3–F17. For each control record implementation location, handler, API/contract dependency, validation, pending/success/failure states, tests, and delivery status. Implement vertically, one complete user flow at a time. Keep every incomplete external capability behind an honest capability state with clear user guidance; never simulate live execution to make the interface look complete.
+Use the active control-to-handler sequence in [interaction-checklist.md](interaction-checklist.md). Do not turn the full F3–F17 route inventory into a work queue. For each retained control record implementation location, handler, API/contract dependency, validation, pending/success/failure/recovery states, and next action. Keep incomplete provider capabilities behind an honest state; never simulate live execution to make the interface look complete.
 
-Deliver the complete visual system and all defined page states. Preserve the central research-to-view-to-payoff journey. Use the pinned LYNX and Cumulant references as architectural inspiration, not as a shortcut around our financial guarantees or original design. QuickNode belongs in the event-data pipeline; ElevenLabs belongs in conversational thesis formation. Native Gemini execution, funding providers, and exit contracts each need their own verified boundary and acceptance tests.
+Deliver the corrected Explore → Speak/refine → Build → Compare/Review journey and its retained page states. Gemini has priority. Use ElevenLabs in the conversation and explanation actions; keep Arc as a conditional construction option. Preserve source and financial safety. The QuickNode post-trade pipeline, native Gemini order execution, funding providers, and exit contracts are outside this target unless the user expands it.
 
-The final implementation is accepted when the full journey matrix passes and every visible control is functional or explicitly unavailable for a verifiable capability/eligibility reason. An incomplete feature cannot be disguised as a perpetual “coming soon” card while calling the product complete. Maintain a release-dependency register so the user can distinguish code still to build from third-party access still to obtain.
+Completion requires the four boards to pass as complete interaction sequences, with every retained control working or clearly unavailable for a verifiable reason. Review must be safe to cancel and must not execute by itself. Do not count separate VFINAL modules as blockers or label the full product complete based on this storyboard.
 
 ### Updated reference links
 
@@ -480,9 +480,11 @@ These extend the official Gemini, Arc, Circle, Linear, and pinned repository ref
 
 ---
 
-# Implementation supplement — core math, reference repositories, and demonstration sequence
+# Original VFINAL supplement — technical and product reference
 
-Supporting research and implementation sequence · User-facing planning date: November 14, 2026 · Historical priority labels below are scheduling only.
+This supplement preserves the earlier product plan and technical detail. Only its corrected scope and execution instructions in sections 2 and 18 are active; the remaining pages are references for features retained in the four-board storyboard. Old P0/P1/P2 labels, route lists, and execution-to-claim acceptance criteria do not expand the active target.
+
+Supporting research · Original planning date: November 14, 2026.
 
 **Working pitch:** Understand what markets expect. Decide where you disagree. Build a position that pays in the scenarios you believe in.
 
@@ -557,39 +559,34 @@ The core financial advantage comes from a programmable, collateralized contract:
 
 Do not claim Arc uniquely makes custom payoffs mathematically possible. Show that removing Arc from this implementation removes the actual escrow, enforceable claims, and settlement receipt. Gemini provides the reference markets; Arc is the place the Thesis position exists.
 
-## 2. Hackathon strategy and scope
+## 2. Active hackathon direction
 
-### 2.1 Submission positioning
+### 2.1 Bounty order
 
-Enter **Track 02: DeFi & Onchain Apps**. Seek **Best Use of Arc** and the **Gemini Prediction Markets bounty**. The event page permits one main track, one chain award, and eligible sponsor bounties. Listed amounts are $2,000 for the track winner, $1,000 for Arc, $2,500 for first in Gemini, and $2,500 for first overall: $8,000 in possible stacked first-place awards, not an expected outcome.
+Gemini is the priority bounty and the primary source for market discovery, contract rules, and provenance. ElevenLabs is integrated into research and view clarification with the same application actions as text. Arc appears as a distinct custom-position construction in Build/Compare/Review only when it adds value and is actually available. All three stay inside the corrected storyboard; they are not separate product roadmaps.
 
-The published deadline is **November 20, 2026 at 12 PM CST**, with finals November 21 at UT Austin. Treat November 19 as the build freeze. Verify the linked submission guide for final video, eligibility, attendance, repository, and pitching requirements before submission. The public page is authoritative for the dates and category structure cited here; do not treat this document as a replacement for the full rules.
+### 2.2 What the demonstration should prove
 
-### 2.2 What judges should be able to verify
-
-| Claim | Visible proof |
+| Claim | Visible proof within the four boards |
 |---|---|
-| Helps users form a view | Evidence links, market rules, editable thesis, explicit confirmation |
-| Converts that view into the correct exposure | Side-by-side payoff comparison and complete scenario table |
-| Uses Gemini meaningfully | Real event IDs, instrument symbols, data timestamps, market details, final resolution provenance |
-| Uses Arc meaningfully | Funded collateral, accepted quote transaction, position state, claim transaction |
-| Is technically thoughtful | Conservation-of-funds tests, expired-quote handling, unresolved/void handling |
-| Is usable | Guest exploration, few steps, clear costs, no unnecessary chain jargon |
-| Is original | Research-to-payoff mismatch workflow, implemented independently with cited inspiration |
+| Uses Gemini meaningfully | Actual event/contract identifiers, instrument symbols, terms, data freshness, and evidence provenance; unavailable live data is stated plainly |
+| Helps users form a view | Research context, supporting/challenging evidence where available, editable text/transcript, precise proposed view, and explicit confirmation |
+| Makes payoff consequences clear | Supported basket construction, full scenario outcomes, outside-view mismatch, and a comparison on an explicit common basis |
+| Uses ElevenLabs meaningfully | User-initiated voice, editable transcript, shared text/voice actions, spoken explanation where useful, and a complete text fallback |
+| Uses Arc meaningfully when available | A distinct custom construction with honest paper/testnet/live labeling and exact terms in Review; no fabricated quote or successful transaction |
+| Preserves safety | Review is read-only and cancelable; no wallet/funding requirement for research; no financial action authorized by voice |
 
-### 2.3 Priority definitions
+### 2.3 Active priority order
 
-**P0 — required to submit confidently:** one curated topic; real Gemini discovery adapter; clear data mode; research workspace; editable confirmed thesis; directional and range compiler if compatible contracts exist; comparison table; funded maker RFQ; Arc testnet collateral and claims; portfolio/detail pages; deterministic settlement/void handling; repeatable demonstration; deployed frontend; source README.
-
-**P1 — only after the complete P0 loop works:** Circle passkey onboarding if its integration has not already passed the early spike; shareable read-only theses; one saved evidence alert; optional personal probability inputs; historical evidence timeline; richer explanation generation; alternate topic family.
-
-**P2 — deliberately postponed:** native Gemini order execution; multi-maker quote competition; secondary exits; cross-chain deposits; arbitrary joint events; continuous payoff drawing; tranches; principal-protected products; copy trading; autonomous rebalancing; paid data agents; governance; mobile native apps.
-
-Wallet connection is P0. Passkeys are a preferred implementation subject to early qualification, not permission to miss the complete trading loop. A standard external wallet is an acceptable documented fallback.
+1. Complete and verify the four storyboard boards, including every retained control's validation, permissions, loading/success/error/recovery behavior.
+2. Prioritize Gemini live market discovery and exact contract semantics; keep Replay separate and visibly labeled if live access is unavailable.
+3. Integrate ElevenLabs into the same research and clarification flow, preserving manual text controls and keeping credentials server-side.
+4. Surface the Arc custom-position alternative only when it adds value and the configured capability supports it; explain unavailable states honestly.
+5. Keep all other original modules, native order management, post-trade portfolio lifecycle, onchain deployment, settlement, and claims outside this completion target.
 
 ### 2.4 Product success criteria
 
-In a moderated test, a first-time user should explain their maximum loss, winning scenario, settlement time, and claim process without help. Target under three minutes from an existing thesis to a reviewed quote, excluding wallet funding. Measure task completion and comprehension rather than invented return or conversion metrics.
+A first-time user can explore a Gemini question, articulate and confirm a supported view by voice or text, inspect the basket's outcomes and mismatch, compare supported constructions, and review then cancel without executing. They can tell live data from Replay, known price/cost from unknown fees, and a proposed view from a confirmed one. Trading is optional and is not required to complete the demonstration.
 
 ## 3. Reference repositories: precise reuse guidance
 
@@ -1472,42 +1469,21 @@ Include a small `docs/qualification.md` table: capability, environment, evidence
 
 **What is original?** The product makes the mismatch between an articulated view and a purchased payoff explicit, then connects that choice to a fully funded inspectable contract. The repo references are credited inspiration, not the originality claim.
 
-## 18. Cursor execution instructions
+## 18. Active execution instructions
 
-Paste this document into the repository as `docs/PROJECT_SPEC.md`. Use the following prompt to begin:
+Use [hackathon-scope.md](hackathon-scope.md) as the implementation target and [plan-progress.md](plan-progress.md) as the work queue. Gemini live discovery, contract meaning, and source provenance have first priority. Build ElevenLabs voice into the retained research and clarification actions while keeping equivalent manual text controls. Include an Arc custom construction only where it improves the comparison and is actually available.
 
-> Build Thesis according to docs/PROJECT_SPEC.md. First inspect the current repository and any AGENTS.md instructions. Do not implement all future-scope features. Start with Phase 0: qualify actual Gemini data, verify a compatible market family, verify Arc testnet connectivity and USDC token units, and report concrete blockers. Then implement the pure payoff domain and local contract loop with meaningful money-conservation tests. Proceed to one complete UI journey before cosmetic expansion. Preserve the product's distinction between research, confirmed belief, payoff, quote, and position. Never fabricate live market data, liquidity, settlement outcomes, or transaction receipts. Keep replay separate and labeled. Use the reference repositories for architectural study and credit them; independently implement unless licensing explicitly permits reuse. Do not copy their visual identities. At the end of each phase, state what works, how it was verified, and which next gate remains.
+Preserve the detailed VFINAL behavior for each retained control: start and goal, enablement, handler, data changes, authorization, immediate and final feedback, cancel/back/refresh, error/retry, and next action. Keep voice proposals visibly editable and unconfirmed until the user confirms them. Financial review is explicit and cancelable; voice cannot authorize an action. Never fabricate live data, costs, liquidity, outcomes, or transaction receipts.
 
-### 18.1 Implementation rules Cursor should follow
+### Definition of done
 
-1. Read the entire specification before selecting a financial model.
-2. Maintain a short implementation checklist with P0/P1/P2 labels.
-3. Record actual Gemini fields and contract semantics; do not rely on illustrative examples.
-4. Keep all financial arithmetic fixed-point and tested.
-5. Make the backend and contract validate independently.
-6. Do not hide a nonfunctional control behind a beautiful UI; implement it or visibly remove it.
-7. Never treat mock balances or seeded outcomes as live.
-8. Avoid unsolicited features that consume the deadline.
-9. Keep source attribution and deployment evidence up to date.
-10. After each integration change, run the relevant tests and the affected user journey.
-11. Before finalizing, check every route's loading, empty, error, and success states.
-12. Keep private user notes separate from public position data.
+- Complete the four storyboard sequences from Explore through a safe, cancelable Review, including loading, success, empty, permission, provider failure, cancel/back, refresh, and retry states.
+- Verify the actual Gemini contracts and source data shown, or clearly identify what remains unavailable; keep Replay distinct from Live.
+- Verify the shared voice/text actions and manual controls; keep the ElevenLabs credential server-side.
+- Show supported basket and comparison scenarios honestly, with known costs, unknown fees, maximum loss, payout, and settlement terms clearly distinguished.
+- Keep My Theses, Portfolio navigation, and History usable as supporting destinations with accurate empty/unavailable states.
 
-### 18.2 Suggested first implementation tasks
-
-- Create typed `MarketFamily`, `Scenario`, `ThesisRevision`, `PayoffSpec`, and `Quote` models.
-- Implement `verifyCompatibility`, `compileDirectional`, `compileRange`, `normalizeComparison`, and `computePositionPayout` as pure functions.
-- Record one actual Gemini market fixture and one final-resolution fixture.
-- Implement a minimal `ThesisEscrow` with acceptance, finalization, claim, and void.
-- Demonstrate conservation with unit and invariant tests.
-- Build the chart and scenario table from the same compiled data.
-- Wire quote acceptance through the user's actual wallet.
-- Add source observation, indexer reconciliation, and portfolio.
-- Polish only after the loop is complete.
-
-### 18.3 Definition of done
-
-A fresh user can discover the supported question, understand its rules, articulate a view, inspect the exact payout, obtain a funded quote, accept it on Arc testnet, find the resulting position, and claim a deterministic final payout/refund. Every displayed financial number is derived from a recorded source or the committed contract terms. The demo can be reproduced from the README, and the submission accurately distinguishes working live components from replay and future scope.
+Order placement, post-trade portfolio management, onchain deployment, settlement, and claims are beyond this active target. Do not treat their historical descriptions elsewhere in this reference document as work items.
 
 ## 19. Research sources and unresolved checks
 

@@ -1,5 +1,7 @@
 # Integration qualification
 
+This is a factual capability/evidence log, not a scope or task list. The active scope is the [corrected four-board storyboard](hackathon-scope.md): Gemini market data is the priority; ElevenLabs supports its research flow; Arc is a conditional construction/review path. Trade execution and the broader onchain position lifecycle below are not required for storyboard completion.
+
 | Capability | Environment | Evidence | Status |
 | --- | --- | --- | --- |
 | Arc network | Public testnet RPC | `eth_chainId` returned `0x4cef52` (5042002). [Arc network details](https://docs.arc.io/arc/references/connect-to-arc) | Verified November 14, 2026 |

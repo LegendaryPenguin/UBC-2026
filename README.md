@@ -2,6 +2,10 @@
 
 Thesis turns a prediction-market view into an explicit payoff table. In the recorded walkthrough, you can compare a custom BTC range payoff with threshold tickets that can still pay above your upper bound.
 
+## Active build scope
+
+The target is the corrected four-board journey: **Explore a Gemini question → speak or type to refine and confirm a view → inspect the basket → compare constructions and review before choosing**. Gemini is the priority bounty. ElevenLabs voice and an Arc custom-position option are included where they support that same journey. Review is cancelable and does not execute anything by itself. Full VFINAL account operations, order lifecycle, position management, settlement, and claims are reference capabilities rather than completion requirements for these boards. See [the active scope](docs/hackathon-scope.md) and [progress register](docs/plan-progress.md).
+
 ## Run locally
 
 ```sh
