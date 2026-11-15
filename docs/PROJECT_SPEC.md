@@ -1,6 +1,486 @@
-# Thesis — extensive product and build specification
+# Thesis — VFINAL complete product specification
 
-Version 1.0 · Research checked November 15, 2026 · Target: UBC 2026 hackathon
+**Target: the fully shipped product, not an MVP.** This replaces the earlier hackathon-only scope. The final product contract below governs the complete user experience; the implementation supplement preserves the detailed financial model, repository references, architecture, and hackathon demonstration plan.
+
+Prepared November 14, 2026 (America/Chicago). Proposed product specification; implementation and external-provider availability remain to be verified.
+
+**How to use in Cursor:** Read F1–F20 first, then the implementation supplement. Build the complete route/control coverage matrix before implementation. Final capabilities supersede the supplement's old P0/P1/P2 exclusions. Never let scheduling labels silently shrink the requested final product.
+
+**Navigation:** F1 product · F2 roles · F3 routes · F4 interaction rules · F5 accounts/recovery · F6 discovery · F7 research · F8 voice · F9 payoff studio · F10 execution · F11 funds · F12 portfolio/exits · F13 alerts · F14 journal/sharing · F15 support/privacy · F16 QuickNode · F17 operations · F18 architecture · F19 acceptance · F20 Cursor handoff.
+
+
+# FINAL PRODUCT CONTRACT — complete shipped experience
+
+This section defines the complete product, including capabilities beyond the initial demonstration. It supersedes earlier scope exclusions, P0/P1/P2 labels, and hackathon cut lists wherever they conflict. Those labels describe implementation order only; they do not remove features from the final product. The financial safety rules, source-verification requirements, and separation of actual execution from estimates remain binding.
+
+“Final” means the target product specification is complete enough to guide implementation and acceptance. It does not claim that integrations have been deployed, audited, approved, or made available by third parties. External capabilities have explicit release gates and unavailable states. Do not fill an unavailable integration with a simulated success.
+
+## F1. Final product promise and boundaries
+
+Thesis is a personal prediction-market research and execution workspace. A user can discover a question, investigate evidence, articulate a view by typing or speaking, compare the implications of different payoffs, seek real quotes, execute an approved position, monitor the reasons behind it, exit when liquidity exists, claim outcomes, and learn from their decisions.
+
+The best version includes the entire lifecycle around that central promise. It does not include unrelated casino mechanics, social engagement bait, leveraged products without a defined risk engine, or arbitrary sponsor integrations. The north-star experience is: **I understand my view, I understand my exposure, and I always know what I can do next.**
+
+### Final feature commitments
+
+- Guest research, account creation, secure authentication, wallet linking, recovery, and account closure.
+- Personalized home, discovery, search, watchlists, topic research, source inspection, and event calendars.
+- Text and voice thesis formation, saved evidence, alternative hypotheses, explicit view confirmation, and version history.
+- Directional, range, finite stepped, and verified multi-scenario payoff design.
+- Transparent comparison of Arc offers and qualified native Gemini alternatives.
+- Multi-maker RFQs, firm quotes, limits, fees, funding, transaction recovery, and receipts.
+- Portfolio, exposure analysis, quote-backed valuations, position management, partial exits where supported, and settlement/refunds.
+- Thesis monitoring, alerts, notification preferences, inbox, and research digests.
+- Private-by-default journals, optional public thesis snapshots, collaboration, moderation, and sharing controls.
+- Reports, transaction exports, accounting provenance, support tickets, service status, and data/privacy settings.
+- Maker liquidity management, curated market onboarding, settlement operations, abuse handling, and incident response.
+- QuickNode Streams as the intended contract-event ingestion service when the deployment is supported.
+- ElevenLabs as the intended conversational research interface, with a complete text equivalent.
+
+### Non-negotiable product truths
+
+The application never guarantees a quote, exit, profit, source correctness, or settlement time beyond the contract's actual rules. A connected wallet does not equal a verified exchange account. A displayed price does not equal executable liquidity. A proposed AI interpretation is not a confirmed user instruction. An exchange order is not an Arc contract transaction. A historical replay is not live trading. Every page respects these distinctions.
+
+## F2. Personas, permissions, and modes
+
+| Role | Can do | Cannot do |
+|---|---|---|
+| Guest | Browse, research, use limited voice/text assistance, simulate, save local drafts | Access another person's private data or submit an authenticated trade |
+| Account member | Sync drafts, manage alerts, publish snapshots, access private journal | Move funds without wallet/account authorization |
+| Wallet owner | Accept Arc quotes, claim, request exits, fund/withdraw own assets | Alter accepted payout rules |
+| Linked Gemini user | View permitted account data and place explicitly authorized native orders when qualified | Assume Arc funds are Gemini cash or bypass exchange eligibility |
+| Collaborator | View/comment/edit according to explicit grant | Trade from owner's wallet or change an accepted position |
+| Maker | Fund liquidity, publish quotes, manage free inventory and limits | Withdraw reserved collateral or choose final outcomes |
+| Curator | Propose and review supported market families | Retroactively change purchased market semantics |
+| Resolver | Submit source-backed outcomes under policy | Change finalized results or transfer user collateral arbitrarily |
+| Support agent | View consented diagnostic metadata and ticket messages | Obtain keys, sign trades, or access private research without grant |
+| Administrator | Manage operational access and incident policies | Sweep reserved user collateral |
+
+Research mode is available without a wallet. Paper mode is simulated and uses paper balances. Live execution is only enabled for verified supported environments and users. Hackathon mode uses testnet funds. These are persistent workspace-level labels, not small footer disclaimers. Changing mode prompts if an in-progress quote would be invalidated and never migrates financial objects between environments.
+
+## F3. Complete navigation map
+
+Primary desktop navigation: Home, Explore, Workspace, Portfolio, Alerts, Journal. Secondary navigation: Activity, Reports, Help, Settings. Account/wallet control remains in the header. Research workspace uses Overview, Evidence, My View, Build, Review as contextual steps. The user can return to earlier steps without losing work.
+
+| Route | Page | Primary outcome |
+|---|---|---|
+| `/` | Product landing | Start research or resume |
+| `/auth` | Sign in / create account | Establish secure session |
+| `/onboarding` | Guided setup | Choose interests, timezone, wallet preference |
+| `/home` | Personal dashboard | Know what needs attention |
+| `/explore` | Market discovery | Find a supported question |
+| `/search` | Unified search | Find topics, drafts, sources, positions |
+| `/calendar` | Event calendar | Inspect deadlines and expected resolutions |
+| `/watchlists` and `/watchlists/:id` | Watchlists | Organize topics |
+| `/topics/:slug` | Topic workspace | Understand rules and context |
+| `/topics/:slug/evidence/:id` | Evidence detail | Inspect source and relevance |
+| `/workspace` | Thesis library | Resume or organize research |
+| `/theses/:id` | Thesis editor | Confirm a precise view |
+| `/theses/:id/history` | Revision history | Understand changes |
+| `/theses/:id/build` | Payoff studio | Specify exposure |
+| `/theses/:id/compare` | Trade comparison | Compare normalized alternatives |
+| `/theses/:id/review` | Execution review | Approve exact terms |
+| `/quotes/:id` | Quote detail | Inspect a firm offer |
+| `/wallet` | Funds and accounts | See spendable funds by venue/network |
+| `/wallet/deposit` | Funding wizard | Choose supported funding route |
+| `/wallet/withdraw` | Withdrawal wizard | Send available funds safely |
+| `/portfolio` | Portfolio overview | Understand positions and concentration |
+| `/positions/:id` | Position detail | Monitor/claim/revisit |
+| `/positions/:id/exit` | Exit workspace | Seek and approve a real close quote |
+| `/orders` | Native exchange orders | Manage pending Gemini orders |
+| `/activity` | Activity ledger | Reconcile all actions |
+| `/transactions/:id` | Transaction detail | Recover and inspect receipt |
+| `/alerts` | Alert rules | Monitor selected conditions |
+| `/notifications` | Inbox | Act on updates |
+| `/journal` | Decision journal | Learn from past theses |
+| `/journal/:id` | Decision review | Compare reasoning with outcome |
+| `/reports` | Reports/exports | Retrieve accurate records |
+| `/publish/:id` | Sharing settings | Publish a controlled snapshot |
+| `/shared/:token` | Shared thesis | Inspect or fork a view |
+| `/profile/:handle` | Optional public profile | View explicitly published research |
+| `/settings/*` | Account/preferences/security | Manage account lifecycle |
+| `/help`, `/help/:article` | Help center | Understand product mechanics |
+| `/support`, `/support/:ticket` | Support | Resolve problems with context |
+| `/status` | Service status | Understand outages |
+| `/maker/*` | Maker console | Operate funded quotes |
+| `/ops/*` | Operations console | Curate, settle, and monitor safely |
+
+Routes may share layouts, but every route must have its own defined data, access policy, loading/empty/error states, and direct-link behavior. Unauthorized private deep links show an access request or not-found state without leaking titles.
+
+## F4. Universal interaction contract
+
+Every visible control must declare: label, enabled condition, event, data read/write, validation, pending state, success state, failure recovery, and permission. Button tables below inherit these rules; a developer may not invent a destructive or financial side effect for a generic “Continue” action.
+
+**Navigation:** preserve query/filter state in URL where shareable. Back restores prior scroll and inputs. Browser refresh restores saved state and reconciles pending mutations. Unsaved large edits prompt before destructive navigation; ordinary autosaved edits do not.
+
+**Dialogs:** title names the decision; primary action names its effect; secondary action closes without mutation. Escape closes only when safe. Financial submission may continue after dialog closure; background transaction indicator remains. Focus returns to the invoking control.
+
+**Form input:** validate inline after interaction and on submit. Do not discard invalid user text. Numeric fields have units, bounds, decimal rules, and accessible increment controls. Sliders are supplemented by text inputs. Dates show timezone. Defaults are visible and reversible.
+
+**Tables:** sort/filter/search never mutate assets. Pagination preserves selection where appropriate. Bulk actions preview count and exact effect. Financial bulk actions expose per-item execution and partial failure; no false atomicity.
+
+**Toasts:** use for supplementary confirmations only. Durable financial results live in Activity and transaction detail. Errors appear next to the affected control and remain until resolved or dismissed.
+
+**Notifications:** open a relevant safe detail page; never trigger trade or withdrawal directly. Deep links re-check current permissions and status.
+
+**Accessibility:** keyboard-only completion of all primary flows; properly named icons; text equivalents for charts/audio; no color-only states; 200% zoom support; reduced motion; focus management; touch targets at least 44px where practical. Provide explicit chart data tables and downloadable data.
+
+**Mobile:** bottom navigation for Home, Explore, Portfolio, Inbox; Workspace accessible from Home and menu. Context panels become sheets with descriptive headings. Review amount and action stay visible without hiding terms. No hover-only financial information.
+
+## F5. Account creation, onboarding, and recovery
+
+### Auth page
+
+Show Sign in and Create account modes with email/passkey/provider options only if implemented. Email input → send one-time link/code → verify → establish session → restore original destination. Resend has a countdown, rate limit, and non-enumerating response. Change email returns to input without creating a duplicate account. Expired code offers fresh verification. Terms/privacy links open without clearing input. Marketing consent is separate and optional.
+
+Wallet authentication uses a scoped challenge including domain, nonce, expiry, and intended purpose. “Connect wallet” discovers an address; “Sign in with wallet” verifies ownership. No allowance or transaction is requested during authentication. Rejecting a signature returns to research.
+
+### Onboarding
+
+Step 1: choose interests or Skip. Step 2: timezone/display currency (display only; settlement currency remains explicit). Step 3: experience preference, Beginner explanations or Compact; reversible later. Step 4: wallet preference, create supported embedded wallet, link external wallet, or Explore first. Step 5: optional notification permissions, requested only after explaining a concrete alert benefit.
+
+Back preserves choices; Continue validates only current step; Skip never silently opts in; Finish opens Home with one suggested topic. Existing account with unfinished onboarding resumes, but cannot block already-owned position claims.
+
+### Security and recovery page `/settings/security`
+
+Rows show passkeys, active sessions, verified contact methods, and connected wallets. **Add passkey** requires reauthentication and device flow; **Rename** changes label only; **Remove** rejects removal of the last usable authentication method without replacement. **Sign out session** revokes that session; **Sign out all others** previews scope. **Recover account** uses the chosen identity/wallet provider's actual recovery method; do not promise the app can recover a self-custody private key.
+
+Recovery distinguishes account-data access from wallet-key control. Restoring an app account does not restore a lost external wallet. Show unaffected public positions and recovery documentation. Changes to recovery methods create durable security notifications.
+
+### Linked accounts `/settings/connections`
+
+Each integration card shows connection status, scopes, last sync, and reconnect/remove controls. Gemini **Connect** opens its supported authorization flow only after qualification; **Review permissions** explains read vs trade scopes; **Disconnect** revokes tokens where supported and stops future sync. It does not cancel existing exchange orders automatically. Before disconnect, show open-order count and direct management link. Wallet unlink cannot erase blockchain history or revoke allowances; offer separate allowance management.
+
+## F6. Home, discovery, search, calendar, watchlists
+
+### Home `/home`
+
+Order sections by user need: action-required claims/failed transactions, active thesis changes, recent work, watchlist updates, then discovery. Financial totals distinguish available funds, cost basis, claimable value, and estimated liquidation value. Hide unavailable valuations rather than substituting zero.
+
+Buttons: **Claim [amount]** opens claim review; **Resume** returns to exact draft step; **Review update** opens the evidence delta; **View position** opens immutable terms; **New thesis** opens topic picker; **Customize home** reorders/hides sections; **Reset layout** restores default after confirmation. Dismissed informational cards can be restored in settings; critical fund/settlement notices cannot be permanently hidden without acknowledgement. First-use empty home provides one sample research journey, not fictional user activity.
+
+### Explore
+
+Add final filters for topic, settlement horizon, supported payoff templates, liquidity/quote availability, source status, and watched-only. Filter labels describe meaning; “Tradeable” requires current eligibility and verified support, not a historical price. **Save search** creates a named reusable filter. **Watch** selects watchlist or creates one inline. **Compare topics** opens a maximum-three-topic research comparison and never implies compatible combined settlement. **Suggest a market** sends a structured curation request with source link; status is visible later.
+
+### Unified search `/search`
+
+Command palette and page share the same index. Search private records only for authorized owner/team. Sections: Topics, My theses, My positions, Evidence, Help. Enter opens highlighted result; Escape closes palette; clear resets query; filter chips scope result types; “Search all results” opens full page. Loading is cancellable; stale responses cannot overwrite newer query results. Empty result offers spelling adjustment and market request. Do not index private rationale into a public search service.
+
+### Calendar `/calendar`
+
+Month/week/list views display trading cutoff, observation time, expected source resolution, and contract longstop as different event types. **Today**, previous/next, timezone control, source/status filters, and view toggle preserve state. Event click opens a detail sheet with original rules and links to research/position. **Add reminder** creates an alert with chosen lead time; **Export event** generates a calendar entry with explicit timezone and disclaimer when resolution time is estimated. Daylight-saving transitions use timezone-aware timestamps.
+
+### Watchlists
+
+List page: Create, Rename, Duplicate, Delete, Reorder. Detail: Add topic via search, Remove, Sort, Notes, Set alert, Share read-only if chosen. Delete requires confirmation and offers undo for the list metadata; it never sells positions or deletes theses. Removing a topic asks whether associated list-specific alerts should remain. Shared lists exclude personal positions and private notes unless explicitly included. A topic becoming unsupported stays visible with reason and research/source link.
+
+## F7. Research workspace and evidence system
+
+The earlier topic page remains the foundation. Final layout adds a research question header, evidence timeline, scenario/reference chart, and persistent view notebook. Default is guided; advanced users can collapse explanations. A user's uncertainty is an accepted state, not an error to be “fixed” by confident AI text.
+
+### Research controls
+
+**Ask a question** opens text/voice thread scoped to topic and selected sources. **Compare arguments** presents strongest supporting and challenging evidence with citations. **Add source** accepts URL or text/file if supported, validates source metadata, and marks user-provided material. **Pin to thesis** attaches a source version. **Unpin** removes association, not the original evidence record. **Mark outdated** flags a source for review and records why. **Refresh research** retrieves new evidence and shows a diff rather than overwriting saved conclusions.
+
+**Snapshot market** saves a timestamped reference state for the journal. **Change time window** changes chart scope only. **Inspect rules** expands exact source terms and verified scenario mapping. **Report data issue** creates a prefilled support/curation ticket including IDs and timestamps, with user consent before including private text.
+
+### Evidence detail
+
+Show source title/publisher, original URL, author where known, publication/retrieval times, status, relevant excerpt, our summary, and why it may matter. Separate source claims from model inference. Controls: Open original; Save; Label supports/challenges/context; Attach note; Compare previous version; Copy citation; Report issue; Remove private uploaded source. External link failure shows archived metadata but does not invent full content. Deleted or corrected sources remain referenced in historical thesis snapshots with a visible status.
+
+### Thesis editor `/theses/:id`
+
+Fields: title, precise outcome question, horizon, view type, compatible boundaries/scenarios, rationale, strongest opposing argument, invalidation conditions, saved evidence, optional personal scenario probabilities, and optional budget intention. None of the latter authorize spending.
+
+**Confirm view** validates semantic compatibility and creates immutable revision. **Save** persists draft. **Duplicate** creates a new owner draft. **Archive** removes from active workspace without deleting journal/positions. **Delete draft** confirms data loss and rejects deleting immutable execution evidence. **Compare revisions** opens side-by-side structured changes. **Restore revision** creates a new draft based on old content; it does not rewrite history. **Invite collaborator** opens explicit role selection. **Build payoff** uses a confirmed revision. **Paper test** opens a labeled simulation.
+
+An AI proposed edit is shown as a diff with Accept selected, Accept all, Reject, and Edit manually. Never overwrite user-written reasoning without consent. Concurrent edits use revision checks and a conflict resolution screen with both versions, not last-write-wins loss.
+
+### Workspace `/workspace`
+
+Tabs: Drafts, Confirmed, Traded, Archived, Shared with me. Search and tags organize private work. Row menu: Open, Rename, Duplicate, Archive, Share, Delete where allowed. Bulk archive/tag is supported with preview; bulk trading is not hidden in this menu. Empty shared workspace explains invitation behavior. Revoked collaborator access removes private cached data on next authorization check.
+
+## F8. ElevenLabs conversational research
+
+Voice is a complete optional input modality for the research workflow, not a mandatory gate or decorative audio player. Text and keyboard users can achieve the same outcomes.
+
+### Voice panel anatomy
+
+Header: topic and source scope; status indicator; microphone controls; live transcript; agent response; cited-source chips; proposed thesis card; privacy notice; session controls. Waveform is supplementary. Every spoken claim that depends on evidence has a visible citation. Keep the confirmed view panel visible while talking.
+
+| Control | Exact behavior |
+|---|---|
+| Talk through my view | Explain microphone use, request browser permission, start scoped session after consent |
+| Start / Resume | Open audio session; display connection state before recording |
+| Mute microphone | Stop sending microphone audio; retain conversation |
+| Stop speaking / Interrupt | Stop playback and allow user turn; preserve transcript |
+| Pause session | Stop capture and playback without discarding draft |
+| End session | Close audio connection, save permitted transcript/summary, show proposed changes |
+| Type instead | Switch input modality with same conversation context |
+| Edit transcript | Correct recognition before deriving a final view; preserve source of correction |
+| Accept proposed view | Validate structured fields, show confirmation, update draft only |
+| Reject proposal | Keep existing draft and optionally explain correction |
+| Open citation | Focus associated source card |
+| Delete conversation | Delete according to retention policy; retain already accepted thesis revision unless separately deleted |
+| Audio settings | Select mic/output where supported, speech speed, voice, transcript preference |
+
+### Conversational states and behavior
+
+States: permission-needed, connecting, listening, transcribing, thinking, speaking, interrupted, paused, reconnecting, ended, error. Permission denied offers browser guidance and Type instead. Network loss stops capture and shows what was saved. Reconnect does not repeat an already accepted edit. Low-confidence transcription asks to confirm critical amounts, dates, and negations.
+
+Example clarification sequence: identify intended observation semantics → select supported thresholds → ask about opposing evidence → summarize precise view → show visual confirmation. The agent must not pressure a user to trade. It can explain “what happens if I am wrong?” by reading the deterministic payout model. It cannot accept a quote, grant allowance, withdraw, or finalize a result by voice alone. “Buy it” opens visual review, not a hidden transaction.
+
+### Integration boundary
+
+Use ElevenLabs speech/agent capabilities around the application's validated research tools. Allowed tools: search verified topics, retrieve evidence, explain rules, propose draft patch, compile nonbinding preview, read user's authorized position state. Privileged financial tools are excluded. Prompt/tool outputs are treated as untrusted. The provider's latency, retention, regions, and account limits must be checked before release; recording is not retained by default without a documented user choice.
+
+## F9. Payoff studio, comparison, and simulation
+
+### Final payoff templates
+
+Directional, interval/range, outside-range, and stepped finite-scenario payouts are supported only when their state space is verifiable and exhaustive. Multi-event combinations require explicit joint settlement rules and bounded state enumeration; no automatic independence assumption. Unsupported continuous exposure is rejected or discretized only with user-visible approximation error and consent.
+
+Advanced editor shows scenario rows with payout per unit, bounded numeric input, maximum payout, premium quote status, and validity. **Add step** splits only at supported boundaries. **Remove step** previews changed payouts. **Normalize** explicitly selects equal maximum payout or equal spend. **Undo/Redo** affect unsaved editor operations. **Reset** returns to the last confirmed template. **Lock scenario** preserves its payout while editing others. **Explain shape** describes the deterministic result. No slider can create an uncapped liability.
+
+### Comparison page
+
+Compare custom Arc offers, supported native Gemini constructions, and paper alternatives. Columns: venue, instruments, settlement semantics, cost, fees, max payout, max loss, outside-target exposure, liquidity, quote time/expiry, execution type, and early-exit availability. **Equal budget / Equal payout / Per unit** changes normalization. **Include fees** is on by default; gas assumptions are labeled. **Inspect legs** shows individual orders and potential partial-fill exposure. **Select offer** opens its exact venue-specific review. **Refresh all** re-fetches without automatically accepting a replacement. **Hide alternative** changes display only.
+
+An offer ranking may optimize user-selected criteria such as lowest cost for identical payoff, lowest mismatch, or simplest execution. It must not label an economically different payoff “best” solely because it is cheaper. If no exact match exists, explain the residual exposure and require explicit selection.
+
+### Simulation page/panel
+
+**Paper trade** uses simulated balance and stores snapshot/assumptions. **Set scenario** previews deterministic payout. **Historical replay** uses time-gated evidence. **Advance time** is available only in replay. **Compare my belief** calculates user-assumption expected value and sensitivity, labeled subjective. **Export scenario table** includes costs and assumptions. **Reset simulation** cannot affect real positions. Backtests report sample limitations and cannot claim future performance.
+
+## F10. Quotes, execution, orders, and transaction recovery
+
+### Multi-maker RFQ
+
+User requests size, desired payoff, maximum spend, and quote lifetime constraints. Server fans out to eligible funded makers, collects signed offers, and displays expiry independently. A quote is firm only within its actual terms and funding checks; it can still fail atomically if its onchain availability changes. No fabricated depth. Maker identity, fee components, and collateral coverage are inspectable.
+
+Buttons: Request quotes, Cancel request, Refresh, Compare, Select, Inspect terms, Accept exact offer. Cancel request stops waiting but does not revoke a submitted blockchain transaction. An expired selected offer triggers Refresh; new terms require a new confirmation. An empty result offers lower size or alert-on-availability, never a synthetic executable quote.
+
+### Final review
+
+Checklist is factual, not a collection of decorative checkboxes: correct wallet and venue, exact payout, maximum loss, total cost, settlement rules, resolver trust, fee policy, and exit limitations. User chooses explicit spending cap and receipt delivery preference. Approval amount defaults to exact required value; unlimited approval, if offered at all, is an advanced explicit choice with revocation path.
+
+The acceptance flow tracks validation → wallet authorization → submission → confirmation → indexed position. If a smart-account batch combines approval and acceptance, display it as a batch only when actually supported. A normal wallet may require two prompts. Pending pages show hash and safe navigation guidance. Replaced transactions reconcile by nonce. Unknown status never auto-resubmits.
+
+### Native Gemini orders `/orders`
+
+Tabs: Open, Partially filled, Completed, Canceled, Rejected. Rows show side, contract, limit, requested/filled/remaining size, fees, venue time, and ID. **Cancel** requests cancellation and displays cancel-pending until venue acknowledgement; fills may still occur during that race. **Replace** previews whether the venue modifies or cancels-and-creates, and warns about interim exposure. **Inspect fills** shows individual fills. **Retry rejected** creates a fresh review rather than reusing stale terms.
+
+Multi-leg execution shows each leg independently and overall exposure. If one leg fills and another fails, show actual held exposure and explicit recovery options: keep, cancel remaining, or seek a separate offsetting order. Do not automatically market-trade away exposure without a pre-authorized bounded policy. Native trading is released only after account eligibility, permissions, current API behavior, and relevant operational requirements are qualified.
+
+### Transaction detail `/transactions/:id`
+
+Show action type, amount/unit, network/venue, signer, timestamp, status, hash/order ID, related position, and error if any. **Open explorer/source**, **Copy ID**, **Refresh status**, **Download receipt**, **Contact support**, and supported wallet **Speed up/Cancel pending** actions are explicit. A wallet cancellation is itself a competing transaction and is not guaranteed. API retry only retries reads/status lookups unless an idempotent mutation is proven safe.
+
+## F11. Funds, deposits, withdrawals, and allowance management
+
+### Wallet overview
+
+Separate balances by wallet, network, token, and exchange account. Show spendable, reserved, pending incoming, pending outgoing, and claimable amounts without double counting Arc native/ERC-20 representations. **Deposit**, **Withdraw**, **Transfer between own accounts**, **Manage approvals**, **Refresh**, and **View activity** are available only for supported routes.
+
+### Deposit wizard
+
+Choose destination → choose supported source route → inspect network/token/minimum/fees/time → confirm instructions → track arrival. Routes may include direct Arc transfer, supported Circle cross-chain funding, and a qualified fiat provider. External dependencies are capability-gated. No fake bank/card form is shown when no provider exists.
+
+**Copy address** copies exact destination with network label. **Show QR** encodes only a validated supported payment format. **Choose network** resets incompatible source choices and warns before address reuse. **I sent funds** starts tracking; it does not credit balance. **Open provider** leaves a return link; abandoned external checkout is recoverable. **Refresh status** reads actual source/destination state. Wrong-network transfers show support guidance without promising recovery. Bridge progress distinguishes source acceptance, attestation/transfer, destination receipt, and final availability.
+
+### Withdrawal wizard
+
+Select available balance → enter recipient/address book → choose supported network → validate address and amount → review fee/reserve and destination → reauthenticate if required → wallet sign → track. **Max** reserves required gas and pending commitments. **Save recipient** is optional with nickname; new/changed recipient requires explicit review. **Paste/scan** only populates fields. **Send** is unavailable for reserved funds. A submitted transfer is not undone by closing the page.
+
+### Approval management
+
+Show spender, verified contract name/address, token, allowance, network, and relevant active product. **Revoke** submits actual allowance update after explanation; **Reduce** accepts bounded amount. Revoking allowance does not retrieve funds already escrowed or cancel a purchased position. Unknown spenders are not labeled malicious without evidence. All actions produce receipts.
+
+## F12. Portfolio, exposure, exits, settlement, and claims
+
+### Portfolio analytics
+
+Views: Positions, Exposure, Performance, Cash, Claims. Group by topic, settlement date, payoff type, venue, and wallet. Costs and realized P&L are factual; unrealized value requires a valuation source and timestamp. If no exit quote exists, show cost and scenario payout, not a made-up market value.
+
+**Stress scenario** previews payouts under selected valid outcomes. **Show overlapping exposure** identifies shared predicates and deadlines, not assumed statistical correlations. **Compare to thesis** links current evidence and purchase rationale. **Rebalance** creates a proposed set of new trades/exits with separate approvals, costs, and execution risks; never mutates existing contracts. **Export current view** preserves filters and valuation assumptions.
+
+### Early exit `/positions/:id/exit`
+
+An exit is a separate funded transaction. For Arc, the final product supports whole-position transfer/buyback through a verified settlement contract; partial exits require deterministic position splitting and a defined unit model. If that contract capability is not deployed, partial-exit controls remain unavailable with explanation rather than editing a database balance.
+
+Flow: choose whole or supported quantity → request buyback quotes → inspect proceeds/fees/realized P&L/remaining exposure → accept chosen quote → transfer/reduce claim rights atomically with payment → update position lineage. Buyer and seller cannot both retain the same future claim. Each split child has a conserved payout allocation and immutable source terms. Settlement beginning while a quote is pending invalidates the quote according to registered cutoff rules.
+
+Buttons: Request exit quote, Change quantity, Refresh, Compare offers, Accept [net proceeds], Cancel request, Return to position. No offer state: keep holding, lower quantity if supported, or notify when liquidity appears. “Exit anytime” is never advertised as unconditional.
+
+### Claim center
+
+List finalized claims/refunds with amounts, wallet, gas estimate, and deadline if the contract has one. **Claim one** opens review. **Select claims** enables batch preview. **Claim selected** uses an actual supported atomic batch or explicitly tracks separate transactions and partial success. A failed item remains retryable without resending successful claims. Zero payouts have explanatory records and no unnecessary claim prompt.
+
+### Position detail additions
+
+Tabs: Overview, Thesis, Timeline, Rules, Transactions. **Add alert** pre-fills position context. **Request exit** opens actual liquidity flow. **Share public facts** excludes private rationale by default. **Download receipt** includes contract/version/source IDs. **Report settlement issue** opens ticket with source evidence; it is not a guaranteed onchain dispute. **Review outcome** opens journal after finalization. A purchased position always shows the original terms even if the market family has a newer version.
+
+## F13. Alerts, notifications, and evidence monitoring
+
+### Alert editor
+
+Supported types: market-reference price crosses a level; firm quote becomes available within budget; source status changes; new relevant evidence; thesis invalidation condition observed; trading cutoff approaching; final result/claim available; transaction problem; maker collateral threshold for maker accounts.
+
+Fields: name, topic/position/source, condition, threshold, data source, freshness requirement, evaluation frequency, repeat/cooldown, delivery channel, quiet hours, expiry. A natural-language invalidation condition must be converted into an inspectable structured rule or labeled human/AI review required. Never imply a vague condition is deterministically monitored.
+
+**Create** validates and shows a sample notification. **Test** sends a marked test only to selected verified channel. **Pause/Resume** changes evaluation status. **Edit** versions the condition. **Duplicate** creates disabled copy until saved. **Delete** stops future evaluation and retains necessary history. **Snooze** sets exact resume time. Alerts do not authorize trades.
+
+### Inbox
+
+Tabs: All, Unread, Trading, Research, Security. Click opens detail; **Mark read/unread**, **Archive**, **Filter**, and **Notification settings** are nonfinancial actions. A claim notification routes to current claim review; an expired quote notification explains expiry rather than showing stale acceptance. Security messages cannot be unsubscribed as marketing. Deduplicate by underlying event and retain updated status.
+
+### Delivery reliability
+
+In-app is baseline. Email/push require verification/permission. Retry transient failures with backoff; show bounced/disabled channels in settings. Quiet hours apply to optional alerts; the user explicitly chooses handling of urgent account notices. Include source timestamp and current-vs-trigger-time distinction in financial alerts.
+
+## F14. Journal, reports, sharing, and collaboration
+
+### Journal
+
+Each executed thesis has a frozen decision snapshot: evidence available then, personal beliefs if supplied, chosen payoff, quoted costs, alternatives considered, and final outcome. **Write reflection** saves private notes. **Compare expectation/outcome** shows exact scenario. **Tag lesson**, **Filter topic/date**, **Link related thesis**, **Export**, and **Archive** are available. Do not equate winning a single trade with sound reasoning or losing with bad reasoning.
+
+Calibration charts are shown only when enough explicit probability forecasts exist and the calculation is defined. Mark small samples. Separate forecast accuracy from trading P&L and fees. **Inspect calculation** shows methodology and included records; **Exclude record** requires a reason and preserves an audit trail rather than silently improving stats.
+
+### Reports
+
+Choose report type, period, timezone, wallets/venues, and output format. Types: transaction ledger, realized outcomes, fees, open positions, evidence/thesis archive. **Preview** shows row count and columns; **Generate** creates a background job; **Download** appears when ready; **Retry** resumes failed generation; **Delete export** removes generated file, not underlying records. CSV amounts include currency and precision; receipts include mode and provenance. Reports are accounting records, not a promise of jurisdiction-specific tax advice.
+
+### Publishing and shared thesis
+
+Publishing flow: choose immutable revision → preview exact public fields → optionally include rationale/evidence → choose unlisted/public access → confirm → generate link. Default excludes wallet address, balances, private notes, and positions. **Copy link** does not itself publish. **Unpublish** revokes app access, with clear notice that prior recipients may retain copies. **Update publication** creates a new visible version, not a retroactive rewrite.
+
+Shared page controls: View sources, Inspect payoff, Compare with my view, Fork privately, Follow updates, Report content, Copy link. Fork creates an independent draft and requires fresh quotes; it never copies financial authorization. Public profile lists only opted-in snapshots, not automatic wallet P&L leaderboards.
+
+### Collaboration
+
+Invite email/account → select viewer/commenter/editor → preview scope → send invite → recipient accepts → access granted. Editors can modify drafts but cannot confirm a wallet trade. Comments support reply, resolve, edit own, delete own, mention authorized collaborator, and report. Revoking access stops future private reads and invalidates shared sessions where practical. Notifications do not leak private content to unverified recipients.
+
+## F15. Help, support, settings, privacy, and account closure
+
+### Help center
+
+Search guides; category filters; article feedback Helpful/Not helpful; related articles; contextual “Explain this term” links; Contact support. Core articles cover payout vs profit, quote expiry, liquidity, wallet/network, gas, source resolution, voids, exits, and recovery. Help examples use the same domain math as the app.
+
+### Support
+
+Ticket form selects category, related transaction/position, description, optional screenshot, and consent to attach diagnostics. **Preview diagnostics** reveals exactly what is sent. **Submit** returns ticket ID; **Reply**, **Attach**, **Close**, **Reopen**, and **View status** maintain thread. Never request seed phrases/private keys. A financial ticket cannot modify contract state through a support agent's arbitrary instruction. Link service incidents when relevant. Attachments are validated and privately scoped.
+
+### Settings
+
+Account: name, verified email, handle, language. Preferences: timezone, currency display, density, theme, reduced motion, default chart mode. Notifications: channels, categories, quiet hours. Privacy: transcript retention, analytics consent where applicable, publication defaults, export/delete requests. Connections: wallet/exchange/provider permissions. Security: passkeys/sessions/recovery. Each page has Save, Cancel/revert, inline validation, and persistent success confirmation; dangerous settings use reauthentication.
+
+### Account closure
+
+**Close account** opens checklist: open positions, claimable funds, pending orders, active alerts, shared pages, exports. Offer cancel native orders via explicit flow, claim/withdraw where possible, export records, and unpublish. Explain that app deletion cannot erase blockchain records or retrieve inaccessible wallets. Account-data deletion follows published retention rules; mandatory retained records are identified, not silently promised deleted. Final confirmation requires reauthentication and explicit acknowledgement. Open onchain claims must remain accessible through a documented contract/wallet path even after app closure. Cancellation window, if offered, has exact dates and a restore action.
+
+## F16. QuickNode, data reliability, and service status
+
+QuickNode Streams is the intended primary ingestion path for Arc contract events, subject to confirming the target network/plan supports it. Configure filters for deployed contract addresses and relevant events. Backend verifies delivery authenticity per current provider documentation, validates chain/address/topic, deduplicates, stores cursor/checkpoint, and updates read models. Historical backfill rebuilds state; direct RPC reads reconcile sensitive balances and claims.
+
+Events update position timelines, maker reservations, claimability, activity, and notifications. Streams never decides Gemini outcomes or authorizes payouts. Webhook delivery is an input to validation, not a trusted financial command. A provider outage must not prevent direct contract claims.
+
+Service status page separates Gemini data, research model, voice, quote service, Arc RPC, stream/indexer, funding providers, and notifications. Show operational/degraded/unavailable states with last update and incident timeline. **Subscribe**, **View incident**, **Retry connection**, and **Open support** have clear behavior. A stale indexer banner includes last indexed block/time and direct-read fallback; do not mark chain transactions failed because the indexer is delayed.
+
+## F17. Maker and operations experience
+
+### Maker console
+
+Dashboard: free/reserved collateral, offered/accepted quotes, exposure by scenario/family, realized proceeds, and operational health. Controls: Deposit, Withdraw free, Set per-family cap, Set quote spread policy, Enable/disable family, Pause all new quotes, Inspect quote, Export ledger. Parameter edits show effective time and whether existing signed offers remain valid. Canceling offers requires actual onchain nonce/cancellation support where promised; a dashboard toggle alone cannot revoke a still-valid signed quote.
+
+### Market curation console
+
+Queue: proposed provider events, compatibility review, source-rule diffs, unsupported statuses. **Propose family** selects exact contracts and predicates. **Validate** runs deterministic checks. **Preview scenarios** exhausts valid/invalid states. **Approve/register** requires permitted role and immutable version. **Reject** records reason. **Retire** blocks new quotes without altering old claims. Source-rule changes trigger a new review and version, not automatic mutation.
+
+### Settlement console
+
+Show unresolved families sorted by close/longstop. Preview raw source evidence, normalized scenario, affected liability, and contract state. Propose/correct/finalize/void actions follow the registered policy and role separation. Final product requires an independently reviewed oracle/trust design before real-fund release; the hackathon authorized-relayer model remains explicitly labeled. A user-facing dispute process, if enabled, must define eligible evidence, submission deadline, adjudicator, collateral effects, and finality before any position uses it. Never bolt on retroactive disputes after claims begin.
+
+### Incident console
+
+Pause new quotes/acceptance where contract allows; preserve withdrawals of free balances and valid claims; identify affected versions; publish status; reconcile event history; notify impacted accounts. Changes require audit records and least privilege. No single support/admin action may silently change all user payoffs.
+
+## F18. Additional final system contracts
+
+New entities: Account, Session, AuthMethod, WalletLink, VenueConnection, Watchlist, CalendarReminder, VoiceSession, DraftPatch, CollaborationGrant, Comment, PublicationSnapshot, NotificationRule, NotificationDelivery, FundingIntent, WithdrawalIntent, ExitQuote, PositionSplit, VenueOrder, Fill, ExportJob, SupportTicket, Incident, MakerPolicy, MarketReview.
+
+Each entity has owner/scope, created/updated timestamps, revision or idempotency key where needed, environment/mode, and explicit status enum. Financial records retain immutable terms and provenance. Private content access is enforced server-side and in storage policies; IDs are not authorization.
+
+Additional API groups:
+
+- `/api/auth/*`, `/api/accounts/*`, `/api/sessions/*`: identity/session/recovery.
+- `/api/watchlists/*`, `/api/search`, `/api/calendar`: discovery organization.
+- `/api/voice/sessions`, `/api/voice/proposals`: scoped ephemeral sessions and validated draft patches.
+- `/api/theses/:id/revisions`, `/collaborators`, `/comments`, `/publication`: versioned collaboration.
+- `/api/funding/routes`, `/intents`, `/api/withdrawals/preview`: qualified money movement.
+- `/api/positions/:id/exit-quotes`, `/api/positions/:id/lineage`: exits and split ownership.
+- `/api/venue/orders`, `/fills`, `/connections`: exchange integration with per-operation authorization.
+- `/api/alerts`, `/api/notifications`, `/api/reports`: monitoring and records.
+- `/api/support`, `/api/status`, `/api/privacy/requests`: lifecycle and support.
+
+Every mutation uses authorization, schema validation, rate limiting, idempotency where needed, and audit logging without secrets. Tool/model calls have per-session budgets. User text and imported sources cannot elevate permissions. External callbacks verify signatures and replay bounds. Financial acceptance always revalidates current terms; a previously loaded page is not authority.
+
+## F19. Complete acceptance matrix and release gates
+
+Every page above must pass loading, empty, partial-data, unavailable, unauthorized, stale-session, narrow-screen, keyboard, and direct-link tests. Every mutation must pass duplicate-click, timeout, retry, canceled-input, and concurrent-change cases. Every financial flow additionally passes insufficient funds, wrong network, expired quote, rejected signature, pending unknown transaction, and reconciliation cases.
+
+### End-to-end journeys that must exist
+
+1. Guest → research → local draft → account → migrate draft without loss.
+2. New account → passkey/wallet setup → funding → research → quote → acceptance → position.
+3. Existing user → voice clarification → proposed edit → manual correction → confirm → trade.
+4. Research → incompatible market family → explicit explanation → supported alternative.
+5. Quote expires during approval → new offer → changed terms review → accept.
+6. Native multi-leg partial fill → inspect residual exposure → explicit recovery.
+7. Position → new contradictory evidence → revise thesis → request exit → funded buyback or honest no-liquidity state.
+8. Partial exit → conserved child positions → later settlement/claim without duplicated rights.
+9. Final result → notification → single/batch claim → reconciled balance and receipt.
+10. Source unavailable/contradictory → wait → defined longstop → refund.
+11. Collaborator invite → edit conflict → merge → owner confirmation → separate wallet approval.
+12. Publish snapshot → reader forks → fresh research/quote → no inherited authorization.
+13. Device loss → account recovery → wallet recovery distinction → restore research/positions.
+14. Provider outage → status notice → cached research → direct claim fallback.
+15. Report generation → download → inspect provenance and units.
+16. Account closure → export → address open obligations → delete eligible private data → retain access path to onchain claims.
+
+### Financial release gates
+
+A fully shipped real-fund product requires reviewed contract/oracle architecture, independent security assessment appropriate to risk, verified venue/provider support, operational monitoring, incident response, and applicable product/market eligibility checks. These are release dependencies for the proposed financial product, not claims that this document grants authorization. Use testnet/paper until these gates are satisfied. Do not use the phrase “production-ready” merely because frontend tests pass.
+
+### Product release gates
+
+Usability testing verifies that users can state the winning condition, maximum loss, fees, settlement source, and exit limitation. Accessibility testing covers nonvisual chart/voice equivalents. Privacy testing covers wallet switching, revoked collaboration, public snapshots, and transcript deletion. Recovery testing covers browser restart, indexer failure, webhook replay, and disconnected exchange authorization.
+
+## F20. Cursor handoff — FINAL specification instructions
+
+Use this document as the target for the fully shipped product. The earlier implementation supplement contains reference research, financial rules, and a hackathon demonstration sequence; its P0/P1/P2 labels are scheduling metadata only. Do not silently remove final features because they were originally postponed.
+
+Start by creating a route/control coverage matrix from F3–F17. For each control record implementation location, handler, API/contract dependency, validation, pending/success/failure states, tests, and delivery status. Implement vertically, one complete user flow at a time. Keep every incomplete external capability behind an honest capability state with clear user guidance; never simulate live execution to make the interface look complete.
+
+Deliver the complete visual system and all defined page states. Preserve the central research-to-view-to-payoff journey. Use the pinned LYNX and Cumulant references as architectural inspiration, not as a shortcut around our financial guarantees or original design. QuickNode belongs in the event-data pipeline; ElevenLabs belongs in conversational thesis formation. Native Gemini execution, funding providers, and exit contracts each need their own verified boundary and acceptance tests.
+
+The final implementation is accepted when the full journey matrix passes and every visible control is functional or explicitly unavailable for a verifiable capability/eligibility reason. An incomplete feature cannot be disguised as a perpetual “coming soon” card while calling the product complete. Maintain a release-dependency register so the user can distinguish code still to build from third-party access still to obtain.
+
+### Updated reference links
+
+- QuickNode Streams: https://www.quicknode.com/docs/streams
+- QuickNode Arc support overview: https://www.quicknode.com/docs/arc/api-overview
+- ElevenLabs speech capabilities: https://elevenlabs.io/docs/overview/capabilities/speech-engine
+- ElevenLabs agents: https://elevenlabs.io/docs/eleven-agents/overview
+
+These extend the official Gemini, Arc, Circle, Linear, and pinned repository references in the implementation supplement. Provider details must be verified at implementation time; this document specifies desired behavior rather than inventing undocumented API capabilities.
+
+
+---
+
+# Implementation supplement — core math, reference repositories, and demonstration sequence
+
+Supporting research and implementation sequence · User-facing planning date: November 14, 2026 · Historical priority labels below are scheduling only.
 
 **Working pitch:** Understand what markets expect. Decide where you disagree. Build a position that pays in the scenarios you believe in.
 
