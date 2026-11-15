@@ -9,6 +9,31 @@ export default function AuthPage() {
   const [code, setCode] = useState("");
   const [demo, setDemo] = useState("");
   const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+
+  async function submit(action: "request" | "verify") {
+    setPending(true);
+    setError("");
+    setMsg("");
+    if (action === "request") setDemo("");
+    try {
+      const res = await api<{ demoCode?: string }>("/api/auth", {
+        method: "POST",
+        body: JSON.stringify({ action, email, code }),
+      });
+      if (action === "verify") {
+        window.location.href = "/onboarding";
+      } else {
+        setDemo(res.demoCode ?? "");
+        setMsg("Your local demo code is ready.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign-in failed.");
+    } finally {
+      setPending(false);
+    }
+  }
   return (
     <div className="mx-auto max-w-md space-y-4">
       <h1 className="font-serif text-3xl">Sign in</h1>
@@ -17,11 +42,8 @@ export default function AuthPage() {
           <input className={inputCls()} value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         <Button
-          onClick={async () => {
-            const res = await api<{ demoCode: string }>("/api/auth", { method: "POST", body: JSON.stringify({ action: "request", email }) });
-            setDemo(res.demoCode);
-            setMsg("Code sent.");
-          }}
+          onClick={() => submit("request")}
+          disabled={pending}
         >
           Send code
         </Button>
@@ -31,14 +53,13 @@ export default function AuthPage() {
         </Field>
         <Button
           kind="secondary"
-          onClick={async () => {
-            await api("/api/auth", { method: "POST", body: JSON.stringify({ action: "verify", email, code }) });
-            window.location.href = "/onboarding";
-          }}
+          onClick={() => submit("verify")}
+          disabled={pending}
         >
           Verify
         </Button>
         {msg ? <p className="text-sm text-muted">{msg}</p> : null}
+        {error ? <p role="alert" className="text-sm text-bad">{error}</p> : null}
       </Card>
     </div>
   );

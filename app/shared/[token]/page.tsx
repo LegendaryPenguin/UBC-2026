@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/client";
 import { Button, Card } from "@/components/ui";
-import type { ThesisRevision } from "@/lib/domain/types";
+type SharedSnapshot = { topicSlug: string; rationale?: string };
 
 export default function Shared() {
   const { token } = useParams<{ token: string }>();
-  const [thesis, setThesis] = useState<ThesisRevision | null>(null);
+  const [thesis, setThesis] = useState<SharedSnapshot | null>(null);
   useEffect(() => {
-    api<{ thesis: ThesisRevision }>(`/api/publish?token=${token}`).then((r) => setThesis(r.thesis)).catch(() => setThesis(null));
+    api<{ thesis: SharedSnapshot }>(`/api/publish?token=${token}`).then((r) => setThesis(r.thesis)).catch(() => setThesis(null));
   }, [token]);
   if (!thesis) return <p>Snapshot unavailable.</p>;
   return (

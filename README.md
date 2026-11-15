@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Next.js. Choose **Replay** to inspect the recorded Gemini markets. To simulate a position, sign in with a throwaway email and the code shown by the local development app, select **Paper**, then open the BTC topic from Explore. Create and confirm a view, enter a maximum payout in Compare, request a simulated quote, inspect its terms, and accept it. Portfolio shows paper positions. The local store lives in `.data/`.
+Open the local URL printed by Next.js. Choose **Replay** to inspect the recorded Gemini markets. To simulate a position, sign in with a throwaway email and the code shown by the local development app, select **Paper**, then open the BTC topic from Explore. Create and confirm a view, choose a maximum payout, request a simulated quote, inspect its terms, and accept it. Portfolio shows paper positions. To walk through settlement, repeat with the archived XRP topic and claim the paper payout after acceptance. The local store lives in `.data/`.
 
 ```sh
 npm run typecheck
