@@ -133,10 +133,45 @@ export function compileRange(
   );
 }
 
+export function compileOutside(
+  family: MarketFamily,
+  lower: number,
+  upper: number,
+  maxPayout: bigint,
+): PayoffSpec {
+  const inner = compileRange(family, lower, upper, maxPayout);
+  const payouts = inner.rows.map((r) => (r.payout === 0n ? maxPayout : 0n));
+  return spec(
+    family,
+    "outside",
+    maxPayout,
+    payouts,
+    inner.sourceContractIds,
+    [`Pays if the observed value is outside [${lower}, ${upper}).`],
+  );
+}
+
+export function compileStepped(
+  family: MarketFamily,
+  steps: Record<string, bigint>,
+  maxPayout: bigint,
+): PayoffSpec {
+  const payouts = family.scenarios.map((s) => steps[s.id] ?? 0n);
+  return spec(family, "stepped", maxPayout, payouts, family.contracts.map((c) => c.id), [
+    "Finite stepped payouts. Each scenario is bounded by the listed maximum.",
+  ]);
+}
+
 export function compileView(
   family: MarketFamily,
   template: ViewTemplate,
-  args: { threshold?: number | null; direction?: Direction | null; lower?: number | null; upper?: number | null },
+  args: {
+    threshold?: number | null;
+    direction?: Direction | null;
+    lower?: number | null;
+    upper?: number | null;
+    steps?: Record<string, bigint>;
+  },
   maxPayout: bigint,
 ): PayoffSpec {
   if (template === "directional") {
@@ -144,6 +179,15 @@ export function compileView(
       throw new CompileError("INCOMPATIBLE_RULES", "Directional views need a threshold and side.");
     }
     return compileDirectional(family, args.threshold, args.direction, maxPayout);
+  }
+  if (template === "outside") {
+    if (args.lower == null || args.upper == null) {
+      throw new CompileError("INCOMPATIBLE_RULES", "Outside views need lower and upper thresholds.");
+    }
+    return compileOutside(family, args.lower, args.upper, maxPayout);
+  }
+  if (template === "stepped") {
+    return compileStepped(family, args.steps ?? {}, maxPayout);
   }
   if (args.lower == null || args.upper == null) {
     throw new CompileError("INCOMPATIBLE_RULES", "Range views need lower and upper thresholds.");

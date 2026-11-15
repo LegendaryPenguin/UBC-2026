@@ -12,7 +12,7 @@ export type MarketStatus =
   | "invalid"
   | "unknown";
 
-export type ViewTemplate = "directional" | "range";
+export type ViewTemplate = "directional" | "range" | "outside" | "stepped";
 export type Direction = "yes" | "no";
 
 export interface SourceEvent {

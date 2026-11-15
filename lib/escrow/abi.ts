@@ -1,0 +1,174 @@
+export const escrowAbi = [
+  {
+    type: "function",
+    name: "accept",
+    stateMutability: "nonpayable",
+    inputs: [
+      {
+        name: "q",
+        type: "tuple",
+        components: [
+          { name: "maker", type: "address" },
+          { name: "taker", type: "address" },
+          { name: "escrow", type: "address" },
+          { name: "token", type: "address" },
+          { name: "familyHash", type: "bytes32" },
+          { name: "payoffHash", type: "bytes32" },
+          { name: "maxPayout", type: "uint256" },
+          { name: "premium", type: "uint256" },
+          { name: "fee", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "issuedAt", type: "uint256" },
+          { name: "deadline", type: "uint256" },
+          { name: "chainId", type: "uint256" },
+        ],
+      },
+      { name: "schedule", type: "uint256[]" },
+      { name: "signature", type: "bytes" },
+    ],
+    outputs: [{ name: "id", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "claim",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "buyback",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "id", type: "uint256" },
+      { name: "proceeds", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "deposit",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "withdraw",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "freeCollateral",
+    stateMutability: "view",
+    inputs: [{ name: "maker", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "previewClaim",
+    stateMutability: "view",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [
+      { name: "buyerPay", type: "uint256" },
+      { name: "makerPay", type: "uint256" },
+    ],
+  },
+  {
+    type: "event",
+    name: "QuoteAccepted",
+    inputs: [
+      { name: "id", type: "uint256", indexed: true },
+      { name: "maker", type: "address", indexed: true },
+      { name: "taker", type: "address", indexed: true },
+      { name: "payoffHash", type: "bytes32", indexed: false },
+      { name: "premium", type: "uint256", indexed: false },
+      { name: "maxPayout", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Resolved",
+    inputs: [
+      { name: "id", type: "uint256", indexed: true },
+      { name: "scenarioIndex", type: "uint32", indexed: false },
+      { name: "buyerPayout", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Claimed",
+    inputs: [
+      { name: "id", type: "uint256", indexed: true },
+      { name: "to", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+] as const;
+
+export const erc20Abi = [
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "boolean" }],
+  },
+  {
+    type: "function",
+    name: "allowance",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "decimals",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint8" }],
+  },
+  {
+    type: "function",
+    name: "mint",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+export const quoteTypes = {
+  Quote: [
+    { name: "maker", type: "address" },
+    { name: "taker", type: "address" },
+    { name: "escrow", type: "address" },
+    { name: "token", type: "address" },
+    { name: "familyHash", type: "bytes32" },
+    { name: "payoffHash", type: "bytes32" },
+    { name: "maxPayout", type: "uint256" },
+    { name: "premium", type: "uint256" },
+    { name: "fee", type: "uint256" },
+    { name: "nonce", type: "uint256" },
+    { name: "issuedAt", type: "uint256" },
+    { name: "deadline", type: "uint256" },
+    { name: "chainId", type: "uint256" },
+  ],
+} as const;
