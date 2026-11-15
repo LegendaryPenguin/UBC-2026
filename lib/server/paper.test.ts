@@ -7,6 +7,9 @@ import { POST as acceptQuote } from "@/app/api/positions/route";
 import { PATCH as updatePosition } from "@/app/api/positions/[id]/route";
 import { POST as publish, GET as readSnapshot } from "@/app/api/publish/route";
 import { POST as research } from "@/app/api/research/route";
+import { POST as geminiOrder } from "@/app/api/gemini/orders/route";
+import { POST as createWatchlist } from "@/app/api/watchlists/route";
+import { PATCH as updateWatchlist } from "@/app/api/watchlists/[id]/route";
 import { listTopics } from "@/lib/gemini/catalog";
 
 const { identity, store } = vi.hoisted(() => ({
@@ -14,6 +17,8 @@ const { identity, store } = vi.hoisted(() => ({
   store: {
     theses: [],
     quotes: [],
+    watchlists: [],
+    geminiOrderIntents: [],
     positions: [],
     publications: [],
     transactions: [],
@@ -42,6 +47,48 @@ function request(body?: object, url = "http://localhost/api") {
 }
 
 describe("recorded paper walkthrough", () => {
+  it("saves watched topics to the owner and rejects edits from another account", async () => {
+    const response = await createWatchlist(request({ name: "Research topics", slugs: ["btc-price-on-november-20"] }));
+    expect(response.status).toBe(200);
+    const { watchlist } = await response.json();
+    expect(watchlist.slugs).toEqual(["btc-price-on-november-20"]);
+
+    identity.id = "bob";
+    const unauthorized = await updateWatchlist(request({ slugs: [] }), { params: { id: watchlist.id } });
+    expect(unauthorized.status).toBe(404);
+    identity.id = "alice";
+
+    const updated = await updateWatchlist(request({ slugs: ["btc-price-on-november-20", "eth-price-on-november-20"] }), { params: { id: watchlist.id } });
+    expect(updated.status).toBe(200);
+    expect((await updated.json()).watchlist.slugs).toEqual(["btc-price-on-november-20", "eth-price-on-november-20"]);
+  });
+
+  it("keeps Gemini order submission disabled until the sandbox flow is qualified", async () => {
+    const originalEnabled = process.env.GEMINI_TRADE_ENABLED;
+    const originalQualified = process.env.GEMINI_TRADE_QUALIFIED;
+    process.env.GEMINI_TRADE_ENABLED = "true";
+    delete process.env.GEMINI_TRADE_QUALIFIED;
+    try {
+      const response = await geminiOrder(request({
+        action: "place",
+        intentId: "sandbox-qualification-check-01",
+        ticker: "BTC2611202200",
+        symbol: "GEMI-BTC-TEST",
+        side: "buy",
+        outcome: "yes",
+        quantity: "1",
+        price: "0.5",
+      }));
+      expect(response.status).toBe(503);
+      expect((await response.json()).error.code).toBe("GEMINI_TRADE_UNQUALIFIED");
+    } finally {
+      if (originalEnabled === undefined) delete process.env.GEMINI_TRADE_ENABLED;
+      else process.env.GEMINI_TRADE_ENABLED = originalEnabled;
+      if (originalQualified === undefined) delete process.env.GEMINI_TRADE_QUALIFIED;
+      else process.env.GEMINI_TRADE_QUALIFIED = originalQualified;
+    }
+  });
+
   it("binds the quote to the confirmed thesis and claims the matching settlement once", async () => {
     const { families } = await listTopics("replay");
     const family = families.find((candidate) => candidate.sourceEvent.status === "settled")!;

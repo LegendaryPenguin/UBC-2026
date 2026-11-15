@@ -32,5 +32,33 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
       .filter((record) => record.thesisId === thesis.id && record.accountId === accountId)
       .sort((a, b) => a.revision - b.revision);
   }
-  return ok({ thesisId: thesis.id, currentRevision: thesis.revision, versions });
+  const quotes = (store.quotes || [])
+    .filter((quote) => quote.thesisId === thesis.id && quote.accountId === accountId)
+    .map((quote) => ({
+      id: quote.id,
+      kind: "quote" as const,
+      at: new Date(quote.issuedAt * 1000).toISOString(),
+      status: quote.status,
+      mode: (quote as typeof quote & { mode?: string }).mode || (quote.signature === "0x" ? "paper or replay" : "live"),
+      premium: quote.premium,
+      fee: quote.fee,
+      maxPayout: quote.maxPayout,
+    }));
+  const positions = (store.positions || [])
+    .filter((position) => position.thesisId === thesis.id && position.accountId === accountId)
+    .map((position) => ({
+      id: position.id,
+      kind: "position" as const,
+      at: position.createdAt,
+      status: position.status,
+      mode: position.mode,
+      premium: position.premium,
+      fee: position.fee,
+      maxPayout: position.maxPayout,
+      scenarioIndex: position.scenarioIndex,
+      scenarioLabel: position.scenarioIndex == null ? null : position.labels[position.scenarioIndex] || null,
+      href: `/positions/${position.id}`,
+    }));
+  const timeline = [...quotes, ...positions].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  return ok({ thesisId: thesis.id, currentRevision: thesis.revision, versions, timeline });
 }

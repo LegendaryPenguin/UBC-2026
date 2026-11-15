@@ -58,3 +58,84 @@ export function computePositionPayout(payouts: bigint[], scenarioIndex: number):
 export function makerResidual(maxPayout: bigint, buyerPayout: bigint): bigint {
   return maxPayout - buyerPayout;
 }
+
+export interface ReferenceCostLeg {
+  contractId: string;
+  contractLabel: string;
+  side: "yes" | "no";
+  payoutAmount: bigint;
+  referencePrice: string;
+}
+
+export interface ReferenceCostEstimate {
+  total: bigint;
+  legs: ReferenceCostLeg[];
+}
+
+function priceMicros(value: string | null | undefined): bigint | null {
+  if (!value || !/^\d+(?:\.\d+)?$/.test(value.trim())) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1) return null;
+  return BigInt(Math.round(parsed * 1_000_000));
+}
+
+function referenceCostLeg(
+  family: MarketFamily,
+  contractId: string,
+  side: "yes" | "no",
+  payoutAmount: bigint,
+): ReferenceCostLeg | null {
+  const contract = family.contracts.find((item) => item.id === contractId);
+  if (!contract || contract.status !== "active") return null;
+  const referencePrice = side === "yes" ? contract.ask : contract.noAsk;
+  const price = priceMicros(referencePrice);
+  if (price == null) return null;
+  return { contractId, contractLabel: contract.label, side, payoutAmount, referencePrice: referencePrice! };
+}
+
+function costOfLeg(leg: ReferenceCostLeg): bigint {
+  return (leg.payoutAmount * priceMicros(leg.referencePrice)!) / 1_000_000n;
+}
+
+export function estimateSingleTicketCost(
+  family: MarketFamily,
+  contractId: string | undefined,
+  side: "yes" | "no" | null,
+  maxPayout: bigint,
+): ReferenceCostEstimate | null {
+  if (family.mode === "live" && family.freshness !== "fresh") return null;
+  if (!contractId || !side || maxPayout <= 0n) return null;
+  const leg = referenceCostLeg(family, contractId, side, maxPayout);
+  return leg ? { total: costOfLeg(leg), legs: [leg] } : null;
+}
+
+export function estimateTwoTicketCost(
+  family: MarketFamily,
+  lowerContractId: string | undefined,
+  upperContractId: string | undefined,
+  maxPayout: bigint,
+): ReferenceCostEstimate | null {
+  if (family.mode === "live" && family.freshness !== "fresh") return null;
+  if (!lowerContractId || !upperContractId || maxPayout <= 0n) return null;
+  const halfPayout = maxPayout / 2n;
+  const legs = [
+    referenceCostLeg(family, lowerContractId, "yes", halfPayout),
+    referenceCostLeg(family, upperContractId, "no", halfPayout),
+  ];
+  if (legs.some((leg) => leg === null)) return null;
+  const completeLegs = legs as ReferenceCostLeg[];
+  return { total: completeLegs.reduce((total, leg) => total + costOfLeg(leg), 0n), legs: completeLegs };
+}
+
+export function estimateBasketCost(
+  family: MarketFamily,
+  legs: { contractId: string; side: "yes" | "no"; payoutAmount: bigint; enabled: boolean }[],
+): ReferenceCostEstimate | null {
+  if (family.mode === "live" && family.freshness !== "fresh") return null;
+  const activeLegs = legs.filter((leg) => leg.enabled && leg.payoutAmount > 0n);
+  if (!activeLegs.length) return null;
+  const references = activeLegs.map((leg) => referenceCostLeg(family, leg.contractId, leg.side, leg.payoutAmount));
+  if (references.some((leg) => leg === null)) return null;
+  const completeLegs = references as ReferenceCostLeg[];
+  return { total: completeLegs.reduce((total, leg) => total + costOfLeg(leg), 0n), legs: completeLegs };
+}

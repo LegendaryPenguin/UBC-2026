@@ -6,6 +6,7 @@ import { api, modeFromStorage } from "@/lib/client";
 import { flattenEvents, type GeminiEvent, type GeminiStatus } from "@/lib/gemini/types";
 import { Button, Card, Empty, Field, inputCls } from "@/components/ui";
 import { formatTime } from "@/lib/format";
+import { useModeChange } from "@/lib/use-mode-change";
 
 type EventKind = "events" | "upcoming" | "settled";
 type MarketResponse = {
@@ -53,6 +54,8 @@ export default function GeminiMarketsPage() {
   useEffect(() => {
     setMode(modeFromStorage() === "live" ? "live" : "replay");
   }, []);
+
+  useModeChange(() => setMode(modeFromStorage() === "live" ? "live" : "replay"));
 
   useEffect(() => {
     const current = ++requestId.current;

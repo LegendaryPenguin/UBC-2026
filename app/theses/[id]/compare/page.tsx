@@ -1,14 +1,48 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, modeFromStorage } from "@/lib/client";
 import type { EvidenceItem, MarketFamily, SignedQuote, ThesisRevision } from "@/lib/domain/types";
-import { formatUsdc } from "@/lib/format";
+import { formatUsdc, formatUsdcFixed, parseUsdc } from "@/lib/format";
+import { compileView } from "@/lib/payoffs/compile";
+import { buildComparisons, estimateBasketCost, estimateSingleTicketCost } from "@/lib/payoffs/compare";
 import { Button, Card, Field, inputCls } from "@/components/ui";
 import { useAccount } from "wagmi";
 import { VoicePanel } from "@/components/VoicePanel";
 import { evidenceForSlug } from "@/lib/evidence";
+import { PayoffChart } from "@/components/PayoffChart";
+import { ThesisWorkspaceTabs } from "@/components/ThesisWorkspaceTabs";
+import { ThesisViewPanel } from "@/components/ThesisViewPanel";
+import { useModeChange } from "@/lib/use-mode-change";
+
+type BasketLeg = { contractId: string; side: "yes" | "no"; payoutAmount: string; enabled: boolean };
+type ConstructionChoice = "gemini-basket" | "gemini-single" | "arc-custom";
+type Mode = "replay" | "paper" | "live";
+
+function defaultBasket(thesis: ThesisRevision, family: MarketFamily, max: string): BasketLeg[] {
+  let half = "50";
+  try { half = formatUsdc(parseUsdc(max) / 2n); } catch { /* use the visible default */ }
+  if (thesis.template === "range" && thesis.lowerThreshold != null && thesis.upperThreshold != null) {
+    const lower = family.predicates.find((predicate) => predicate.threshold === thesis.lowerThreshold);
+    const upper = family.predicates.find((predicate) => predicate.threshold === thesis.upperThreshold);
+    if (lower && upper) return [
+      { contractId: lower.contractId, side: "yes", payoutAmount: half, enabled: true },
+      { contractId: upper.contractId, side: "no", payoutAmount: half, enabled: true },
+    ];
+  }
+  if (thesis.template === "directional" && thesis.lowerThreshold != null) {
+    const predicate = family.predicates.find((item) => item.threshold === thesis.lowerThreshold);
+    if (predicate) return [{ contractId: predicate.contractId, side: thesis.direction || "yes", payoutAmount: max, enabled: true }];
+  }
+  return [];
+}
+
+function belowCostLabels(values: bigint[], labels: string[], cost: bigint | null): string {
+  if (cost == null) return "Cost is not known";
+  const below = values.flatMap((value, index) => value < cost ? [labels[index]] : []);
+  return below.length ? below.join("; ") : "None before fees";
+}
 
 export default function ComparePage() {
   const { id } = useParams<{ id: string }>();
@@ -16,78 +50,252 @@ export default function ComparePage() {
   const [thesis, setThesis] = useState<ThesisRevision | null>(null);
   const [family, setFamily] = useState<MarketFamily | null>(null);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
+  const [mode, setMode] = useState<Mode>("replay");
   const [budget, setBudget] = useState("100");
+  const [basket, setBasket] = useState<BasketLeg[]>([]);
+  const [selectedScenarioId, setSelectedScenarioId] = useState("");
+  const [selected, setSelected] = useState<ConstructionChoice>("gemini-basket");
   const [quote, setQuote] = useState<SignedQuote | null>(null);
+  const [quoteCapability, setQuoteCapability] = useState(false);
+  const [geminiTradeState, setGeminiTradeState] = useState("unqualified");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useModeChange(() => window.location.reload());
+
   useEffect(() => {
-    setBudget(new URLSearchParams(window.location.search).get("maxPayout") || "100");
-    api<{ thesis: ThesisRevision }>(`/api/theses/${id}`).then(async (r) => {
-      setThesis(r.thesis);
-      const mode = modeFromStorage() === "live" ? "live" : "replay";
-      const topic = await api<{ family: MarketFamily; evidence: EvidenceItem[] }>(`/api/topics/${r.thesis.topicSlug}?mode=${mode}`);
-      setFamily(topic.family);
-      setEvidence(topic.evidence);
-    }).catch((err) => setError(err.message));
+    let active = true;
+    (async () => {
+      try {
+        const currentMode = modeFromStorage();
+        const safeMode: Mode = currentMode === "live" || currentMode === "paper" ? currentMode : "replay";
+        const savedBudget = new URLSearchParams(window.location.search).get("maxPayout") || (() => {
+          try { return sessionStorage.getItem(`thesis-build-max:${id}`) || "100"; } catch { return "100"; }
+        })();
+        const [thesisResult, status] = await Promise.all([
+          api<{ thesis: ThesisRevision }>(`/api/theses/${id}`),
+          api<{ services: { id: string; state: string }[] }>("/api/status").catch(() => ({ services: [] })),
+        ]);
+        const topic = await api<{ family: MarketFamily; evidence: EvidenceItem[] }>(`/api/topics/${thesisResult.thesis.topicSlug}?mode=${safeMode === "live" ? "live" : "replay"}`);
+        if (!active) return;
+        setMode(safeMode);
+        setBudget(savedBudget);
+        setThesis(thesisResult.thesis);
+        setFamily(topic.family);
+        setEvidence(topic.evidence);
+        setSelectedScenarioId(topic.family.scenarios[0]?.id || "");
+        const allowed = new Set(topic.family.contracts.map((contract) => contract.id));
+        let restored: BasketLeg[] | null = null;
+        try {
+          const candidate = JSON.parse(sessionStorage.getItem(`thesis-basket:${id}`) || "null") as BasketLeg[] | null;
+          if (Array.isArray(candidate) && candidate.length <= 4 && candidate.every((leg) => allowed.has(leg.contractId) && (leg.side === "yes" || leg.side === "no") && typeof leg.payoutAmount === "string" && typeof leg.enabled === "boolean")) restored = candidate;
+        } catch { /* use defaults if there is no valid session draft */ }
+        setBasket(restored || defaultBasket(thesisResult.thesis, topic.family, savedBudget));
+        setQuoteCapability(safeMode === "paper" || (safeMode === "live" && status.services.some((service) => service.id === "quotes" && service.state === "available")));
+        setGeminiTradeState(status.services.find((service) => service.id === "geminiTrade")?.state || "unqualified");
+        const savedChoice = sessionStorage.getItem(`thesis-construction:${id}`) as ConstructionChoice | null;
+        if (savedChoice === "gemini-basket" || savedChoice === "gemini-single" || savedChoice === "arc-custom") setSelected(savedChoice);
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : "Comparison could not be loaded.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
   }, [id]);
-  async function requestQuote() {
+
+  const calculations = useMemo(() => {
+    if (!thesis || !family) return null;
+    try {
+      const maxPayout = parseUsdc(budget);
+      const desired = compileView(
+        family,
+        thesis.template,
+        { threshold: thesis.lowerThreshold, direction: thesis.direction, lower: thesis.lowerThreshold, upper: thesis.upperThreshold },
+        maxPayout,
+      );
+      const alternatives = buildComparisons(family, desired, { lower: thesis.lowerThreshold, upper: thesis.upperThreshold, threshold: thesis.lowerThreshold, direction: thesis.direction });
+      const basketRows = family.scenarios.map((scenario) => ({
+        scenario,
+        payout: basket.reduce((total, leg) => {
+          if (!leg.enabled) return total;
+          const predicate = family.predicates.find((item) => item.contractId === leg.contractId);
+          if (!predicate) return total;
+          const yes = scenario.predicateYes[predicate.id] === true;
+          if ((leg.side === "yes" && !yes) || (leg.side === "no" && yes)) return total;
+          return total + parseUsdc(leg.payoutAmount);
+        }, 0n),
+      }));
+      const basketCost = estimateBasketCost(family, basket.map((leg) => ({ ...leg, payoutAmount: parseUsdc(leg.payoutAmount) })));
+      const ticketSide = thesis.template === "range" ? "yes" : thesis.direction;
+      const singleCost = estimateSingleTicketCost(family, alternatives.ticket?.sourceContractIds[0], ticketSide, maxPayout);
+      return { desired, alternatives, basketRows, basketCost, singleCost, error: "" };
+    } catch (err) {
+      return { desired: null, alternatives: null, basketRows: [], basketCost: null, singleCost: null, error: err instanceof Error ? err.message : "The payoff could not be compared." };
+    }
+  }, [thesis, family, budget, basket]);
+
+  async function requestArcQuote() {
+    if (!thesis || !quoteCapability || mode === "replay") return;
     setPending(true);
     setError("");
-    setQuote(null);
     setNote("");
     try {
-      const mode = modeFromStorage();
-      const res = await api<{ quote: SignedQuote; note: string }>("/api/quotes", {
+      const response = await api<{ quote: SignedQuote; note: string }>("/api/quotes", {
         method: "POST",
         body: JSON.stringify({ thesisId: id, mode, maxPayout: budget, taker: address }),
       });
-      setQuote(res.quote);
-      setNote(res.note);
+      setQuote(response.quote);
+      setNote(response.note);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Quote failed");
+      setError(err instanceof Error ? err.message : "Quote request failed. Your comparison remains available to retry.");
     } finally {
       setPending(false);
     }
   }
+
+  function choose(value: ConstructionChoice) {
+    setSelected(value);
+    try { sessionStorage.setItem(`thesis-construction:${id}`, value); } catch { /* selection is still active */ }
+  }
+
+  function changeBudget(value: string) {
+    setBudget(value);
+    try { sessionStorage.setItem(`thesis-build-max:${id}`, value); } catch { /* comparison remains usable without session storage */ }
+    const url = new URL(window.location.href);
+    url.searchParams.set("maxPayout", value);
+    window.history.replaceState({}, "", url);
+    if (quote) {
+      setQuote(null);
+      setNote("Maximum payout changed. Request a fresh quote before reviewing trade terms.");
+    }
+  }
+
+  const budgetValid = (() => {
+    try { return budget.trim().length > 0 && parseUsdc(budget) > 0n; } catch { return false; }
+  })();
+
+  if (loading) return <p role="status">Loading construction comparison…</p>;
+  if (error && !thesis) return <Card><p role="alert" className="text-sm text-bad">{error}</p><div className="mt-3"><Button href="/workspace" kind="ghost">My Theses</Button></div></Card>;
+  if (!thesis || !family) return <Card><p role="alert" className="text-sm text-bad">{error || "Thesis could not be loaded."}</p></Card>;
+  if (thesis.status === "draft") return (
+    <div className="space-y-4">
+      <h1 className="font-serif text-3xl">Compare constructions</h1>
+      <ThesisWorkspaceTabs thesisId={id} current="Compare" lockedTabs={["Build"]} />
+      <Card><h2 className="font-serif text-xl">Confirm your view first</h2><p className="mt-2 text-sm text-muted">Comparison is based on a saved, confirmed view. Return to Research and review the proposed boundaries first.</p><div className="mt-3"><Button href={`/theses/${id}`}>Return to Research</Button></div></Card>
+    </div>
+  );
+
+  const selectedIndex = family.scenarios.findIndex((scenario) => scenario.id === selectedScenarioId);
+  const selectedScenario = family.scenarios[selectedIndex];
+  const arcUseful = thesis.template === "range" || thesis.template === "outside";
+  const showArc = arcUseful && quoteCapability;
+  const ticket = calculations?.alternatives?.ticket;
+  const ticketContract = ticket ? family.contracts.find((contract) => contract.id === ticket.sourceContractIds[0]) : null;
+  const activeConstruction: ConstructionChoice = selected === "arc-custom" && !showArc || selected === "gemini-single" && !ticketContract ? "gemini-basket" : selected;
+  const selectedPayout = activeConstruction === "gemini-basket"
+    ? calculations?.basketRows[selectedIndex]?.payout
+    : activeConstruction === "gemini-single"
+      ? ticket?.rows[selectedIndex]?.payout
+      : calculations?.desired?.rows[selectedIndex]?.payout;
+  const desiredPayout = calculations?.desired?.rows[selectedIndex]?.payout ?? 0n;
+  const outcome = selectedScenario
+    ? activeConstruction === "arc-custom"
+      ? `${formatUsdcFixed(selectedPayout || 0n)} USDC · matches the confirmed view`
+      : `${formatUsdcFixed(selectedPayout || 0n)} USDC vs ${formatUsdcFixed(desiredPayout)} USDC desired · ${selectedPayout === desiredPayout ? "matches" : "differs"}`
+    : undefined;
+  const series = calculations?.desired ? [
+    { name: "Gemini basket", values: calculations.basketRows.map((row) => row.payout), color: "#C57A36" },
+    ...(ticket ? [{ name: "Single Gemini ticket", values: ticket.rows.map((row) => row.payout), color: "#718394" }] : []),
+    ...(showArc ? [{ name: "Arc custom", values: calculations.desired.rows.map((row) => row.payout), color: "#3559E0" }] : []),
+  ] : [];
+  const labels = family.scenarios.map((scenario) => scenario.label);
+  const basketValues = calculations?.basketRows.map((row) => row.payout) || [];
+  const basketMaximum = basketValues.reduce((maximum, value) => value > maximum ? value : maximum, 0n);
+  const arcCost = quote ? BigInt(quote.premium) + BigInt(quote.fee) : null;
+  const basketShortfalls = belowCostLabels(basketValues, labels, calculations?.basketCost?.total ?? null);
+  const singleShortfalls = belowCostLabels(ticket?.rows.map((row) => row.payout) || [], labels, calculations?.singleCost?.total ?? null);
+  const arcShortfalls = belowCostLabels(calculations?.desired?.rows.map((row) => row.payout) || [], labels, arcCost);
+  const selectedName = activeConstruction === "gemini-basket" ? "Gemini basket" : activeConstruction === "gemini-single" ? "One Gemini position" : "Arc custom position";
+  const selectedCost = activeConstruction === "gemini-basket"
+    ? calculations?.basketCost ? `~${formatUsdc(calculations.basketCost.total)} USDC before fees` : "Reference cost unavailable"
+    : activeConstruction === "gemini-single"
+      ? calculations?.singleCost ? `~${formatUsdc(calculations.singleCost.total)} USDC before fees` : "Reference cost unavailable"
+      : quote ? `${formatUsdc(arcCost || 0n)} USDC including quote fee` : "Not quoted";
+  const action = activeConstruction === "arc-custom" && showArc
+    ? quote ? { label: quote.signature === "0x" ? "Review paper quote" : "Review Arc quote", href: `/quotes/${quote.id}` } : { label: mode === "paper" ? "Request paper quote" : "Request Arc quote", onClick: () => void requestArcQuote(), disabled: pending || !budgetValid }
+    : activeConstruction === "gemini-basket" ? { label: "Edit basket", href: `/theses/${id}/build` }
+      : activeConstruction === "gemini-single" ? { label: "Open Gemini market", href: `/gemini/${family.sourceEvent.ticker}?thesisId=${encodeURIComponent(id)}` }
+        : undefined;
+
   return (
     <div className="space-y-4">
-      <h1 className="font-serif text-3xl">Compare</h1>
-      <p className="text-sm text-muted">Custom Arc offers are listed beside native Gemini constructions. A cheaper different payoff is not labeled best.</p>
-      <Field label="Maximum payout">
-        <input className={inputCls()} value={budget} onChange={(e) => setBudget(e.target.value)} />
+      <p className="text-xs uppercase tracking-wide text-muted">{family.title} · same maximum gross payout · {mode === "replay" ? "illustrative replay" : mode}</p>
+      <h1 className="font-serif text-3xl">Compare constructions</h1>
+      <ThesisWorkspaceTabs thesisId={id} current="Compare" />
+      {family.mode === "replay" ? <p className="rounded-lg bg-[#FFF8E7] p-3 text-xs text-muted">Replay prices are recorded demonstration fixtures, not current Gemini quotes. Paper mode can request a simulated Arc quote; no live Gemini order is supported from this data.</p> : null}
+      {error ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{error}</p> : null}
+      {note ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">{note}</p> : null}
+      <Field label="Desired view maximum payout (USDC)" hint="The custom view and single Gemini ticket use the same gross maximum payout. Edited basket allocations may have a different maximum; it is shown in the table.">
+        <input className={inputCls()} type="number" min="0.01" step="0.01" value={budget} disabled={pending} onChange={(event) => changeBudget(event.target.value)} />
       </Field>
-      <Button onClick={requestQuote} disabled={pending || !thesis}>{pending ? "Requesting…" : "Request quotes"}</Button>
-      {note ? <p className="text-sm text-muted">{note}</p> : null}
-      {error ? <p className="text-bad text-sm">{error}</p> : null}
-      {thesis && family ? <VoicePanel
-        slug={family.slug}
-        family={family}
-        evidence={evidence.length ? evidence : evidenceForSlug(family.slug, family.mode)}
-        thesis={thesis}
-        context="compare"
-        maxPayout={budget}
-      /> : null}
-      {quote ? (
-        <Card>
-          <h2 className="font-serif text-xl">{quote.signature === "0x" ? "Simulated quote" : "Arc maker offer"}</h2>
-          <ul className="mt-2 text-sm">
-            <li>Status: {quote.status}</li>
-            <li>Premium: {formatUsdc(BigInt(quote.premium))} USDC</li>
-            <li>Fee: {formatUsdc(BigInt(quote.fee))} USDC</li>
-            <li>Max payout: {formatUsdc(BigInt(quote.maxPayout))} USDC</li>
-            <li>Expires: {new Date(quote.deadline * 1000).toLocaleString()}</li>
-          </ul>
-          {quote.unavailableReason ? <p className="mt-2 text-sm text-bad">{quote.unavailableReason}</p> : null}
-          <div className="mt-3">
-            <Button href={`/quotes/${quote.id}`}>Inspect terms</Button>
+      {calculations?.error ? <p role="alert" className="text-sm text-bad">{calculations.error}</p> : null}
+      {calculations?.desired ? (
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,0.85fr)]">
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <button type="button" onClick={() => choose("gemini-basket")} aria-pressed={activeConstruction === "gemini-basket"} className={`rounded-card border p-4 text-left ${activeConstruction === "gemini-basket" ? "border-action bg-[#F2F5FF]" : "border-line bg-white"}`}>
+                <span className="block font-semibold">Gemini basket</span><span className="mt-1 block text-sm text-muted">{basket.filter((leg) => leg.enabled).length} separate contract leg(s) · preferred market construction</span>
+              </button>
+              {ticket && ticketContract ? <button type="button" onClick={() => choose("gemini-single")} aria-pressed={activeConstruction === "gemini-single"} className={`rounded-card border p-4 text-left ${activeConstruction === "gemini-single" ? "border-action bg-[#F2F5FF]" : "border-line bg-white"}`}>
+                <span className="block font-semibold">One Gemini position</span><span className="mt-1 block text-sm text-muted">{ticketContract.label} · easier to execute, may be a looser match</span>
+              </button> : null}
+              {showArc ? <button type="button" onClick={() => choose("arc-custom")} aria-pressed={activeConstruction === "arc-custom"} className={`rounded-card border p-4 text-left ${activeConstruction === "arc-custom" ? "border-action bg-[#F2F5FF]" : "border-line bg-white"}`}>
+                <span className="block font-semibold">Arc custom range</span><span className="mt-1 block text-sm text-muted">Distinct payout shape · {mode === "paper" ? "paper quote available" : "firm quote service available"}</span>
+              </button> : null}
+            </div>
+            <Card>
+              <h2 className="font-serif text-xl">Payout by settlement scenario</h2>
+              <p className="mt-1 text-sm text-muted">Gross payout only. Cost references are shown separately and exclude venue fees.</p>
+              <div className="mt-3"><PayoffChart labels={family.scenarios.map((scenario) => scenario.label)} series={series} selectedIndex={selectedIndex} /></div>
+            </Card>
+            <Card>
+              <h2 className="font-serif text-xl">What each construction means</h2>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead><tr><th className="border-b border-line py-2 pr-3">Construction</th><th className="border-b border-line py-2 pr-3">Max gross payout</th><th className="border-b border-line py-2 pr-3">Cost / max loss</th><th className="border-b border-line py-2 pr-3">Payout below cost</th><th className="border-b border-line py-2 pr-3">Execution difference</th><th className="border-b border-line py-2">Status</th></tr></thead>
+                  <tbody>
+                    <tr><td className="border-b border-line py-3 pr-3">Gemini basket · {basket.filter((leg) => leg.enabled).length} legs</td><td className="border-b border-line py-3 pr-3">{formatUsdc(basketMaximum)} USDC</td><td className="border-b border-line py-3 pr-3">{calculations.basketCost ? `~${formatUsdc(calculations.basketCost.total)} before fees` : "Reference cost unavailable"}</td><td className="border-b border-line py-3 pr-3">{basketShortfalls}</td><td className="border-b border-line py-3 pr-3">Independent orders; may fill or fail separately</td><td className="border-b border-line py-3">{geminiTradeState === "available" ? "Native orders qualified" : "Research only · native orders gated"}</td></tr>
+                    {ticket && ticketContract ? <tr><td className="border-b border-line py-3 pr-3">One Gemini position · {ticketContract.label}</td><td className="border-b border-line py-3 pr-3">{formatUsdc(ticket.maxPayout)} USDC</td><td className="border-b border-line py-3 pr-3">{calculations.singleCost ? `~${formatUsdc(calculations.singleCost.total)} before fees` : "Reference cost unavailable"}</td><td className="border-b border-line py-3 pr-3">{singleShortfalls}</td><td className="border-b border-line py-3 pr-3">One limit order; may miss range boundaries</td><td className="border-b border-line py-3">{geminiTradeState === "available" ? "Native order qualified" : "Research only · native order gated"}</td></tr> : null}
+                    {showArc ? <tr><td className="border-b border-line py-3 pr-3">Arc custom position</td><td className="border-b border-line py-3 pr-3">{formatUsdc(calculations.desired.maxPayout)} USDC</td><td className="border-b border-line py-3 pr-3">{quote ? `${formatUsdc(arcCost || 0n)} incl. fee` : "Not quoted"}</td><td className="border-b border-line py-3 pr-3">{arcShortfalls}</td><td className="border-b border-line py-3 pr-3">One custom contract with the selected scenario schedule</td><td className="border-b border-line py-3">{mode === "paper" ? "Paper simulation" : quote ? quote.status : "Quote available"}</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-3 text-xs text-muted">“Payout below cost” lists losing scenarios when costs are known. Gemini cost estimates use displayed ask-side references, exclude fees, size, and slippage, and are not executable quotes. A Gemini basket uses independent orders, not an exchange combo.</p>
+            </Card>
+            {showArc && activeConstruction === "arc-custom" && !quote ? <Button onClick={() => void requestArcQuote()} disabled={pending || !budgetValid}>{pending ? "Requesting…" : mode === "paper" ? "Request paper quote" : "Request Arc quote"}</Button> : null}
+            {showArc && activeConstruction === "arc-custom" && quote ? <Card><h2 className="font-serif text-lg">{quote.signature === "0x" ? "Paper quote ready" : "Arc quote ready"}</h2><p className="mt-2 text-sm text-muted">Premium {formatUsdc(BigInt(quote.premium))} USDC · fee {formatUsdc(BigInt(quote.fee))} USDC · maximum loss {formatUsdc(arcCost || 0n)} USDC</p><div className="mt-3"><Button href={`/quotes/${quote.id}`}>Review exact terms</Button></div></Card> : null}
+            {activeConstruction !== "arc-custom" ? <Card><h2 className="font-serif text-lg">No Gemini order submitted</h2><p className="mt-2 text-sm text-muted">{geminiTradeState === "available" ? "This comparison does not submit the basket, because its legs are independent and can partially fill. Review individual orders at the Gemini event." : "Native Gemini trading remains gated until a sandbox order, status lookup, and position/fill retrieval are verified. You can continue with market research and payoff comparisons."}</p></Card> : null}
+            <VoicePanel slug={family.slug} family={family} evidence={evidence.length ? evidence : evidenceForSlug(family.slug, family.mode)} thesis={thesis} context="compare" maxPayout={budget} title="Talk through the comparison" />
           </div>
-        </Card>
-      ) : (
-        <Card>
-          <p className="text-sm">No firm quote yet. Native Gemini multi-leg orders stay gated until exchange trading is qualified.</p>
-        </Card>
-      )}
+          <aside className="space-y-4">
+            <ThesisViewPanel thesis={thesis} family={family} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} scenarioOutcome={outcome} scenarioOutcomeLabel="Selected construction · scenario result" action={action} />
+            <Card>
+              <h2 className="font-serif text-lg">Selected option</h2>
+              <p className="mt-2 font-medium">{selectedName}</p>
+              <p className="mt-1 text-sm text-muted">Cost: {selectedCost}</p>
+              <p className="mt-2 text-xs text-muted">Changing your selected construction does not change the confirmed thesis. Gemini basket legs are separate orders, not an exchange combo.</p>
+            </Card>
+            <Card>
+              <h2 className="font-serif text-lg">Current mode</h2>
+              <p className="mt-2 text-sm capitalize">{mode === "replay" ? "Illustrative replay" : mode === "paper" ? "Paper simulation" : "Live data"}</p>
+              <p className="mt-1 text-xs text-muted">The mode is selected in the top bar. Switching it does not move orders, quotes, or positions between environments.</p>
+            </Card>
+          </aside>
+        </div>
+      ) : null}
     </div>
   );
 }

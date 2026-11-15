@@ -4,23 +4,33 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { WalletButton } from "@/components/WalletButton";
+import { announceModeChange } from "@/lib/client";
 
 const NAV = [
-  ["Home", "/home"],
   ["Explore", "/explore"],
-  ["Workspace", "/workspace"],
+  ["My Theses", "/workspace"],
   ["Portfolio", "/portfolio"],
-  ["Alerts", "/alerts"],
-  ["Journal", "/journal"],
 ];
 
 const MORE = [
   ["Gemini markets", "/gemini"],
+  ["Alerts", "/alerts"],
+  ["Journal", "/journal"],
   ["Activity", "/activity"],
   ["Reports", "/reports"],
   ["Help", "/help"],
   ["Settings", "/settings"],
 ];
+
+function isCurrent(label: string, href: string, path: string) {
+  if (label === "Explore") {
+    return ["/explore", "/topics", "/gemini", "/search", "/calendar", "/watchlists"]
+      .some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+  }
+  if (label === "My Theses") return path === "/workspace" || path.startsWith("/theses/");
+  if (label === "Portfolio") return path === "/portfolio" || path.startsWith("/positions/");
+  return path === href || path.startsWith(`${href}/`);
+}
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
@@ -29,11 +39,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setMode(localStorage.getItem("thesis_mode") || "replay");
   }, [path]);
-  function changeMode(next: string) {
+  function changeMode(next: "replay" | "live" | "paper") {
     const current = localStorage.getItem("thesis_mode") || "replay";
-    if (current !== next && !window.confirm("Switching mode does not move quotes or positions between environments. Continue?")) return;
+    if (current !== next && !window.confirm("Switching refreshes mode-dependent market data. Any open quote review and unsaved order-form inputs are cleared. Existing orders and positions stay in their original environment. Continue?")) return false;
     localStorage.setItem("thesis_mode", next);
     setMode(next);
+    announceModeChange(next);
+    return true;
   }
   return (
     <div className="min-h-screen">
@@ -42,21 +54,39 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </a>
       <header className="sticky top-0 z-20 border-b border-line bg-[#F4F2ED]/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-          <Link href="/" className="font-serif text-2xl">Thesis</Link>
-          <nav className="hidden gap-3 text-sm md:flex" aria-label="Primary">
+          <Link href="/explore" className="font-serif text-2xl">Thesis</Link>
+          <nav className="hidden gap-1 text-sm md:flex" aria-label="Primary">
             {NAV.map(([label, href]) => (
-              <Link key={href} href={href} className={path.startsWith(href) ? "font-semibold" : "text-muted"}>
+              <Link
+                key={href}
+                href={href}
+                aria-current={isCurrent(label, href, path) ? "page" : undefined}
+                className={`rounded-lg px-3 py-2 ${isCurrent(label, href, path) ? "bg-[#E9EEFF] font-semibold text-action" : "text-muted hover:text-ink"}`}
+              >
                 {label}
               </Link>
             ))}
           </nav>
+          <details className="relative hidden md:block">
+            <summary className="min-h-11 cursor-pointer list-none rounded-lg px-3 py-2 text-sm text-muted hover:text-ink">More</summary>
+            <nav className="absolute right-0 top-12 z-30 min-w-44 rounded-xl border border-line bg-white p-2 shadow-lg" aria-label="More">
+              {MORE.map(([label, href]) => (
+                <Link key={href} href={href} className="block min-h-10 rounded-lg px-3 py-2 text-sm text-muted hover:bg-[#F4F2ED] hover:text-ink">
+                  {label}
+                </Link>
+              ))}
+            </nav>
+          </details>
           <div className="ml-auto flex items-center gap-2">
             <label className="hidden text-xs text-muted sm:block">
               Mode
               <select
                 className="ml-2 min-h-11 rounded-lg border border-line bg-white px-2"
                 value={mode}
-                onChange={(e) => changeMode(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value as "replay" | "live" | "paper";
+                  if (!changeMode(next)) e.currentTarget.value = mode;
+                }}
               >
                 <option value="replay">Replay</option>
                 <option value="live">Live data</option>
@@ -80,27 +110,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
         ) : null}
       </header>
-      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[1fr_180px]">
+      <div className="mx-auto max-w-6xl px-4 py-6 pb-24 md:pb-6">
         <main id="main">{children}</main>
-        <aside className="hidden lg:block">
-          <p className="text-xs uppercase tracking-wide text-muted">More</p>
-          <nav className="mt-2 space-y-2 text-sm">
-            {MORE.map(([label, href]) => (
-              <Link key={href} href={href} className="block text-muted hover:text-ink">
-                {label}
-              </Link>
-            ))}
-          </nav>
-        </aside>
       </div>
-      <nav className="fixed bottom-0 left-0 right-0 z-20 grid grid-cols-4 border-t border-line bg-white md:hidden" aria-label="Mobile">
-        {[
-          ["Home", "/home"],
-          ["Explore", "/explore"],
-          ["Portfolio", "/portfolio"],
-          ["Inbox", "/notifications"],
-        ].map(([label, href]) => (
-          <Link key={href} href={href} className="flex min-h-11 items-center justify-center text-xs">
+      <nav className="fixed bottom-0 left-0 right-0 z-20 grid grid-cols-3 border-t border-line bg-white md:hidden" aria-label="Primary mobile">
+        {NAV.map(([label, href]) => (
+          <Link key={href} href={href} aria-current={isCurrent(label, href, path) ? "page" : undefined} className={`flex min-h-12 items-center justify-center text-xs ${isCurrent(label, href, path) ? "font-semibold text-action" : "text-muted"}`}>
             {label}
           </Link>
         ))}

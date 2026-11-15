@@ -1,5 +1,7 @@
 # Thesis — VFINAL complete product specification
 
+> **Current hackathon implementation scope:** the user's corrected four-board storyboard is the active product direction for this build. Follow [the hackathon scope](hackathon-scope.md) for the Explore → speak/refine/confirm → inspect basket → compare journey, the three primary navigation items, and the persistent view. The broader VFINAL routes below remain product reference and release requirements where relevant; their full route breadth does not override the corrected hackathon scope.
+
 **Target: the fully shipped product, not an MVP.** This replaces the earlier hackathon-only scope. The final product contract below governs the complete user experience; the implementation supplement preserves the detailed financial model, repository references, architecture, and hackathon demonstration plan.
 
 Prepared November 14, 2026 (America/Chicago). Proposed product specification; implementation and external-provider availability remain to be verified.

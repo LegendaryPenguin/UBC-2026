@@ -128,7 +128,7 @@ export async function POST(req: Request) {
       }))
       : undefined;
     mutate((s) => {
-      s.quotes.push({ ...quote, thesisId: thesis.id, accountId: owner, recordedScenarioIndex: recordedScenario?.index });
+      s.quotes.push({ ...quote, thesisId: thesis.id, accountId: owner, mode: body.mode, recordedScenarioIndex: recordedScenario?.index });
       thesis.status = "quoted";
     });
     if (ctx) {

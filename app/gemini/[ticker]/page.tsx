@@ -7,6 +7,8 @@ import { api, modeFromStorage } from "@/lib/client";
 import { flattenEvents, type GeminiEvent } from "@/lib/gemini/types";
 import { Button, Card, Empty, Field, inputCls } from "@/components/ui";
 import { formatTime } from "@/lib/format";
+import type { ThesisRevision } from "@/lib/domain/types";
+import { useModeChange } from "@/lib/use-mode-change";
 
 type GeminiDetail = {
   event: GeminiEvent;
@@ -21,6 +23,7 @@ type GeminiConnectionStatus = {
   configured: boolean;
   connection: null | { canTrade: boolean; canReadOrders: boolean };
 };
+type TradeCapability = { state: string; note: string };
 
 type TermsResponse = {
   status: { hasAcceptedLatest: boolean; latestVersion?: number };
@@ -66,6 +69,7 @@ export default function GeminiEventPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [connection, setConnection] = useState<GeminiConnectionStatus | null>(null);
+  const [tradeCapability, setTradeCapability] = useState<TradeCapability | null>(null);
   const [selectedSymbol, setSelectedSymbol] = useState("");
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [outcome, setOutcome] = useState<"yes" | "no">("yes");
@@ -79,6 +83,16 @@ export default function GeminiEventPage() {
   const [orderNotice, setOrderNotice] = useState("");
   const [intentId, setIntentId] = useState("");
   const [submittedIntent, setSubmittedIntent] = useState<SubmittedIntent | null>(null);
+  const [linkedThesis, setLinkedThesis] = useState<ThesisRevision | null>(null);
+  const [thesisLinkError, setThesisLinkError] = useState("");
+
+  useModeChange(() => {
+    const nextMode = modeFromStorage() === "live" ? "live" : "replay";
+    const url = new URL(window.location.href);
+    url.searchParams.set("mode", nextMode);
+    window.history.replaceState({}, "", url);
+    window.location.reload();
+  });
 
   useEffect(() => {
     const requestedMode = new URLSearchParams(window.location.search).get("mode");
@@ -104,7 +118,23 @@ export default function GeminiEventPage() {
   }, [ticker]);
 
   useEffect(() => {
+    let active = true;
+    const requestedThesisId = new URLSearchParams(window.location.search).get("thesisId");
+    if (!requestedThesisId) return;
+    api<{ thesis: ThesisRevision }>(`/api/theses/${encodeURIComponent(requestedThesisId)}`)
+      .then(({ thesis }) => { if (active) setLinkedThesis(thesis); })
+      .catch(() => { if (active) setThesisLinkError("The linked thesis is unavailable for this account. This market can still be inspected without that link."); });
+    return () => { active = false; };
+  }, [ticker]);
+
+  useEffect(() => {
     api<GeminiConnectionStatus>("/api/gemini/oauth").then(setConnection).catch(() => setConnection(null));
+    api<{ services: { id: string; state: string; note: string }[] }>("/api/status")
+      .then(({ services }) => {
+        const service = services.find((item) => item.id === "geminiTrade");
+        setTradeCapability(service ? { state: service.state, note: service.note } : { state: "unqualified", note: "Native Gemini orders are unavailable until sandbox behavior is verified." });
+      })
+      .catch(() => setTradeCapability({ state: "unqualified", note: "Native Gemini order qualification could not be checked. Order submission remains disabled." }));
   }, []);
 
   if (loading) return <p className="text-sm text-muted">Loading Gemini event…</p>;
@@ -120,7 +150,7 @@ export default function GeminiEventPage() {
   const activeContracts = tradeableContracts.filter((contract) => contract.status?.toLowerCase() === "active");
   const selectedContract = activeContracts.find((contract) => contract.instrumentSymbol === selectedSymbol);
   const canTradeOnGemini = data.mode === "live" && event.status.toLowerCase() === "active" &&
-    Boolean(connection?.connection?.canTrade) && selectedContract?.status?.toLowerCase() === "active";
+    tradeCapability?.state === "available" && Boolean(connection?.connection?.canTrade) && selectedContract?.status?.toLowerCase() === "active";
   const unresolvedIntent = submittedIntent?.status === "unknown" || submittedIntent?.status === "submitting";
 
   async function reviewOrder() {
@@ -172,6 +202,7 @@ export default function GeminiEventPage() {
         body: JSON.stringify({
           action: "place",
           intentId: currentIntentId,
+          ...(linkedThesis ? { thesisId: linkedThesis.id } : {}),
           ticker: event.ticker,
           symbol: selectedSymbol,
           side,
@@ -200,6 +231,8 @@ export default function GeminiEventPage() {
       </div>
 
       {description ? <Card><h2 className="font-serif text-xl">Market question and rules</h2><p className="mt-2 whitespace-pre-wrap text-sm">{description}</p></Card> : null}
+      {linkedThesis ? <Card><h2 className="font-serif text-lg">From your thesis</h2><p className="mt-1 text-sm text-muted">This market was opened from <Link className="text-action underline" href={`/theses/${linkedThesis.id}`}>{linkedThesis.topicSlug.replaceAll("-", " ")}</Link>. If a Gemini order is later submitted, its local order record will retain this thesis link.</p></Card> : null}
+      {thesisLinkError ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">{thesisLinkError}</p> : null}
 
       <Card>
         <h2 className="font-serif text-xl">Event details</h2>
@@ -265,14 +298,20 @@ export default function GeminiEventPage() {
           <p className="mt-2 text-sm text-muted">Order entry is disabled in Replay. Switch to Live data and inspect a current Gemini event before connecting an account.</p>
         </Card>
       ) : null}
-      {data.mode === "live" && !connection?.connection ? (
+      {data.mode === "live" && tradeCapability && tradeCapability.state !== "available" ? (
+        <Card>
+          <h2 className="font-serif text-xl">Gemini live data · native orders gated</h2>
+          <p className="mt-2 text-sm text-muted">{tradeCapability.note}</p>
+        </Card>
+      ) : null}
+      {data.mode === "live" && tradeCapability?.state === "available" && !connection?.connection ? (
         <Card>
           <h2 className="font-serif text-xl">Connect Gemini to trade</h2>
           <p className="mt-2 text-sm text-muted">A live market listing does not connect your Gemini account or authorize an order.</p>
           <div className="mt-3"><Button href="/settings/connections">Connection settings</Button></div>
         </Card>
       ) : null}
-      {data.mode === "live" && connection?.connection && !connection.connection.canTrade ? (
+      {data.mode === "live" && tradeCapability?.state === "available" && connection?.connection && !connection.connection.canTrade ? (
         <Card>
           <h2 className="font-serif text-xl">Trading permission required</h2>
           <p className="mt-2 text-sm text-muted">This account connection is read-only. Add Gemini's separate <code>orders:create</code> permission to submit a native order.</p>

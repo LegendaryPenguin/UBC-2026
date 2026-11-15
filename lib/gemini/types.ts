@@ -14,6 +14,11 @@ export interface GeminiPrices {
   lastTradePrice?: string;
 }
 
+export interface GeminiPricePoint {
+  timestamp: string;
+  price: string;
+}
+
 export interface GeminiContract {
   id: string;
   label: string;
@@ -36,6 +41,7 @@ export interface GeminiContract {
   priceIncrement?: string | null;
   strike?: { value?: string | null; type?: string | null; availableAt?: string | null } | null;
   prices?: GeminiPrices | null;
+  priceHistory?: GeminiPricePoint[] | null;
 }
 
 export interface GeminiEvent {

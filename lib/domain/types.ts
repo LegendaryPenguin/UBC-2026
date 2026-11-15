@@ -45,7 +45,15 @@ export interface SourceContract {
   resolvedAt: string | null;
   bid: string | null;
   ask: string | null;
+  noBid?: string | null;
+  noAsk?: string | null;
   lastTrade: string | null;
+  priceHistory?: PricePoint[] | null;
+}
+
+export interface PricePoint {
+  timestamp: string;
+  price: string;
 }
 
 export interface QuoteSnapshot {
@@ -200,6 +208,7 @@ export interface SignedQuote {
 
 export interface EvidenceItem {
   id: string;
+  stance?: "supports" | "challenges" | "context";
   url: string;
   publisher: string;
   title: string;

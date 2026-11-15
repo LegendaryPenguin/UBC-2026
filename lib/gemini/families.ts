@@ -75,9 +75,12 @@ export function toSourceContract(event: GeminiEvent, contract: GeminiContract): 
         ? contract.resolutionSide
         : null,
     resolvedAt: contract.resolvedAt ?? null,
-    bid: contract.prices?.bestBid ?? contract.prices?.buy?.yes ?? null,
-    ask: contract.prices?.bestAsk ?? null,
+    bid: contract.prices?.bestBid ?? contract.prices?.sell?.yes ?? null,
+    ask: contract.prices?.bestAsk ?? contract.prices?.buy?.yes ?? null,
+    noBid: contract.prices?.sell?.no ?? null,
+    noAsk: contract.prices?.buy?.no ?? null,
     lastTrade: contract.prices?.lastTradePrice ?? null,
+    priceHistory: contract.priceHistory ?? null,
   };
 }
 

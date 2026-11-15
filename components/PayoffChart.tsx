@@ -5,16 +5,18 @@ import { formatUsdcFixed } from "@/lib/format";
 export function PayoffChart({
   labels,
   series,
+  selectedIndex,
 }: {
   labels: string[];
   series: { name: string; values: bigint[]; color: string }[];
+  selectedIndex?: number;
 }) {
   const max = series.reduce((m, s) => s.values.reduce((n, v) => (v > n ? v : n), m), 1n);
   return (
     <div>
       <div className="grid gap-4 md:grid-cols-3" role="img" aria-label="Payoff comparison by scenario">
         {labels.map((label, i) => (
-          <div key={label} className="rounded-lg border border-line p-3">
+          <div key={label} className={`rounded-lg border p-3 ${selectedIndex === i ? "border-action bg-[#F2F5FF]" : "border-line"}`}>
             <p className="text-xs text-muted">{label}</p>
             <div className="mt-3 flex items-end gap-2" style={{ height: 140 }}>
               {series.map((s) => {
@@ -42,7 +44,7 @@ export function PayoffChart({
         </thead>
         <tbody>
           {labels.map((label, i) => (
-            <tr key={label}>
+            <tr key={label} className={selectedIndex === i ? "bg-[#F2F5FF] font-medium" : undefined}>
               <td className="py-2">{label}</td>
               {series.map((s) => (
                 <td key={s.name}>{formatUsdcFixed(s.values[i] ?? 0n)} USDC</td>

@@ -3,6 +3,7 @@ import type { DataMode, EvidenceItem } from "@/lib/domain/types";
 export const FEATURED_EVIDENCE: EvidenceItem[] = [
   {
     id: "ev-demand",
+    stance: "supports",
     url: "https://www.gemini.com/predictions",
     publisher: "Gemini market terms",
     title: "BTC November 20 observation uses the listed Gemini index source",
@@ -14,6 +15,7 @@ export const FEATURED_EVIDENCE: EvidenceItem[] = [
   },
   {
     id: "ev-range",
+    stance: "challenges",
     url: "https://www.gemini.com/predictions",
     publisher: "Market structure note",
     title: "A YES ticket on a lower threshold still pays above the next threshold",
@@ -25,6 +27,7 @@ export const FEATURED_EVIDENCE: EvidenceItem[] = [
   },
   {
     id: "ev-challenge",
+    stance: "challenges",
     url: "https://www.gemini.com/predictions",
     publisher: "Counter-argument card",
     title: "Spot can print outside a preferred interval even if implied odds look calm",

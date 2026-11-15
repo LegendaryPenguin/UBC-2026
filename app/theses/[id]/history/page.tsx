@@ -5,20 +5,35 @@ import { useParams } from "next/navigation";
 import { api } from "@/lib/client";
 import type { ThesisHistoryRecord } from "@/lib/domain/types";
 import { Button, Card, Empty } from "@/components/ui";
+import { ThesisWorkspaceTabs } from "@/components/ThesisWorkspaceTabs";
+import { formatUsdc } from "@/lib/format";
 
 export default function History() {
   const { id } = useParams<{ id: string }>();
   const [versions, setVersions] = useState<ThesisHistoryRecord[]>([]);
   const [currentRevision, setCurrentRevision] = useState(0);
+  const [timeline, setTimeline] = useState<{
+    id: string;
+    kind: "quote" | "position";
+    at: string;
+    status: string;
+    mode: string;
+    premium: string;
+    fee: string;
+    maxPayout: string;
+    scenarioLabel?: string | null;
+    href?: string;
+  }[]>([]);
   const [pendingRevision, setPendingRevision] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api<{ versions: ThesisHistoryRecord[]; currentRevision: number }>(`/api/theses/${id}/history`)
+    api<{ versions: ThesisHistoryRecord[]; currentRevision: number; timeline: typeof timeline }>(`/api/theses/${id}/history`)
       .then((result) => {
         setVersions(result.versions);
         setCurrentRevision(result.currentRevision);
+        setTimeline(result.timeline || []);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "History could not be loaded."))
       .finally(() => setLoading(false));
@@ -39,13 +54,29 @@ export default function History() {
     }
   }
 
+  async function reload() {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await api<{ versions: ThesisHistoryRecord[]; currentRevision: number; timeline: typeof timeline }>(`/api/theses/${id}/history`);
+      setVersions(result.versions);
+      setCurrentRevision(result.currentRevision);
+      setTimeline(result.timeline || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "History could not be loaded.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
+      <ThesisWorkspaceTabs thesisId={id} current="History" />
       <div>
         <h1 className="font-serif text-3xl">Revision history</h1>
         <p className="mt-1 text-sm text-muted">Current revision {currentRevision}. Restoring a version creates a new draft.</p>
       </div>
-      {error ? <p role="alert" className="text-sm text-bad">{error}</p> : null}
+      {error ? <p role="alert" className="text-sm text-bad">{error} <button type="button" className="text-action underline" onClick={() => void reload()}>Retry</button></p> : null}
       {loading ? <p>Loading revisions…</p> : null}
       {!loading && !versions.length && !error ? <Empty title="No saved versions">Save or confirm a view to create its first snapshot.</Empty> : null}
       {versions.map((version) => (
@@ -80,6 +111,24 @@ export default function History() {
           ) : null}
         </Card>
       ))}
+      {timeline.length ? (
+        <section className="space-y-3">
+          <div><h2 className="font-serif text-2xl">Construction and position history</h2><p className="mt-1 text-sm text-muted">Quotes are not trades. Positions appear only after a recorded acceptance.</p></div>
+          {timeline.map((item) => (
+            <Card key={`${item.kind}-${item.id}`}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-medium">{item.kind === "quote" ? "Quote requested" : "Position recorded"}</p>
+                  <p className="mt-1 text-sm capitalize text-muted">{item.mode} · {item.status} · {new Date(item.at).toLocaleString()}</p>
+                  <p className="mt-2 text-sm">Maximum payout {formatUsdc(BigInt(item.maxPayout))} USDC · cost {formatUsdc(BigInt(item.premium) + BigInt(item.fee))} USDC including fee</p>
+                  {item.scenarioLabel ? <p className="mt-1 text-sm">Outcome: {item.scenarioLabel}</p> : null}
+                </div>
+                {item.href ? <Button href={item.href} kind="ghost">Open position</Button> : item.kind === "quote" && item.status === "available" ? <Button href={`/quotes/${item.id}`} kind="ghost">Review quote</Button> : null}
+              </div>
+            </Card>
+          ))}
+        </section>
+      ) : null}
     </div>
   );
 }

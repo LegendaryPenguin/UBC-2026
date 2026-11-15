@@ -15,7 +15,8 @@ export function capabilities(): Record<string, Capability> {
   const eleven = Boolean(process.env.ELEVENLABS_API_KEY);
   const grok = Boolean(process.env.XAI_API_KEY);
   const qn = Boolean(process.env.QUICKNODE_STREAMS_SECRET);
-  const geminiTrade = process.env.GEMINI_TRADE_ENABLED === "true";
+  const geminiTradeEnabled = process.env.GEMINI_TRADE_ENABLED === "true";
+  const geminiTradeQualified = process.env.GEMINI_TRADE_QUALIFIED === "true";
   const circle = Boolean(process.env.CIRCLE_API_KEY);
   return {
     escrow: {
@@ -51,8 +52,12 @@ export function capabilities(): Record<string, Capability> {
     geminiTrade: {
       id: "geminiTrade",
       label: "Native Gemini orders",
-      state: geminiTrade ? "unqualified" : "unavailable",
-      reason: "Native exchange trading stays gated until account eligibility is verified. Market data still loads.",
+      state: !geminiTradeQualified ? "unqualified" : geminiTradeEnabled ? "available" : "unavailable",
+      reason: !geminiTradeQualified
+        ? "Native order submission is disabled until a sandbox order, status lookup, and position/fill retrieval have been verified. Market data and paper execution remain available."
+        : geminiTradeEnabled
+          ? "The verified Gemini sandbox order path is enabled."
+          : "The sandbox flow is qualified, but order submission is disabled by GEMINI_TRADE_ENABLED.",
     },
     circle: {
       id: "circle",
@@ -70,6 +75,7 @@ export function statusSnapshot() {
     updatedAt: new Date().toISOString(),
     services: [
       { id: "gemini", label: "Gemini prediction markets", state: gemini.state, note: gemini.note },
+      { id: "geminiTrade", label: "Gemini native orders", state: caps.geminiTrade.state, note: caps.geminiTrade.reason },
       { id: "research", label: "Research model", state: caps.grok.state, note: caps.grok.reason },
       { id: "voice", label: "Voice", state: caps.voice.state, note: caps.voice.reason },
       { id: "quotes", label: "Quote service", state: caps.maker.state, note: caps.maker.reason },

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api, modeFromStorage } from "@/lib/client";
+import { useModeChange } from "@/lib/use-mode-change";
 import { Button, Card, Field, inputCls } from "@/components/ui";
 import type { EvidenceItem, MarketFamily, ThesisRevision, ViewTemplate } from "@/lib/domain/types";
 
@@ -170,6 +171,17 @@ export function VoicePanel({
       releasePlayback();
     };
   }, []);
+
+  useModeChange(() => {
+    researchControllerRef.current?.abort();
+    if (status === "speaking") releasePlayback();
+    setAnswer("");
+    setCitations([]);
+    setProposal(null);
+    setProposalSaved(false);
+    setNotice("Market data mode changed. Ask again to refresh the research reply and suggested view.");
+    setStatus((current) => current === "listening" || current === "connecting" ? current : "ended");
+  });
 
   useEffect(() => {
     let active = true;

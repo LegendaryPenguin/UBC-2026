@@ -4,6 +4,7 @@ import { GeminiPrivateApiError, geminiPrivateRequest } from "@/lib/gemini/privat
 import { getEvent } from "@/lib/gemini/client";
 import { flattenEvents, type GeminiContract } from "@/lib/gemini/types";
 import { geminiAccessToken } from "@/lib/gemini/oauth";
+import { capabilities } from "@/lib/capabilities";
 import { mutate, readStore, type GeminiOrderIntent } from "@/lib/server/store";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ type OrderBucket = "active" | "filled" | "cancelled";
 interface PlaceBody {
   action: "place";
   intentId: string;
+  thesisId?: string;
   ticker: string;
   symbol: string;
   side: "buy" | "sell";
@@ -55,7 +57,8 @@ function visibleIntent(intent: GeminiOrderIntent) {
 
 function matchesIntent(intent: GeminiOrderIntent, body: PlaceBody) {
   return intent.ticker === body.ticker && intent.symbol === body.symbol && intent.side === body.side &&
-    intent.outcome === body.outcome && intent.quantity === body.quantity && intent.price === body.price;
+    intent.outcome === body.outcome && intent.quantity === body.quantity && intent.price === body.price &&
+    intent.thesisId === body.thesisId;
 }
 
 export async function GET(req: Request) {
@@ -123,11 +126,21 @@ export async function POST(req: Request) {
   }
   const orderBody = body as PlaceBody;
 
+  if (orderBody.thesisId !== undefined && (typeof orderBody.thesisId !== "string" || orderBody.thesisId.length > 100)) {
+    return fail("INVALID", "Choose a valid thesis link.");
+  }
+  if (orderBody.thesisId && !readStore().theses.some((thesis) =>
+    thesis.id === orderBody.thesisId && (thesis as typeof thesis & { accountId?: string }).accountId === ctx.account.id
+  )) return fail("NOT_FOUND", "The linked thesis is unavailable.", 404);
+
   const existing = readStore().geminiOrderIntents.find((intent) => intent.accountId === ctx.account.id && intent.id === orderBody.intentId);
   if (existing) {
     if (!matchesIntent(existing, orderBody)) return fail("IDEMPOTENCY_CONFLICT", "This order intent ID was already used for different order terms.", 409);
     return ok({ intent: visibleIntent(existing), duplicate: true }, existing.status === "submitting" ? 202 : 200);
   }
+
+  const trading = capabilities().geminiTrade;
+  if (trading.state !== "available") return fail("GEMINI_TRADE_UNQUALIFIED", trading.reason, 503);
 
   try {
     const authorization = await geminiAccessToken(ctx.account.id);
@@ -164,6 +177,7 @@ export async function POST(req: Request) {
     const intent: GeminiOrderIntent = {
       id: orderBody.intentId,
       accountId: ctx.account.id,
+      ...(orderBody.thesisId ? { thesisId: orderBody.thesisId } : {}),
       symbol: orderBody.symbol,
       ticker: orderBody.ticker,
       side: orderBody.side,

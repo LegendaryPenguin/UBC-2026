@@ -16,3 +16,9 @@ export function modeFromStorage(): "live" | "replay" | "paper" {
 export function setMode(mode: "live" | "replay" | "paper") {
   localStorage.setItem("thesis_mode", mode);
 }
+
+export const MODE_CHANGE_EVENT = "thesis:mode-change";
+
+export function announceModeChange(mode: "live" | "replay" | "paper") {
+  window.dispatchEvent(new CustomEvent(MODE_CHANGE_EVENT, { detail: { mode } }));
+}

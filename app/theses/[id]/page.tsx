@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { api, modeFromStorage } from "@/lib/client";
 import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
 import { VoicePanel } from "@/components/VoicePanel";
 import { Button, Card, Empty, Field, inputCls } from "@/components/ui";
+import { ThesisWorkspaceTabs } from "@/components/ThesisWorkspaceTabs";
+import { ThesisViewPanel } from "@/components/ThesisViewPanel";
+import { MarketPriceHistory } from "@/components/MarketPriceHistory";
+import { useModeChange } from "@/lib/use-mode-change";
 
 export default function ThesisEditor() {
   const { id } = useParams<{ id: string }>();
@@ -41,6 +46,21 @@ export default function ThesisEditor() {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [id]);
+
+  const refreshMarketData = useCallback(async () => {
+    if (!thesis?.topicSlug) return;
+    const mode = modeFromStorage() === "live" ? "live" : "replay";
+    try {
+      const topic = await api<{ family: MarketFamily; evidence: EvidenceItem[] }>(`/api/topics/${thesis.topicSlug}?mode=${mode}`);
+      setFamily(topic.family);
+      setEvidence(topic.evidence);
+      setNotice(`Market research refreshed for ${mode === "live" ? "Live data" : "Replay"}. Your view edits remain here.`);
+    } catch (err) {
+      setNotice(err instanceof Error ? `Market data could not refresh: ${err.message}. Your view edits remain here.` : "Market data could not refresh. Your view edits remain here.");
+    }
+  }, [thesis?.topicSlug]);
+
+  useModeChange(() => { void refreshMarketData(); });
 
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -100,14 +120,115 @@ export default function ThesisEditor() {
   if (loading) return <p role="status">Loading thesis…</p>;
   if (error && !thesis) return <Empty title="Thesis unavailable">{error}</Empty>;
   if (!thesis) return <Empty title="Thesis unavailable">This view could not be found.</Empty>;
+  const historyPredicates = [thesis.lowerThreshold, thesis.upperThreshold]
+    .filter((threshold): threshold is number => threshold != null)
+    .map((threshold) => family?.predicates.find((predicate) => predicate.threshold === threshold))
+    .filter((predicate) => predicate != null);
+  const historyContracts = historyPredicates
+    .map((predicate) => family?.contracts.find((contract) => contract.id === predicate.contractId))
+    .filter((contract) => contract != null);
 
   return (
     <div className="space-y-4">
-      <h1 className="font-serif text-3xl">My view</h1>
-      <p className="text-sm text-muted">Revision {thesis.revision} · {thesis.status}. Save creates a version. Confirm opens a payoff review before any quote or transaction.</p>
+      <p className="text-xs uppercase tracking-wide text-muted">{thesis.topicSlug.replaceAll("-", " ")}</p>
+      <h1 className="font-serif text-3xl">Research your view</h1>
+      <p className="text-sm text-muted">Revision {thesis.revision} · {thesis.status}. Research and saved views do not require a wallet. Confirming opens payoff design without requesting a quote or submitting a trade.</p>
+      <ThesisWorkspaceTabs
+        thesisId={id}
+        current="Research"
+        lockedTabs={thesis.status === "draft" ? ["Build", "Compare"] : []}
+        onNavigate={() => !dirty || window.confirm("Discard these unsaved view edits and leave Research?")}
+      />
       {error ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{error}</p> : null}
       {notice ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">{notice}</p> : null}
+      {family ? (
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,0.85fr)]">
+          <div className="space-y-4">
+            <MarketPriceHistory
+              illustrative={family.mode === "replay"}
+              series={historyContracts.map((contract, index) => ({
+                label: contract!.label,
+                color: index === 0 ? "#3559E0" : "#8D6CEB",
+                points: contract!.priceHistory || [],
+              }))}
+            />
+            <Card>
+              <h2 className="font-serif text-xl">{family.title} · market expectations</h2>
+              <p className="mt-1 text-sm text-muted">{family.question}</p>
+              <p className="mt-2 text-xs text-muted">
+                {family.mode === "replay" ? "Illustrative recorded snapshot" : "Gemini reference data"} · {family.freshness} · observed {family.observationTime ? new Date(family.observationTime).toLocaleString() : "time not provided"}
+              </p>
+              {family.mode === "replay" ? <p className="mt-2 rounded-lg bg-[#FFF8E7] p-3 text-xs text-muted">Replay prices and evidence are walkthrough fixtures. They are not current prices, news, or executable quotes.</p> : null}
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead><tr><th className="border-b border-line py-2 pr-3">Contract</th><th className="border-b border-line py-2 pr-3">Bid · YES</th><th className="border-b border-line py-2 pr-3">Ask · YES</th><th className="border-b border-line py-2">Last trade</th></tr></thead>
+                  <tbody>{family.contracts.map((contract) => (
+                    <tr key={contract.id}>
+                      <td className="border-b border-line py-2 pr-3">{contract.label}</td>
+                      <td className="border-b border-line py-2 pr-3">{contract.bid ?? "—"}</td>
+                      <td className="border-b border-line py-2 pr-3">{contract.ask ?? "—"}</td>
+                      <td className="border-b border-line py-2">{contract.lastTrade ?? "—"}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-xs text-muted">Prices show market references only. They do not guarantee available size or execution.</p>
+            </Card>
+            <Card>
+              <h2 className="font-serif text-xl">Resolution rules</h2>
+              <dl className="mt-3 space-y-2 text-sm">
+                <div><dt className="text-muted">Observation</dt><dd>{family.observationTime ? new Date(family.observationTime).toLocaleString() : "Not provided"}</dd></div>
+                <div><dt className="text-muted">Source</dt><dd>{family.sourceEvent.sourceAgency || "Gemini listed source"}{family.sourceEvent.sourceIndex ? ` · ${family.sourceEvent.sourceIndex}` : ""}</dd></div>
+                <div><dt className="text-muted">Market status</dt><dd className="capitalize">{family.sourceEvent.status}</dd></div>
+                <div><dt className="text-muted">Trade cutoff</dt><dd>{family.closeTime ? new Date(family.closeTime).toLocaleString() : "Not provided"}</dd></div>
+              </dl>
+              {family.sourceEvent.sourceUrl ? <a className="mt-3 inline-block text-sm text-action" href={family.sourceEvent.sourceUrl} target="_blank" rel="noreferrer">Read original Gemini rules</a> : null}
+            </Card>
+            {evidence.length ? (
+              <Card>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h2 className="font-serif text-xl">Evidence board</h2>
+                  {family.mode === "replay" ? <span className="text-xs text-muted">Illustrative replay evidence</span> : null}
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {evidence.map((item) => (
+                    <article key={item.id} className="rounded-lg border border-line p-3">
+                      <span className={`inline-flex rounded-full px-2 py-1 text-xs capitalize ${item.stance === "supports" ? "bg-[#E3F5EC] text-good" : item.stance === "challenges" ? "bg-[#FCE8E8] text-bad" : "bg-[#E9EEFF] text-action"}`}>{item.stance || "context"}</span>
+                      <Link href={`/topics/${thesis.topicSlug}/evidence/${item.id}`} className="mt-2 block font-medium">{item.title}</Link>
+                      <p className="mt-1 text-xs text-muted">{item.publisher} · {new Date(item.retrievedAt).toLocaleString()}</p>
+                      <p className="mt-2 text-sm">{item.excerpt}</p>
+                    </article>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-muted">Evidence cards stay tied to this thesis. Review the original source before relying on a claim.</p>
+              </Card>
+            ) : <Card><h2 className="font-serif text-xl">Evidence</h2><p className="mt-2 text-sm text-muted">No current evidence cards are available for this market. Research and manual view controls remain available.</p></Card>}
+          </div>
+          <aside className="space-y-4">
+            <VoicePanel
+              slug={family.slug}
+              family={family}
+              evidence={evidence}
+              thesis={thesis}
+              onThesisChange={(updated) => { setThesis(updated); setDirty(false); setNotice(`Voice-assisted edit saved as draft revision ${updated.revision}.`); }}
+              context="view"
+              title="Talk through your view"
+            />
+            <ThesisViewPanel
+              thesis={thesis}
+              family={family}
+              action={thesis.status === "draft"
+                ? { label: "Review and confirm view", onClick: () => setReviewingConfirmation(true) }
+                : { label: "Build a basket", href: `/theses/${id}/build` }}
+            />
+          </aside>
+        </div>
+      ) : null}
       <Card className="space-y-3">
+        <div>
+          <h2 className="font-serif text-xl">Your view</h2>
+          <p className="mt-1 text-sm text-muted">Edit the conditions that would support your idea. Save creates a draft version; confirm only after reviewing the wording.</p>
+        </div>
         <Field label="Template">
           <select className={inputCls()} value={thesis.template} onChange={(event) => change("template", event.target.value as ThesisRevision["template"])}>
             <option value="directional">Directional</option>
@@ -149,16 +270,6 @@ export default function ThesisEditor() {
             <Button onClick={() => setReviewingConfirmation(false)} kind="ghost" disabled={saving !== null}>Cancel</Button>
           </div>
         </Card>
-      ) : null}
-      {family ? (
-        <VoicePanel
-          slug={family.slug}
-          family={family}
-          evidence={evidence}
-          thesis={thesis}
-          onThesisChange={(updated) => { setThesis(updated); setDirty(false); setNotice(`Voice-assisted edit saved as draft revision ${updated.revision}.`); }}
-          context="view"
-        />
       ) : null}
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => void save("save")} disabled={saving !== null}>{saving === "save" ? "Saving…" : "Save view"}</Button>

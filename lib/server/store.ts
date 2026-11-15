@@ -128,6 +128,7 @@ export interface GeminiConnection {
 export interface GeminiOrderIntent {
   id: string;
   accountId: string;
+  thesisId?: string;
   symbol: string;
   ticker: string;
   side: "buy" | "sell";
@@ -181,7 +182,7 @@ export interface StoreShape {
   watchlists: Watchlist[];
   alerts: AlertRule[];
   notifications: NotificationItem[];
-  quotes: (SignedQuote & { thesisId?: string; accountId?: string; recordedScenarioIndex?: number })[];
+  quotes: (SignedQuote & { thesisId?: string; accountId?: string; mode?: string; recordedScenarioIndex?: number })[];
   positions: PositionRecord[];
   transactions: TransactionRecord[];
   journals: JournalEntry[];
