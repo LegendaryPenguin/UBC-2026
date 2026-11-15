@@ -46,10 +46,10 @@ export default function ThesisEditor() {
           </Field>
         ) : null}
         <Field label="Lower / directional threshold">
-          <input className={inputCls()} type="number" value={thesis.lowerThreshold ?? ""} onChange={(e) => setThesis({ ...thesis, lowerThreshold: Number(e.target.value) })} />
+          <input className={inputCls()} type="number" value={thesis.lowerThreshold ?? ""} onChange={(e) => setThesis({ ...thesis, lowerThreshold: e.target.value === "" ? null : Number(e.target.value) })} />
         </Field>
         <Field label="Upper threshold">
-          <input className={inputCls()} type="number" value={thesis.upperThreshold ?? ""} onChange={(e) => setThesis({ ...thesis, upperThreshold: Number(e.target.value) })} />
+          <input className={inputCls()} type="number" value={thesis.upperThreshold ?? ""} onChange={(e) => setThesis({ ...thesis, upperThreshold: e.target.value === "" ? null : Number(e.target.value) })} />
         </Field>
         <Field label="Rationale">
           <textarea className={`${inputCls()} min-h-24 py-2`} value={thesis.rationale} onChange={(e) => setThesis({ ...thesis, rationale: e.target.value })} />

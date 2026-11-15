@@ -2,6 +2,7 @@ import type { ThesisRevision } from "@/lib/domain/types";
 import { fail, ok, readJson } from "@/lib/server/http";
 import { thesisOwner } from "@/lib/server/session";
 import { mutate, uid } from "@/lib/server/store";
+import { recordThesisVersion } from "@/lib/server/thesis-history";
 
 export async function GET() {
   const owner = thesisOwner();
@@ -33,6 +34,7 @@ export async function POST(req: Request) {
   };
   mutate((s) => {
     s.theses.push(thesis);
+    recordThesisVersion(s, thesis, thesis.accountId, "Created draft");
   });
   return ok({ thesis });
 }

@@ -11,7 +11,7 @@ npm run dev
 
 Open the local URL printed by Next.js. Choose **Replay** to inspect the recorded Gemini markets. On a topic page, the voice panel can record a question, transcribe it with ElevenLabs, and read the written research reply aloud. Microphone permission is requested only when you start recording. Audio is sent to ElevenLabs for transcription and is not saved by this app. Provider logging follows your ElevenLabs account settings.
 
-To simulate a position, sign in with a throwaway email and the code shown by the local development app, select **Paper**, then open the BTC topic from Explore. Create and confirm a view, choose a maximum payout, request a simulated quote, inspect its terms, and accept it. Portfolio shows paper positions. To walk through settlement, repeat with the archived XRP topic and claim the paper payout after acceptance. The local store lives in `.data/`.
+To simulate a position, sign in with a throwaway email and the code shown by the local development app, select **Paper**, then open the BTC topic from Explore. Create and confirm a view, choose a maximum payout, request a simulated quote, inspect its terms, and accept it. Portfolio shows paper positions. Saved and confirmed views appear in revision history, where an earlier version can be restored as a separate draft. To walk through settlement, repeat with the archived XRP topic and claim the paper payout after acceptance. The local store lives in `.data/`.
 
 ```sh
 npm run typecheck

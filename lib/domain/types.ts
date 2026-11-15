@@ -116,6 +116,31 @@ export interface ThesisRevision {
   updatedAt: string;
 }
 
+export type ThesisSnapshot = Pick<
+  ThesisRevision,
+  | "topicSlug"
+  | "familyId"
+  | "familyVersion"
+  | "template"
+  | "direction"
+  | "lowerThreshold"
+  | "upperThreshold"
+  | "rationale"
+  | "invalidation"
+  | "evidenceIds"
+  | "status"
+>;
+
+export interface ThesisHistoryRecord {
+  id: string;
+  thesisId: string;
+  accountId: string;
+  revision: number;
+  recordedAt: string;
+  reason: string;
+  snapshot: ThesisSnapshot;
+}
+
 export interface PayoffRow {
   scenarioId: string;
   label: string;

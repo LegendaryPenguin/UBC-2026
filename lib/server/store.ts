@@ -1,6 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { AlertRule, NotificationItem, PositionRecord, SignedQuote, ThesisRevision } from "@/lib/domain/types";
+import type {
+  AlertRule,
+  NotificationItem,
+  PositionRecord,
+  SignedQuote,
+  ThesisHistoryRecord,
+  ThesisRevision,
+} from "@/lib/domain/types";
 
 export type AppMode = "research" | "paper" | "live" | "hackathon";
 
@@ -127,6 +134,7 @@ export interface StoreShape {
   sessions: Session[];
   codes: { email: string; code: string; expiresAt: string }[];
   theses: ThesisRevision[];
+  thesisHistory: ThesisHistoryRecord[];
   watchlists: Watchlist[];
   alerts: AlertRule[];
   notifications: NotificationItem[];
@@ -153,6 +161,7 @@ function empty(): StoreShape {
     sessions: [],
     codes: [],
     theses: [],
+    thesisHistory: [],
     watchlists: [],
     alerts: [],
     notifications: [],
@@ -178,7 +187,14 @@ function load(): StoreShape {
   if (mem) return mem;
   try {
     const raw = fs.readFileSync(FILE, "utf8");
-    mem = JSON.parse(raw) as StoreShape;
+    const stored = JSON.parse(raw) as Partial<StoreShape>;
+    const defaults = empty();
+    mem = {
+      ...defaults,
+      ...stored,
+      maker: { ...defaults.maker, ...(stored.maker || {}) },
+      thesisHistory: stored.thesisHistory || [],
+    };
   } catch {
     mem = empty();
   }
