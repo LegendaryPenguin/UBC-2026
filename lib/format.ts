@@ -3,9 +3,12 @@ import { USDC_DECIMALS } from "@/lib/domain/types";
 export function parseUsdc(input: string): bigint {
   const trimmed = input.trim();
   if (!trimmed) return 0n;
+  if (!/^(?:\d+(?:\.\d{0,6})?|\.\d{1,6})$/.test(trimmed)) {
+    throw new Error("Enter a USDC amount with up to six decimal places.");
+  }
   const [whole, frac = ""] = trimmed.split(".");
   const fracPadded = (frac + "000000").slice(0, USDC_DECIMALS);
-  return BigInt(whole.replace(/[^0-9]/g, "") || "0") * 1_000_000n + BigInt(fracPadded || "0");
+  return BigInt(whole || "0") * 1_000_000n + BigInt(fracPadded || "0");
 }
 
 export function formatUsdc(value: bigint, opts?: { signed?: boolean }): string {

@@ -5,10 +5,11 @@ import { quotePremium } from "@/lib/pricing";
 import { signQuote } from "@/lib/escrow/quote";
 import { capabilities } from "@/lib/capabilities";
 import { fail, ok, readJson } from "@/lib/server/http";
-import { currentSession } from "@/lib/server/session";
+import { currentSession, thesisOwner } from "@/lib/server/session";
 import { mutate, uid } from "@/lib/server/store";
 import { publicEscrow, publicUsdc, publicChainId } from "@/lib/chain";
 import type { SignedQuote } from "@/lib/domain/types";
+import { isAddress, zeroAddress } from "viem";
 
 export async function POST(req: Request) {
   const body = await readJson<{
@@ -16,17 +17,39 @@ export async function POST(req: Request) {
     mode: string;
     maxPayout: string;
     taker?: string;
-    template?: "directional" | "range" | "outside" | "stepped";
   }>(req);
-  const thesis = mutate((s) => s.theses.find((t) => t.id === body.thesisId));
+  const ctx = currentSession();
+  const owner = thesisOwner();
+  if (!owner) return fail("NOT_FOUND", "Thesis not found.", 404);
+  const thesis = mutate((s) => s.theses.find((t) => {
+    return t.id === body.thesisId && (t as typeof t & { accountId?: string }).accountId === owner;
+  }));
   if (!thesis) return fail("NOT_FOUND", "Confirm a view first.", 404);
-  const family = await getTopic(thesis.topicSlug, body.mode === "live" ? "live" : "replay");
+  if (body.mode !== "live" && body.mode !== "paper" && body.mode !== "replay") {
+    return fail("INVALID", "Select live, paper, or replay mode.");
+  }
+  if (thesis.status !== "confirmed" && thesis.status !== "quoted") {
+    return fail("INVALID", "Confirm the thesis before requesting a quote.");
+  }
+  const live = body.mode === "live";
+  const family = await getTopic(thesis.topicSlug, live ? "live" : "replay");
   if (!family) return fail("UNSUPPORTED_FAMILY", "Family unavailable");
-  const maxPayout = parseUsdc(body.maxPayout || "100");
+  const escrow = publicEscrow();
+  const key = process.env.MAKER_PRIVATE_KEY as `0x${string}` | undefined;
+  if (live) {
+    if (!body.taker || !isAddress(body.taker) || body.taker === zeroAddress) {
+      return fail("INVALID", "Connect a wallet before requesting a live quote.");
+    }
+    if (!family.quotesAvailable || family.freshness !== "fresh") {
+      return fail("UNAVAILABLE", "This market's settlement rules and current quote eligibility have not been verified.", 503);
+    }
+    if (!escrow || !key) return fail("UNAVAILABLE", capabilities().maker.reason, 503);
+  }
   try {
+    const maxPayout = parseUsdc(body.maxPayout || "100");
     const spec = compileView(
       family,
-      body.template || thesis.template,
+      thesis.template,
       {
         threshold: thesis.lowerThreshold,
         direction: thesis.direction,
@@ -39,12 +62,13 @@ export async function POST(req: Request) {
     const paused = mutate((s) => s.maker.paused);
     if (paused) return fail("UNAVAILABLE", "Maker quoting is paused.");
     const priced = quotePremium(family, spec, spread);
+    const note = live ? priced.note : priced.usedMids
+      ? "Estimated from recorded Gemini prices and a simulated maker spread."
+      : "Simulated premium using a fallback estimate. The recorded markets have no usable bid and ask.";
     const fee = priced.premium / 100n;
-    const caps = capabilities();
-    const taker = (body.taker as `0x${string}` | undefined) || "0x0000000000000000000000000000000000000000";
-    const key = process.env.MAKER_PRIVATE_KEY as `0x${string}` | undefined;
+    const taker = (body.taker as `0x${string}` | undefined) || zeroAddress;
     let quote: SignedQuote;
-    if (caps.maker.state === "available" && key && publicEscrow()) {
+    if (live && key && escrow) {
       const nonce = BigInt(mutate((s) => s.nonce++));
       quote = await signQuote({
         makerKey: key,
@@ -62,9 +86,9 @@ export async function POST(req: Request) {
       quote = {
         id: uid("q"),
         status: body.mode === "paper" ? "available" : "unavailable",
-        maker: "0x0000000000000000000000000000000000000000",
+        maker: zeroAddress,
         taker,
-        escrow: publicEscrow() || "0x0000000000000000000000000000000000000000",
+        escrow: zeroAddress,
         token: publicUsdc(),
         familyHash: spec.familyHash as `0x${string}`,
         payoffHash: spec.payoffHash as `0x${string}`,
@@ -78,25 +102,31 @@ export async function POST(req: Request) {
         signature: "0x",
         payouts: spec.rows.map((r) => r.payout.toString()),
         scenarioLabels: spec.rows.map((r) => r.label),
-        unavailableReason:
-          body.mode === "paper"
-            ? undefined
-            : caps.maker.reason,
+        unavailableReason: body.mode === "replay" ? "Historical estimate. Switch to paper mode to simulate acceptance." : undefined,
       };
     }
     quote.id = uid("q");
+    const recordedScenario = body.mode === "paper" &&
+      family.sourceEvent.status === "settled" &&
+      family.predicates.every((predicate) => family.contracts.some((contract) =>
+        contract.id === predicate.contractId && contract.status === "settled" && contract.resolutionSide !== null
+      ))
+      ? family.scenarios.find((scenario) => family.predicates.every((predicate) => {
+        const contract = family.contracts.find((item) => item.id === predicate.contractId);
+        return scenario.predicateYes[predicate.id] === (contract?.resolutionSide === "yes");
+      }))
+      : undefined;
     mutate((s) => {
-      s.quotes.push(quote);
+      s.quotes.push({ ...quote, thesisId: thesis.id, accountId: owner, recordedScenarioIndex: recordedScenario?.index });
       thesis.status = "quoted";
     });
-    const ctx = currentSession();
     if (ctx) {
       mutate((s) => {
         s.notifications.unshift({
           id: uid("n"),
           accountId: ctx.account.id,
-          title: "Quote ready",
-          body: priced.note,
+          title: live ? "Quote ready" : "Simulation ready",
+          body: note,
           href: `/quotes/${quote.id}`,
           category: "trading",
           read: false,
@@ -104,7 +134,16 @@ export async function POST(req: Request) {
         });
       });
     }
-    return ok({ quote, spec, note: priced.note, paper: body.mode === "paper" });
+    return ok({
+      quote,
+      spec: {
+        ...spec,
+        maxPayout: spec.maxPayout.toString(),
+        rows: spec.rows.map((row) => ({ ...row, payout: row.payout.toString() })),
+      },
+      note,
+      paper: body.mode === "paper",
+    });
   } catch (err) {
     return fail("INCOMPATIBLE_RULES", err instanceof Error ? err.message : "Compile failed");
   }

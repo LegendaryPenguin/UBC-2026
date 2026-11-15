@@ -13,51 +13,49 @@ export async function POST(req: Request) {
   if (!ctx) return fail("AUTH", "Sign in required", 401);
   const body = await readJson<{
     quoteId: string;
-    thesisId: string;
     mode: "paper" | "live" | "hackathon";
     txHash?: string;
     chainPositionId?: string;
-    topicSlug: string;
-    familyId: string;
   }>(req);
   const quote = mutate((s) => s.quotes.find((q) => q.id === body.quoteId));
-  if (!quote) return fail("NOT_FOUND", "Quote not found", 404);
+  if (!quote || quote.accountId !== ctx.account.id) return fail("NOT_FOUND", "Quote not found", 404);
   if (body.mode !== "paper") {
-    if (quote.status !== "available") return fail("QUOTE_EXPIRED", "Quote is not available.");
-    if (!body.txHash) return fail("UNAVAILABLE", "Live acceptance needs a confirmed transaction hash.");
+    return fail("UNAVAILABLE", "Live position recording requires verified Arc receipts.", 503);
   }
-  if (quote.deadline * 1000 < Date.now() && body.mode !== "paper") {
-    quote.status = "expired";
-    return fail("QUOTE_EXPIRED", "Quote expired. Request a new offer.");
+  if (quote.signature !== "0x" || quote.status !== "available" || quote.deadline * 1000 <= Date.now()) {
+    return fail("QUOTE_EXPIRED", "Request a new paper quote.");
   }
+  if (body.txHash || body.chainPositionId) return fail("INVALID", "Paper positions have no chain receipt.");
+  const thesis = mutate((s) => s.theses.find((t) => t.id === quote.thesisId));
+  if (!thesis) return fail("NOT_FOUND", "Thesis not found", 404);
   const position = mutate((s) => {
     quote.status = "accepted";
     const p = {
       id: uid("pos"),
       accountId: ctx.account.id,
-      thesisId: body.thesisId,
+      thesisId: thesis.id,
       quoteId: quote.id,
       mode: body.mode,
-      chainPositionId: body.chainPositionId || null,
-      txHash: body.txHash || null,
-      status: "open" as const,
-      scenarioIndex: null,
+      chainPositionId: null,
+      txHash: null,
+      status: quote.recordedScenarioIndex === undefined ? "open" as const : "resolved" as const,
+      scenarioIndex: quote.recordedScenarioIndex ?? null,
       payouts: quote.payouts,
       labels: quote.scenarioLabels,
       maxPayout: quote.maxPayout,
       premium: quote.premium,
       fee: quote.fee,
-      familyId: body.familyId,
-      topicSlug: body.topicSlug,
+      familyId: thesis.familyId,
+      topicSlug: thesis.topicSlug,
       createdAt: new Date().toISOString(),
     };
     s.positions.push(p);
     s.transactions.push({
       id: uid("tx"),
       accountId: ctx.account.id,
-      type: "accept_quote",
-      status: body.txHash ? "confirmed" : "confirmed",
-      hash: body.txHash || null,
+      type: "accept_paper_quote",
+      status: "confirmed",
+      hash: null,
       amount: quote.premium,
       unit: "USDC",
       related: p.id,
@@ -67,9 +65,9 @@ export async function POST(req: Request) {
     s.journals.push({
       id: uid("j"),
       accountId: ctx.account.id,
-      thesisId: body.thesisId,
+      thesisId: thesis.id,
       positionId: p.id,
-      snapshot: { quote, thesisId: body.thesisId },
+      snapshot: { quote, thesisId: thesis.id },
       reflection: "",
       tags: [],
       createdAt: new Date().toISOString(),

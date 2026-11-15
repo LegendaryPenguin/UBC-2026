@@ -169,7 +169,8 @@ export function familyFromEvent(
       scenarioLabels: scenarios.map((s) => s.label),
       observationTime,
     }),
-    quotesAvailable: live && mapStatus(event.status) === "active",
+    // Discovery labels alone do not establish settlement compatibility.
+    quotesAvailable: false,
     freshness: freshness(fetchedAt, observationTime, live),
     fetchedAt,
   };
@@ -240,7 +241,7 @@ export function binaryFromEvent(
       scenarioLabels: scenarios.map((s) => s.label),
       observationTime: event.expiryDate ?? null,
     }),
-    quotesAvailable: live && mapStatus(event.status) === "active",
+    quotesAvailable: false,
     freshness: freshness(fetchedAt, event.expiryDate ?? null, live),
     fetchedAt,
   };

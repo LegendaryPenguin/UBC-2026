@@ -199,3 +199,47 @@ export const ERROR_CODES = [
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
+
+export interface PositionRecord {
+  id: string;
+  accountId: string;
+  thesisId: string;
+  quoteId: string;
+  mode: string;
+  chainPositionId: string | null;
+  txHash: string | null;
+  status: "pending" | "open" | "resolved" | "voided" | "claimed" | "exited";
+  scenarioIndex: number | null;
+  payouts: string[];
+  labels: string[];
+  maxPayout: string;
+  premium: string;
+  fee: string;
+  familyId: string;
+  topicSlug: string;
+  createdAt: string;
+}
+
+export interface AlertRule {
+  id: string;
+  accountId: string;
+  name: string;
+  type: string;
+  topicSlug: string | null;
+  positionId: string | null;
+  threshold: string;
+  channel: "inbox";
+  paused: boolean;
+  createdAt: string;
+}
+
+export interface NotificationItem {
+  id: string;
+  accountId: string;
+  title: string;
+  body: string;
+  href: string;
+  category: "trading" | "research" | "security";
+  read: boolean;
+  createdAt: string;
+}

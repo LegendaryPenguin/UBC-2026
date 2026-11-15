@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { SignedQuote, ThesisRevision } from "@/lib/domain/types";
+import type { AlertRule, NotificationItem, PositionRecord, SignedQuote, ThesisRevision } from "@/lib/domain/types";
 
 export type AppMode = "research" | "paper" | "live" | "hackathon";
 
@@ -32,50 +32,6 @@ export interface Watchlist {
   name: string;
   slugs: string[];
   notes: string;
-  createdAt: string;
-}
-
-export interface AlertRule {
-  id: string;
-  accountId: string;
-  name: string;
-  type: string;
-  topicSlug: string | null;
-  positionId: string | null;
-  threshold: string;
-  channel: "inbox";
-  paused: boolean;
-  createdAt: string;
-}
-
-export interface NotificationItem {
-  id: string;
-  accountId: string;
-  title: string;
-  body: string;
-  href: string;
-  category: "trading" | "research" | "security";
-  read: boolean;
-  createdAt: string;
-}
-
-export interface PositionRecord {
-  id: string;
-  accountId: string;
-  thesisId: string;
-  quoteId: string;
-  mode: AppMode;
-  chainPositionId: string | null;
-  txHash: string | null;
-  status: "pending" | "open" | "resolved" | "voided" | "claimed" | "exited";
-  scenarioIndex: number | null;
-  payouts: string[];
-  labels: string[];
-  maxPayout: string;
-  premium: string;
-  fee: string;
-  familyId: string;
-  topicSlug: string;
   createdAt: string;
 }
 
@@ -121,6 +77,7 @@ export interface Publication {
   includeRationale: boolean;
   access: "unlisted" | "public";
   createdAt: string;
+  snapshot?: { topicSlug: string; rationale?: string };
 }
 
 export interface Comment {
@@ -173,7 +130,7 @@ export interface StoreShape {
   watchlists: Watchlist[];
   alerts: AlertRule[];
   notifications: NotificationItem[];
-  quotes: SignedQuote[];
+  quotes: (SignedQuote & { thesisId?: string; accountId?: string; recordedScenarioIndex?: number })[];
   positions: PositionRecord[];
   transactions: TransactionRecord[];
   journals: JournalEntry[];

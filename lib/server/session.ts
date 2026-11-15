@@ -1,7 +1,20 @@
+import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { mutate, readStore, uid, type Account, type Session } from "@/lib/server/store";
 
 const COOKIE = "thesis_session";
+const GUEST_COOKIE = "thesis_guest";
+
+export function thesisOwner(createGuest = false): string | undefined {
+  const account = currentSession()?.account;
+  if (account) return account.id;
+  const guest = cookies().get(GUEST_COOKIE)?.value;
+  if (guest && /^guest_[a-f0-9-]{36}$/.test(guest)) return guest;
+  if (!createGuest) return undefined;
+  const id = `guest_${randomUUID()}`;
+  cookies().set(GUEST_COOKIE, id, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 30 * 86400 });
+  return id;
+}
 
 export function currentSession(): { session: Session; account: Account } | null {
   const id = cookies().get(COOKIE)?.value;

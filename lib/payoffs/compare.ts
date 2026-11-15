@@ -41,8 +41,9 @@ export function impliedMiddleInterval(
   upperAsk: number | null,
 ): { low: number; high: number } | null {
   if (lowerBid == null || lowerAsk == null || upperBid == null || upperAsk == null) return null;
-  const low = Math.max(0, lowerBid - upperAsk);
-  const high = Math.min(1, lowerAsk - upperBid);
+  const scale = 1_000_000;
+  const low = Math.max(0, Math.round((lowerBid - upperAsk) * scale)) / scale;
+  const high = Math.min(scale, Math.round((lowerAsk - upperBid) * scale)) / scale;
   if (high < low) return null;
   return { low, high };
 }

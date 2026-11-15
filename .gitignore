@@ -16,3 +16,5 @@ contracts/cache
 contracts/out
 contracts/broadcast
 .vercel
+.data/
+*.tsbuildinfo
