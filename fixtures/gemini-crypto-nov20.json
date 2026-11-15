@@ -1,0 +1,1380 @@
+{
+  "fetchedAt": "2026-11-15T01:38:00.000Z",
+  "events": [
+    {
+      "id": "455983",
+      "title": "BTC price on November 20",
+      "slug": "btc-price-on-november-20",
+      "type": "categorical",
+      "category": "Crypto",
+      "ticker": "BTC2611202200",
+      "status": "active",
+      "createdAt": "2026-11-13T10:25:44.890Z",
+      "contracts": [
+        {
+          "id": "455983-1151724",
+          "label": "$61,500 or above",
+          "ticker": "HI61500",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI61500",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.64",
+              "no": "0.4"
+            },
+            "sell": {
+              "yes": "0.6",
+              "no": "0.36"
+            },
+            "bestBid": "0.6",
+            "bestAsk": "0.64"
+          }
+        },
+        {
+          "id": "455983-1151677",
+          "label": "$62,000 or above",
+          "ticker": "HI62000",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI62000",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.61",
+              "no": "0.43"
+            },
+            "sell": {
+              "yes": "0.57",
+              "no": "0.39"
+            },
+            "bestBid": "0.57",
+            "bestAsk": "0.61"
+          }
+        },
+        {
+          "id": "455983-1149697",
+          "label": "$62,500 or above",
+          "ticker": "HI62500",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI62500",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.57",
+              "no": "0.47"
+            },
+            "sell": {
+              "yes": "0.53",
+              "no": "0.43"
+            },
+            "bestBid": "0.53",
+            "bestAsk": "0.57",
+            "lastTradePrice": "0.68"
+          }
+        },
+        {
+          "id": "455983-1149263",
+          "label": "$63,000 or above",
+          "ticker": "HI63000",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI63000",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.53",
+              "no": "0.51"
+            },
+            "sell": {
+              "yes": "0.49",
+              "no": "0.47"
+            },
+            "bestBid": "0.49",
+            "bestAsk": "0.53"
+          }
+        },
+        {
+          "id": "455983-1149155",
+          "label": "$63,500 or above",
+          "ticker": "HI63500",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI63500",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.48",
+              "no": "0.56"
+            },
+            "sell": {
+              "yes": "0.44",
+              "no": "0.52"
+            },
+            "bestBid": "0.44",
+            "bestAsk": "0.48"
+          }
+        },
+        {
+          "id": "455983-1145001",
+          "label": "$64,000 or above",
+          "ticker": "HI64000",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI64000",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.44",
+              "no": "0.6"
+            },
+            "sell": {
+              "yes": "0.4",
+              "no": "0.56"
+            },
+            "bestBid": "0.4",
+            "bestAsk": "0.44",
+            "lastTradePrice": "0.66"
+          }
+        },
+        {
+          "id": "455983-1144923",
+          "label": "$64,500 or above",
+          "ticker": "HI64500",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI64500",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.4",
+              "no": "0.64"
+            },
+            "sell": {
+              "yes": "0.36",
+              "no": "0.6"
+            },
+            "bestBid": "0.36",
+            "bestAsk": "0.4",
+            "lastTradePrice": "0.5"
+          }
+        },
+        {
+          "id": "455983-1144554",
+          "label": "$65,000 or above",
+          "ticker": "HI65000",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI65000",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.36",
+              "no": "0.68"
+            },
+            "sell": {
+              "yes": "0.32",
+              "no": "0.64"
+            },
+            "bestBid": "0.32",
+            "bestAsk": "0.36"
+          }
+        },
+        {
+          "id": "455983-1138673",
+          "label": "$65,500 or above",
+          "ticker": "HI65500",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI65500",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.32",
+              "no": "0.72"
+            },
+            "sell": {
+              "yes": "0.28",
+              "no": "0.68"
+            },
+            "bestBid": "0.28",
+            "bestAsk": "0.32"
+          }
+        },
+        {
+          "id": "455983-1138236",
+          "label": "$66,000 or above",
+          "ticker": "HI66000",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI66000",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.29",
+              "no": "0.76"
+            },
+            "sell": {
+              "yes": "0.24",
+              "no": "0.71"
+            },
+            "bestBid": "0.24",
+            "bestAsk": "0.29"
+          }
+        },
+        {
+          "id": "455983-1138038",
+          "label": "$66,500 or above",
+          "ticker": "HI66500",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI66500",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.24",
+              "no": "0.8"
+            },
+            "sell": {
+              "yes": "0.2",
+              "no": "0.76"
+            },
+            "bestBid": "0.2",
+            "bestAsk": "0.24"
+          }
+        },
+        {
+          "id": "455983-1128269",
+          "label": "$67,000 or above",
+          "ticker": "HI67000",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI67000",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.21",
+              "no": "0.83"
+            },
+            "sell": {
+              "yes": "0.17",
+              "no": "0.79"
+            },
+            "bestBid": "0.17",
+            "bestAsk": "0.21",
+            "lastTradePrice": "0.32"
+          }
+        },
+        {
+          "id": "455983-1128270",
+          "label": "$67,500 or above",
+          "ticker": "HI67500",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI67500",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.19",
+              "no": "0.85"
+            },
+            "sell": {
+              "yes": "0.15",
+              "no": "0.81"
+            },
+            "bestBid": "0.15",
+            "bestAsk": "0.19",
+            "lastTradePrice": "0.28"
+          }
+        },
+        {
+          "id": "455983-1128271",
+          "label": "$68,000 or above",
+          "ticker": "HI68000",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI68000",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.16",
+              "no": "0.89"
+            },
+            "sell": {
+              "yes": "0.11",
+              "no": "0.84"
+            },
+            "bestBid": "0.11",
+            "bestAsk": "0.16",
+            "lastTradePrice": "0.57"
+          }
+        },
+        {
+          "id": "455983-1128272",
+          "label": "$68,500 or above",
+          "ticker": "HI68500",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI68500",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.15",
+              "no": "0.9"
+            },
+            "sell": {
+              "yes": "0.1",
+              "no": "0.85"
+            },
+            "bestBid": "0.1",
+            "bestAsk": "0.15",
+            "lastTradePrice": "0.13"
+          }
+        },
+        {
+          "id": "455983-1128273",
+          "label": "$69,000 or above",
+          "ticker": "HI69000",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI69000",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.12",
+              "no": "0.92"
+            },
+            "sell": {
+              "yes": "0.08",
+              "no": "0.88"
+            },
+            "bestBid": "0.08",
+            "bestAsk": "0.12",
+            "lastTradePrice": "0.48"
+          }
+        },
+        {
+          "id": "455983-1128274",
+          "label": "$69,500 or above",
+          "ticker": "HI69500",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI69500",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.09",
+              "no": "0.95"
+            },
+            "sell": {
+              "yes": "0.05",
+              "no": "0.91"
+            },
+            "bestBid": "0.05",
+            "bestAsk": "0.09"
+          }
+        },
+        {
+          "id": "455983-1128275",
+          "label": "$70,000 or above",
+          "ticker": "HI70000",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI70000",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.09",
+              "no": "0.95"
+            },
+            "sell": {
+              "yes": "0.05",
+              "no": "0.91"
+            },
+            "bestBid": "0.05",
+            "bestAsk": "0.09",
+            "lastTradePrice": "0.34"
+          }
+        },
+        {
+          "id": "455983-1128276",
+          "label": "$70,500 or above",
+          "ticker": "HI70500",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI70500",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.08",
+              "no": "0.96"
+            },
+            "sell": {
+              "yes": "0.04",
+              "no": "0.92"
+            },
+            "bestBid": "0.04",
+            "bestAsk": "0.08",
+            "lastTradePrice": "0.13"
+          }
+        },
+        {
+          "id": "455983-1129557",
+          "label": "$71,000 or above",
+          "ticker": "HI71000",
+          "instrumentSymbol": "GEMI-BTC2611202200-HI71000",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.06",
+              "no": "0.98"
+            },
+            "sell": {
+              "yes": "0.02",
+              "no": "0.94"
+            },
+            "bestBid": "0.02",
+            "bestAsk": "0.06",
+            "lastTradePrice": "0.15"
+          }
+        }
+      ],
+      "effectiveDate": "2026-11-13T10:25:44.890Z",
+      "isLive": false,
+      "participants": [],
+      "description": "Interval BTC price prediction event expiring on November 20, 2026 at 5pm ET",
+      "imageUrl": "https://assets.gemini.com/predictions/images/btc_ace6c0f4-f500-4b7d-a66c-a3ea5ea1d9e9.avif",
+      "series": "BTC1H",
+      "volume": "2047.6",
+      "volume24h": "1035.12",
+      "tags": [
+        "Bitcoin"
+      ],
+      "expiryDate": "2026-11-20T22:00:00.000Z",
+      "startTime": "2026-11-13T10:30:00.000Z",
+      "termsLink": "https://assets.gemini.com/predictions/terms_and_conditions/btc_398860b3-ea2f-47a7-b167-a8c6ad03d6d7.pdf",
+      "subcategory": {
+        "id": 32,
+        "slug": "crypto_bitcoin",
+        "name": "Bitcoin",
+        "path": [
+          "Crypto",
+          "Bitcoin"
+        ]
+      },
+      "socialImageUrl": "https://assets.gemini.com/predictions/images/btc_29510bf2-83f3-4d5e-beec-2d09f473347c.png",
+      "template": "prices-ladder",
+      "eventTags": [
+        {
+          "id": 18,
+          "name": "Reference",
+          "slug": "reference"
+        }
+      ],
+      "source": "LS-LRRR-XBTUSD",
+      "sourceDetails": {
+        "agency": "lukka",
+        "index": "LS-LRRR-XBTUSD"
+      },
+      "volumeDelta24hPct": "2.24"
+    },
+    {
+      "id": "455989",
+      "title": "SOL price on November 20",
+      "slug": "sol-price-on-november-20",
+      "type": "categorical",
+      "category": "Crypto",
+      "ticker": "SOL2611202200",
+      "status": "active",
+      "createdAt": "2026-11-13T10:26:43.022Z",
+      "contracts": [
+        {
+          "id": "455989-1149266",
+          "label": "$67 or above",
+          "ticker": "HI67",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI67",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.69",
+              "no": "0.41"
+            },
+            "sell": {
+              "yes": "0.59",
+              "no": "0.31"
+            },
+            "bestBid": "0.59",
+            "bestAsk": "0.69"
+          }
+        },
+        {
+          "id": "455989-1149095",
+          "label": "$68 or above",
+          "ticker": "HI68",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI68",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.63",
+              "no": "0.47"
+            },
+            "sell": {
+              "yes": "0.53",
+              "no": "0.37"
+            },
+            "bestBid": "0.53",
+            "bestAsk": "0.63"
+          }
+        },
+        {
+          "id": "455989-1145817",
+          "label": "$70 or above",
+          "ticker": "HI70",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI70",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.58",
+              "no": "0.59"
+            },
+            "sell": {
+              "yes": "0.41",
+              "no": "0.42"
+            },
+            "bestBid": "0.41",
+            "lastTradePrice": "0.58"
+          }
+        },
+        {
+          "id": "455989-1148502",
+          "label": "$69 or above",
+          "ticker": "HI69",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI69",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.57",
+              "no": "0.53"
+            },
+            "sell": {
+              "yes": "0.47",
+              "no": "0.43"
+            },
+            "bestBid": "0.47",
+            "bestAsk": "0.57"
+          }
+        },
+        {
+          "id": "455989-1145002",
+          "label": "$71 or above",
+          "ticker": "HI71",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI71",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.52",
+              "no": "0.65"
+            },
+            "sell": {
+              "yes": "0.35",
+              "no": "0.48"
+            },
+            "bestBid": "0.35",
+            "lastTradePrice": "0.52"
+          }
+        },
+        {
+          "id": "455989-1144557",
+          "label": "$72 or above",
+          "ticker": "HI72",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI72",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.45",
+              "no": "0.71"
+            },
+            "sell": {
+              "yes": "0.29",
+              "no": "0.55"
+            },
+            "bestBid": "0.29",
+            "lastTradePrice": "0.45"
+          }
+        },
+        {
+          "id": "455989-1138235",
+          "label": "$73 or above",
+          "ticker": "HI73",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI73",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.39",
+              "no": "0.76"
+            },
+            "sell": {
+              "yes": "0.24",
+              "no": "0.61"
+            },
+            "bestBid": "0.24",
+            "lastTradePrice": "0.39"
+          }
+        },
+        {
+          "id": "455989-1137952",
+          "label": "$74 or above",
+          "ticker": "HI74",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI74",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.33",
+              "no": "0.81"
+            },
+            "sell": {
+              "yes": "0.19",
+              "no": "0.67"
+            },
+            "bestBid": "0.19",
+            "lastTradePrice": "0.33"
+          }
+        },
+        {
+          "id": "455989-1135296",
+          "label": "$75 or above",
+          "ticker": "HI75",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI75",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.27",
+              "no": "0.85"
+            },
+            "sell": {
+              "yes": "0.15",
+              "no": "0.73"
+            },
+            "bestBid": "0.15",
+            "lastTradePrice": "0.27"
+          }
+        },
+        {
+          "id": "455989-1128298",
+          "label": "$83 or above",
+          "ticker": "HI83",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI83",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.23",
+              "no": "0.99"
+            },
+            "sell": {
+              "yes": "0.01",
+              "no": "0.77"
+            },
+            "bestBid": "0.01",
+            "lastTradePrice": "0.23"
+          }
+        },
+        {
+          "id": "455989-1128288",
+          "label": "$76 or above",
+          "ticker": "HI76",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI76",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.21",
+              "no": "0.89"
+            },
+            "sell": {
+              "yes": "0.11",
+              "no": "0.79"
+            },
+            "bestBid": "0.11",
+            "bestAsk": "0.21"
+          }
+        },
+        {
+          "id": "455989-1128291",
+          "label": "$78 or above",
+          "ticker": "HI78",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI78",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.16",
+              "no": "0.94"
+            },
+            "sell": {
+              "yes": "0.06",
+              "no": "0.84"
+            },
+            "bestBid": "0.06",
+            "bestAsk": "0.16"
+          }
+        },
+        {
+          "id": "455989-1128290",
+          "label": "$77 or above",
+          "ticker": "HI77",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI77",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.15",
+              "no": "0.87"
+            },
+            "sell": {
+              "yes": "0.13",
+              "no": "0.85"
+            },
+            "bestBid": "0.13",
+            "bestAsk": "0.15",
+            "lastTradePrice": "0.13"
+          }
+        },
+        {
+          "id": "455989-1128293",
+          "label": "$79 or above",
+          "ticker": "HI79",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI79",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.11",
+              "no": "0.93"
+            },
+            "sell": {
+              "yes": "0.07",
+              "no": "0.89"
+            },
+            "bestBid": "0.07",
+            "bestAsk": "0.11",
+            "lastTradePrice": "0.6"
+          }
+        },
+        {
+          "id": "455989-1128295",
+          "label": "$81 or above",
+          "ticker": "HI81",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI81",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.11",
+              "no": "0.99"
+            },
+            "sell": {
+              "yes": "0.01",
+              "no": "0.89"
+            },
+            "bestBid": "0.01",
+            "bestAsk": "0.11"
+          }
+        },
+        {
+          "id": "455989-1128294",
+          "label": "$80 or above",
+          "ticker": "HI80",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI80",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.09",
+              "no": "0.95"
+            },
+            "sell": {
+              "yes": "0.05",
+              "no": "0.91"
+            },
+            "bestBid": "0.05",
+            "bestAsk": "0.09",
+            "lastTradePrice": "0.09"
+          }
+        },
+        {
+          "id": "455989-1128297",
+          "label": "$82 or above",
+          "ticker": "HI82",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI82",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.07",
+              "no": "0.97"
+            },
+            "sell": {
+              "yes": "0.03",
+              "no": "0.93"
+            },
+            "bestBid": "0.03",
+            "bestAsk": "0.07",
+            "lastTradePrice": "0.16"
+          }
+        },
+        {
+          "id": "455989-1129524",
+          "label": "$84 or above",
+          "ticker": "HI84",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI84",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.05",
+              "no": "0.99"
+            },
+            "sell": {
+              "yes": "0.01",
+              "no": "0.95"
+            },
+            "bestBid": "0.01",
+            "bestAsk": "0.05"
+          }
+        },
+        {
+          "id": "455989-1151882",
+          "label": "$66 or above",
+          "ticker": "HI66",
+          "instrumentSymbol": "GEMI-SOL2611202200-HI66",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+          "prices": {
+            "buy": {},
+            "sell": {}
+          }
+        }
+      ],
+      "effectiveDate": "2026-11-13T10:26:43.022Z",
+      "isLive": false,
+      "participants": [],
+      "description": "Interval SOL price prediction event expiring on November 20, 2026 at 5pm ET",
+      "imageUrl": "https://assets.gemini.com/predictions/images/sol_0e1cf18e-eff3-4570-a348-210cd5434e8f.avif",
+      "series": "SOL1H",
+      "volume": "524.87",
+      "volume24h": "374.87",
+      "tags": [
+        "Solana"
+      ],
+      "expiryDate": "2026-11-20T22:00:00.000Z",
+      "startTime": "2026-11-13T10:30:00.000Z",
+      "termsLink": "https://assets.gemini.com/predictions/terms_and_conditions/sol_9cceb1a1-4177-401a-82dc-097ad2676bc2.pdf",
+      "subcategory": {
+        "id": 35,
+        "slug": "crypto_solana",
+        "name": "Solana",
+        "path": [
+          "Crypto",
+          "Solana"
+        ]
+      },
+      "socialImageUrl": "https://assets.gemini.com/predictions/images/sol_9af62db6-2bf3-49e8-b401-4e7e93eeb520.png",
+      "template": "prices-ladder",
+      "eventTags": [
+        {
+          "id": 18,
+          "name": "Reference",
+          "slug": "reference"
+        }
+      ],
+      "source": "LS-LRRR-SOLNUSD",
+      "sourceDetails": {
+        "agency": "lukka",
+        "index": "LS-LRRR-SOLNUSD"
+      },
+      "volumeDelta24hPct": "149.91"
+    },
+    {
+      "id": "455986",
+      "title": "ETH price on November 20",
+      "slug": "eth-price-on-november-20",
+      "type": "categorical",
+      "category": "Crypto",
+      "ticker": "ETH2611202200",
+      "status": "active",
+      "createdAt": "2026-11-13T10:26:21.689Z",
+      "contracts": [
+        {
+          "id": "455986-1149709",
+          "label": "$1,640 or above",
+          "ticker": "HI1640",
+          "instrumentSymbol": "GEMI-ETH2611202200-HI1640",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/eth_9eb0f142-3d78-49f4-8313-23c321836e79.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.83",
+              "no": "0.27"
+            },
+            "sell": {
+              "yes": "0.73",
+              "no": "0.17"
+            },
+            "bestBid": "0.73",
+            "bestAsk": "0.83"
+          }
+        },
+        {
+          "id": "455986-1145950",
+          "label": "$1,720 or above",
+          "ticker": "HI1720",
+          "instrumentSymbol": "GEMI-ETH2611202200-HI1720",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/eth_9eb0f142-3d78-49f4-8313-23c321836e79.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.75",
+              "no": "0.45"
+            },
+            "sell": {
+              "yes": "0.55",
+              "no": "0.25"
+            },
+            "bestBid": "0.55",
+            "lastTradePrice": "0.75"
+          }
+        },
+        {
+          "id": "455986-1149197",
+          "label": "$1,680 or above",
+          "ticker": "HI1680",
+          "instrumentSymbol": "GEMI-ETH2611202200-HI1680",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/eth_9eb0f142-3d78-49f4-8313-23c321836e79.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.75",
+              "no": "0.35"
+            },
+            "sell": {
+              "yes": "0.65",
+              "no": "0.25"
+            },
+            "bestBid": "0.65",
+            "bestAsk": "0.75",
+            "lastTradePrice": "0.75"
+          }
+        },
+        {
+          "id": "455986-1144555",
+          "label": "$1,760 or above",
+          "ticker": "HI1760",
+          "instrumentSymbol": "GEMI-ETH2611202200-HI1760",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/eth_9eb0f142-3d78-49f4-8313-23c321836e79.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.66",
+              "no": "0.5"
+            },
+            "sell": {
+              "yes": "0.5",
+              "no": "0.34"
+            },
+            "bestBid": "0.5",
+            "lastTradePrice": "0.66"
+          }
+        },
+        {
+          "id": "455986-1128279",
+          "label": "$1,800 or above",
+          "ticker": "HI1800",
+          "instrumentSymbol": "GEMI-ETH2611202200-HI1800",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/eth_9eb0f142-3d78-49f4-8313-23c321836e79.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.43",
+              "no": "0.67"
+            },
+            "sell": {
+              "yes": "0.33",
+              "no": "0.57"
+            },
+            "bestBid": "0.33",
+            "bestAsk": "0.43"
+          }
+        },
+        {
+          "id": "455986-1128282",
+          "label": "$1,880 or above",
+          "ticker": "HI1880",
+          "instrumentSymbol": "GEMI-ETH2611202200-HI1880",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/eth_9eb0f142-3d78-49f4-8313-23c321836e79.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.24",
+              "no": "0.86"
+            },
+            "sell": {
+              "yes": "0.14",
+              "no": "0.76"
+            },
+            "bestBid": "0.14",
+            "bestAsk": "0.24"
+          }
+        },
+        {
+          "id": "455986-1128283",
+          "label": "$1,920 or above",
+          "ticker": "HI1920",
+          "instrumentSymbol": "GEMI-ETH2611202200-HI1920",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/eth_9eb0f142-3d78-49f4-8313-23c321836e79.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.18",
+              "no": "0.92"
+            },
+            "sell": {
+              "yes": "0.08",
+              "no": "0.82"
+            },
+            "bestBid": "0.08",
+            "bestAsk": "0.18"
+          }
+        },
+        {
+          "id": "455986-1128284",
+          "label": "$1,960 or above",
+          "ticker": "HI1960",
+          "instrumentSymbol": "GEMI-ETH2611202200-HI1960",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/eth_9eb0f142-3d78-49f4-8313-23c321836e79.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.13",
+              "no": "0.97"
+            },
+            "sell": {
+              "yes": "0.03",
+              "no": "0.87"
+            },
+            "bestBid": "0.03",
+            "bestAsk": "0.13"
+          }
+        },
+        {
+          "id": "455986-1128286",
+          "label": "$2,000 or above",
+          "ticker": "HI2000",
+          "instrumentSymbol": "GEMI-ETH2611202200-HI2000",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/eth_9eb0f142-3d78-49f4-8313-23c321836e79.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.1",
+              "no": "0.99"
+            },
+            "sell": {
+              "yes": "0.01",
+              "no": "0.9"
+            },
+            "bestBid": "0.01",
+            "bestAsk": "0.1"
+          }
+        },
+        {
+          "id": "455986-1128287",
+          "label": "$2,040 or above",
+          "ticker": "HI2040",
+          "instrumentSymbol": "GEMI-ETH2611202200-HI2040",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/eth_9eb0f142-3d78-49f4-8313-23c321836e79.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.08",
+              "no": "0.99"
+            },
+            "sell": {
+              "yes": "0.01",
+              "no": "0.92"
+            },
+            "bestBid": "0.01",
+            "bestAsk": "0.08",
+            "lastTradePrice": "0.15"
+          }
+        },
+        {
+          "id": "455986-1128289",
+          "label": "$2,080 or above",
+          "ticker": "HI2080",
+          "instrumentSymbol": "GEMI-ETH2611202200-HI2080",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/eth_9eb0f142-3d78-49f4-8313-23c321836e79.pdf",
+          "prices": {
+            "buy": {
+              "yes": "0.05",
+              "no": "0.87"
+            },
+            "sell": {
+              "yes": "0.13",
+              "no": "0.95"
+            },
+            "bestAsk": "0.05",
+            "lastTradePrice": "0.13"
+          }
+        },
+        {
+          "id": "455986-1128280",
+          "label": "$1,840 or above",
+          "ticker": "HI1840",
+          "instrumentSymbol": "GEMI-ETH2611202200-HI1840",
+          "status": "active",
+          "expiryDate": "2026-11-20T22:00:00.000Z",
+          "effectiveDate": "2026-11-13T10:30:00.000Z",
+          "resolutionSide": null,
+          "resolvedAt": null,
+          "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/eth_9eb0f142-3d78-49f4-8313-23c321836e79.pdf",
+          "prices": {
+            "buy": {},
+            "sell": {}
+          }
+        }
+      ],
+      "effectiveDate": "2026-11-13T10:26:21.689Z",
+      "isLive": false,
+      "participants": [],
+      "description": "Interval ETH price prediction event expiring on November 20, 2026 at 5pm ET",
+      "imageUrl": "https://assets.gemini.com/predictions/images/eth_427f68cf-9bf1-4b52-9738-6e906c1e2146.avif",
+      "series": "ETH1H",
+      "volume": "133.23",
+      "volume24h": "108.23",
+      "tags": [
+        "Ether"
+      ],
+      "expiryDate": "2026-11-20T22:00:00.000Z",
+      "startTime": "2026-11-13T10:30:00.000Z",
+      "termsLink": "https://assets.gemini.com/predictions/terms_and_conditions/eth_9eb0f142-3d78-49f4-8313-23c321836e79.pdf",
+      "subcategory": {
+        "id": 33,
+        "slug": "crypto_ether",
+        "name": "Ether",
+        "path": [
+          "Crypto",
+          "Ether"
+        ]
+      },
+      "socialImageUrl": "https://assets.gemini.com/predictions/images/eth_ad2adf62-6fe8-4b44-9191-0f6ac0124f9c.png",
+      "template": "prices-ladder",
+      "eventTags": [
+        {
+          "id": 18,
+          "name": "Reference",
+          "slug": "reference"
+        }
+      ],
+      "source": "LS-LRRR-ETHUSD",
+      "sourceDetails": {
+        "agency": "lukka",
+        "index": "LS-LRRR-ETHUSD"
+      },
+      "volumeDelta24hPct": "332.92"
+    }
+  ]
+}
