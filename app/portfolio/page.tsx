@@ -100,6 +100,7 @@ export default function Portfolio() {
 
   const cost = positions.reduce((sum, position) => sum + BigInt(position.premium || "0") + BigInt(position.fee || "0"), 0n);
   const settledLocal = positions.filter((position) => ["resolved", "claimed", "voided", "exited"].includes(position.status));
+  const openLocal = positions.filter((position) => !["resolved", "claimed", "voided", "exited"].includes(position.status));
 
   return (
     <div className="space-y-4">
@@ -118,6 +119,7 @@ export default function Portfolio() {
           </button>
         ))}
         <Button onClick={() => { void loadLocal(); if (tab === "positions") void loadGeminiActive(); else void loadGeminiSettled(); }} kind="ghost">Refresh</Button>
+        {tab === "settled" ? <Button onClick={() => setTab("positions")} kind="secondary">Back to open positions</Button> : null}
       </div>
 
       {tab === "positions" ? (
@@ -126,7 +128,9 @@ export default function Portfolio() {
             <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="font-serif text-2xl">Gemini positions</h2><Link className="text-sm text-action" href="/orders">Orders</Link></div>
             {geminiError ? <Card><p role="alert" className="text-sm text-bad">{geminiError}</p><div className="mt-3 flex flex-wrap gap-2"><Button onClick={() => void loadGeminiActive()} kind="ghost">Retry</Button><Button href={geminiError.toLowerCase().includes("sign in") ? "/auth" : "/settings/connections"} kind="secondary">{geminiError.toLowerCase().includes("sign in") ? "Sign in" : "Connect Gemini"}</Button></div></Card> : null}
             {geminiLoading ? <p role="status" className="text-sm text-muted">Loading positions from Gemini…</p> : null}
-            {!geminiLoading && !geminiError && !geminiActive.length ? <Empty title="No active Gemini positions">A Gemini account connection is required to read holdings. Orders and Arc positions remain separate.</Empty> : null}
+            {!geminiLoading && !geminiError && !geminiActive.length ? <Empty title="No active Gemini positions">
+              <p>No current positions are reported for this connected account. Orders and Arc positions remain separate.</p>
+            </Empty> : null}
             {geminiActive.map((position, index) => (
               <Card key={`${position.symbol}-${position.outcome}-${index}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -152,8 +156,11 @@ export default function Portfolio() {
             <h2 className="font-serif text-2xl">Arc and paper positions</h2>
             {error ? <Card><p role="alert" className="text-sm text-bad">{error}</p><Button onClick={() => void loadLocal()} kind="ghost">Retry</Button></Card> : null}
             {loading ? <p role="status" className="text-sm text-muted">Loading Arc and paper positions…</p> : null}
-            {!loading && !error && !positions.filter((position) => !["resolved", "claimed", "voided", "exited"].includes(position.status)).length ? <Empty title="No open Arc or paper positions">Research first. A connected wallet is not a position.</Empty> : null}
-            {positions.filter((position) => !["resolved", "claimed", "voided", "exited"].includes(position.status)).map((position) => (
+            {!loading && !error && !openLocal.length ? <Empty title="No open Arc or paper positions">
+              <p>Research first. A connected wallet is not a position.</p>
+              <div className="mt-3"><Button href="/explore" kind="secondary">Explore markets</Button></div>
+            </Empty> : null}
+            {openLocal.map((position) => (
               <Card key={position.id}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -173,7 +180,9 @@ export default function Portfolio() {
             <h2 className="font-serif text-2xl">Gemini settlement history</h2>
             {settledError ? <Card><p role="alert" className="text-sm text-bad">{settledError}</p><div className="mt-3"><Button onClick={() => void loadGeminiSettled()} kind="ghost">Retry</Button></div></Card> : null}
             {settledLoading ? <p role="status" className="text-sm text-muted">Loading settled Gemini positions…</p> : null}
-            {!settledLoading && !settledError && !geminiSettled.length ? <Empty title="No settled Gemini positions">Settled positions appear here after Gemini reports their outcome.</Empty> : null}
+            {!settledLoading && !settledError && !geminiSettled.length ? <Empty title="No settled Gemini positions">
+              <p>Settled positions appear here after Gemini reports their outcome.</p>
+            </Empty> : null}
             {geminiSettled.map((position, index) => (
               <Card key={`${position.symbol}-${position.settledAt}-${index}`}>
                 <p className="font-medium">{position.contractMetadata?.eventName || position.contractMetadata?.contractName || position.symbol}</p>
@@ -191,7 +200,9 @@ export default function Portfolio() {
                 <p className="mt-1 text-sm text-muted">Maximum payout {usdc(position.maxPayout)} · cost {usdc(BigInt(position.premium) + BigInt(position.fee))}</p>
                 <div className="mt-3 flex flex-wrap gap-2"><Button href={`/positions/${position.id}`} kind="ghost">Review outcome</Button><Button href={`/theses/${position.thesisId}`} kind="ghost">Revisit thesis</Button></div>
               </Card>
-            )) : <Empty title="No settled Arc or paper positions">Resolved positions and claims will appear here with their original thesis.</Empty>}
+            )) : <Empty title="No settled Arc or paper positions">
+              <p>Resolved positions and claims will appear here with their original thesis.</p>
+            </Empty>}
           </section>
         </div>
       )}

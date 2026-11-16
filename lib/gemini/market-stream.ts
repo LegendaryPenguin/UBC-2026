@@ -66,9 +66,12 @@ export function parseGeminiMarketStreamMessage(
   if (!value || typeof value !== "object") return null;
   const message = value as Record<string, unknown>;
   const symbol = typeof message.s === "string" ? message.s : typeof message.symbol === "string" ? message.symbol : null;
-  if (!symbol || symbol.toUpperCase() !== expectedSymbol.toUpperCase()) return null;
 
   if ("lastUpdateId" in message && "bids" in message && "asks" in message) {
+    // Gemini's documented depth5 snapshot omits its symbol. This hook opens a
+    // connection for one exact instrument, so only an omitted symbol is
+    // inferred from that subscription; an explicit mismatch is still rejected.
+    if (symbol && symbol.toUpperCase() !== expectedSymbol.toUpperCase()) return null;
     const updateId = message.lastUpdateId;
     if (typeof updateId !== "number" || !Number.isSafeInteger(updateId) || updateId < 0) return null;
     const bid = depthSide(message.bids, "highest");
@@ -89,6 +92,7 @@ export function parseGeminiMarketStreamMessage(
     };
   }
 
+  if (!symbol || symbol.toUpperCase() !== expectedSymbol.toUpperCase()) return null;
   const timestamp = eventTime(message.E);
   if (!timestamp) return null;
 

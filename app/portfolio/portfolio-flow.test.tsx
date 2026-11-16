@@ -45,17 +45,28 @@ const position: PositionRecord = {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 let savedAlert: AlertRule | null;
+let portfolioPositions: PositionRecord[];
+let failLocalPositionLoads: number;
 
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   savedAlert = null;
+  portfolioPositions = [position];
+  failLocalPositionLoads = 0;
   window.history.replaceState({}, "", "/portfolio");
   fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url === "/api/positions" || url === "/api/positions?include=settled") return new Response(JSON.stringify({ positions: [position] }), { status: 200 });
+    if (url === "/api/positions" || url === "/api/positions?include=settled") {
+      if (url === "/api/positions" && failLocalPositionLoads > 0) {
+        failLocalPositionLoads -= 1;
+        return new Response(JSON.stringify({ error: { message: "Positions are temporarily unavailable." } }), { status: 503 });
+      }
+      return new Response(JSON.stringify({ positions: portfolioPositions }), { status: 200 });
+    }
     if (url === "/api/positions/position-1") return new Response(JSON.stringify({ position, walletAddress: null }), { status: 200 });
     if (url === "/api/gemini/positions?bucket=active") return new Response(JSON.stringify({ positions: [] }), { status: 200 });
+    if (url === "/api/gemini/positions?bucket=settled") return new Response(JSON.stringify({ positions: [] }), { status: 200 });
     if (url === "/api/activity") return new Response(JSON.stringify({ transactions: [] }), { status: 200 });
     if (url === "/api/alerts" && !init?.method) return new Response(JSON.stringify({ alerts: savedAlert ? [savedAlert] : [], notifications: [] }), { status: 200 });
     if (url === "/api/alerts" && init?.method === "POST") {
@@ -86,6 +97,31 @@ afterEach(() => {
 });
 
 describe("Portfolio and settlement alert follow-through", () => {
+  it("explains empty open and settled states and returns to the open positions tab", async () => {
+    portfolioPositions = [];
+    render(<Portfolio />);
+
+    const explore = await screen.findByRole("link", { name: "Explore markets" });
+    expect(explore.getAttribute("href")).toBe("/explore");
+
+    fireEvent.click(screen.getByRole("button", { name: "Settled history" }));
+    expect(await screen.findByText("No settled Gemini positions")).toBeTruthy();
+    expect(screen.getByText("No settled Arc or paper positions")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Back to open positions" }));
+    expect(screen.getByRole("button", { name: "Open positions" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("recovers from a local position read error with Retry", async () => {
+    portfolioPositions = [];
+    failLocalPositionLoads = 1;
+    render(<Portfolio />);
+
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Positions are temporarily unavailable.");
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("link", { name: "Explore markets" })).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("opens the linked paper position, preserves its thesis, and sets then pauses and resumes an alert", async () => {
     render(<Portfolio />);
     expect(await screen.findByText("btc-friday · open · paper")).toBeTruthy();

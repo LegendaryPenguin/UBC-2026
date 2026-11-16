@@ -57,6 +57,23 @@ describe("Gemini public market stream messages", () => {
       asks: [],
     }), SYMBOL)).toBeNull();
   });
+
+  it("accepts the documented symbol-less depth snapshot only on its dedicated symbol subscription", () => {
+    const update = parseGeminiMarketStreamMessage(JSON.stringify({
+      lastUpdateId: 12345678,
+      bids: [["0.26", "5000"], ["0.25", "2000"]],
+      asks: [["0.28", "3200"], ["0.29", "1500"]],
+    }), SYMBOL, "2026-11-16T03:00:00.000Z");
+    expect(update).toMatchObject({ kind: "book", feed: "depth5", instrumentSymbol: SYMBOL, bid: "0.26", ask: "0.28" });
+
+    expect(parseGeminiMarketStreamMessage(JSON.stringify({
+      lastUpdateId: 12345678,
+      symbol: "GEMI-OTHER",
+      bids: [["0.26", "5000"]],
+      asks: [["0.28", "3200"]],
+    }), SYMBOL)).toBeNull();
+    expect(parseGeminiMarketStreamMessage(JSON.stringify({ E: 1_751_508_438_600_119_168, b: "0.48" }), SYMBOL)).toBeNull();
+  });
 });
 
 class FakeWebSocket {
