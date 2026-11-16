@@ -7,9 +7,10 @@ const RIGHT = 14;
 const TOP = 14;
 const BOTTOM = 34;
 
-export function MarketPriceHistory({ series, illustrative = false }: {
+export function MarketPriceHistory({ series, illustrative = false, liveSession = false }: {
   series: { label: string; color: string; points: PricePoint[] }[];
   illustrative?: boolean;
+  liveSession?: boolean;
 }) {
   const normalized = series.map((item) => ({
     ...item,
@@ -23,7 +24,7 @@ export function MarketPriceHistory({ series, illustrative = false }: {
     return (
       <section className="rounded-card border border-line bg-surface p-5 shadow-sm">
         <h2 className="font-serif text-xl">Market-price history</h2>
-        <p className="mt-2 text-sm text-muted">Gemini has not returned a history series for these contracts. Current bid and ask references remain available below.</p>
+        <p className="mt-2 text-sm text-muted">Gemini has not returned a history series for these contracts. Current bid and ask references remain available below.{liveSession ? " New Gemini trade prints will appear here while this page stays connected." : ""}</p>
       </section>
     );
   }
@@ -45,7 +46,7 @@ export function MarketPriceHistory({ series, illustrative = false }: {
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 className="font-serif text-xl">Market-price history</h2>
-          <p className="mt-1 text-xs text-muted">YES contract price per $1 payout · price is not a forecast probability</p>
+          <p className="mt-1 text-xs text-muted">YES contract price per $1 payout · price is not a forecast probability{liveSession ? " · live prints accrue only during this session" : ""}</p>
         </div>
         {illustrative ? <span className="rounded-full bg-[#FFF8E7] px-3 py-1 text-xs text-muted">Illustrative replay</span> : null}
       </div>

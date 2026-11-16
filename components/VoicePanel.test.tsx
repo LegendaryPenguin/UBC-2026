@@ -158,6 +158,32 @@ afterEach(() => {
 });
 
 describe("VoicePanel interaction flows", () => {
+  it("routes basket explanation questions through the shared research action with the selected payout basis", async () => {
+    panel({ context: "payoff", maxPayout: "100" });
+    const question = await screen.findByPlaceholderText(/Ask how each scenario pays/);
+    fireEvent.change(question, { target: { value: "Explain this basket across every settlement scenario." } });
+    fireEvent.click(screen.getByRole("button", { name: "Explain this basket" }));
+    expect(await screen.findByText(/A bounded range differs from a threshold ticket/)).toBeTruthy();
+
+    const payload = JSON.parse(String(requests("/api/research")[0].init?.body));
+    expect(payload).toMatchObject({
+      context: "payoff",
+      maxPayout: "100",
+      question: "Explain this basket across every settlement scenario.",
+    });
+  });
+
+  it("routes comparison scenario questions through that same action", async () => {
+    panel({ context: "compare", maxPayout: "100" });
+    const question = await screen.findByPlaceholderText(/Explain how the custom payout differs/);
+    fireEvent.change(question, { target: { value: "Compare the basket payouts across scenarios." } });
+    fireEvent.click(screen.getByRole("button", { name: "Explain scenarios" }));
+    expect(await screen.findByText(/A bounded range differs from a threshold ticket/)).toBeTruthy();
+
+    const payload = JSON.parse(String(requests("/api/research")[0].init?.body));
+    expect(payload).toMatchObject({ context: "compare", maxPayout: "100", question: "Compare the basket payouts across scenarios." });
+  });
+
   it("recovers from denied microphone permission and sends typed input through research", async () => {
     getUserMedia.mockRejectedValue(new DOMException("permission denied", "NotAllowedError"));
     panel();

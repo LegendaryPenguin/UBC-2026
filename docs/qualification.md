@@ -17,3 +17,9 @@ This is a factual capability/evidence log, not a scope or task list. The active 
 | QuickNode Streams | Provider webhook | The handler verifies QuickNode HMAC signatures and timestamp/replay limits, matches signed log pointers to independent Arc receipts, and refreshes status from escrow state. [QuickNode webhook verification](https://www.quicknode.com/guides/quicknode-products/streams/validating-incoming-streams-webhook-messages), [Webhook destination](https://www.quicknode.com/docs/streams/destinations/webhooks) | Secret, deployed public endpoint, Stream filter, and a real signed delivery are not configured or verified |
 
 Before opening a family for live quotes, record the exact Gemini event and contract terms, the observation rule, consistent threshold semantics, the trade cutoff, and how cancellation and correction affect settlement. Confirm that the deployed escrow has the approved family and enough maker collateral, then verify that position recording reconciles the actual Arc acceptance receipt.
+
+## Gemini public market stream
+
+Research subscribes to the exact live contract's public `@bookTicker` and `@trade` streams. It uses streamed best bid/ask values when present and adds actual streamed trades to a session-only contract-price chart. It keeps the REST snapshot as a clearly labeled fallback, never treats market data as an executable quote, and does not send orders through this connection. This follows Gemini's [Prediction Markets WebSocket stream reference](https://developer.gemini.com/prediction-markets/websocket/streams).
+
+Parser, exact-symbol filtering, connection lifecycle, retry/reconnect, cleanup, empty-book handling, REST fallback, and stale/no-first-update recovery are covered by automated headless tests. A live WebSocket handshake and provider event have not been observed in this environment, so actual feed availability, freshness, and depth remain unqualified.

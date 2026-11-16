@@ -4,11 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { MarketFamily, ThesisRevision } from "@/lib/domain/types";
 
-const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+const navigation = vi.hoisted(() => ({ push: vi.fn(), historySeries: [] as unknown[] }));
 vi.mock("next/navigation", () => ({ useParams: () => ({ id: "thesis-1" }), useRouter: () => ({ push: navigation.push }) }));
 vi.mock("next/link", () => ({ default: ({ children, href, ...props }: React.PropsWithChildren<{ href: string }>) => <a href={href} {...props}>{children}</a> }));
 vi.mock("@/components/VoicePanel", () => ({ VoicePanel: () => <div data-testid="voice-panel" /> }));
-vi.mock("@/components/MarketPriceHistory", () => ({ MarketPriceHistory: () => <div data-testid="price-history" /> }));
+vi.mock("@/components/MarketPriceHistory", () => ({ MarketPriceHistory: ({ series }: { series: unknown[] }) => { navigation.historySeries = series; return <div data-testid="price-history" />; } }));
+vi.mock("@/components/GeminiLiveMarketFeed", () => ({ GeminiLiveMarketFeed: () => <div data-testid="live-market-feed" /> }));
+vi.mock("@/lib/gemini/use-market-stream", () => ({ useGeminiMarketStream: () => ({ status: "connected", book: null, trades: [{ kind: "trade", instrumentSymbol: "GEMI-BTCFRIDAY-HI95K", eventAt: "2026-11-15T01:00:00.000Z", tradeId: "trade-1", price: "0.51", quantity: "1" }], error: null, retry: vi.fn() }) }));
 vi.mock("@/lib/use-mode-change", () => ({ useModeChange: () => undefined }));
 
 import ThesisEditor from "@/app/theses/[id]/page";
@@ -98,6 +100,7 @@ let activeFamily: MarketFamily;
 
 beforeEach(() => {
   activeFamily = family();
+  navigation.historySeries = [];
   localStorage.setItem("thesis_mode", "live");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -116,6 +119,16 @@ afterEach(() => {
 });
 
 describe("thesis research contract rules", () => {
+  it("anchors a binary view to its contract history and appends streamed Gemini trade prints", async () => {
+    render(<ThesisEditor />);
+    expect(await screen.findByTestId("price-history")).toBeTruthy();
+    expect(screen.getByTestId("live-market-feed")).toBeTruthy();
+    const series = navigation.historySeries as { label: string; points: { timestamp: string; price: string }[] }[];
+    expect(series).toHaveLength(1);
+    expect(series[0].label).toBe(contract.label);
+    expect(series[0].points).toEqual([{ timestamp: "2026-11-15T01:00:00.000Z", price: "0.51" }]);
+  });
+
   it("shows exact selected-contract wording and keeps event terms separately labeled", async () => {
     render(<ThesisEditor />);
 

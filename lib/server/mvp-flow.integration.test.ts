@@ -192,6 +192,41 @@ describe("narrated MVP API flow", () => {
     }), { params: { id: thesisId } }));
     expect(confirmedAgain.body.thesis.status).toBe("confirmed");
 
+    const quotesBeforeVoiceExplanation = store.readStore().quotes.length;
+    const payoffExplanation = await json<{
+      answer: string;
+      provider: string;
+      comparison?: { maxPayout: string; rows: { label: string; custom: string }[]; quote: unknown };
+    }>(await researchPost(request("/api/research", "POST", {
+      question: "Explain this basket across every settlement scenario.",
+      slug: topic.body.family.slug,
+      thesisId,
+      mode: "paper",
+      context: "payoff",
+      maxPayout: "100",
+    })));
+    expect(payoffExplanation.response.status).toBe(200);
+    expect(payoffExplanation.body.answer).toContain("Scenario comparison at a maximum payout of 100 USDC");
+    expect(payoffExplanation.body.comparison?.maxPayout).toBeTruthy();
+    expect(payoffExplanation.body.comparison?.rows.length).toBeGreaterThan(2);
+    expect(payoffExplanation.body.comparison?.rows[0].label).toBeTruthy();
+    expect(payoffExplanation.body.comparison?.quote).toBeNull();
+    expect(store.readStore().quotes).toHaveLength(quotesBeforeVoiceExplanation);
+
+    const comparisonExplanation = await json<{ answer: string; comparison?: { rows: { label: string; custom: string }[]; quote: unknown } }>(await researchPost(request("/api/research", "POST", {
+      question: "Compare the basket payouts across scenarios.",
+      slug: topic.body.family.slug,
+      thesisId,
+      mode: "paper",
+      context: "compare",
+      maxPayout: "100",
+    })));
+    expect(comparisonExplanation.response.status).toBe(200);
+    expect(comparisonExplanation.body.answer).toContain("Scenario comparison at a maximum payout of 100 USDC");
+    expect(comparisonExplanation.body.comparison?.rows.length).toBeGreaterThan(2);
+    expect(comparisonExplanation.body.comparison?.quote).toBeNull();
+    expect(store.readStore().quotes).toHaveLength(quotesBeforeVoiceExplanation);
+
     const quote = await json<{ quote: { id: string; status: string; signature: string; payouts: string[] }; note: string }>(await quotesPost(request("/api/quotes", "POST", {
       thesisId,
       mode: "paper",

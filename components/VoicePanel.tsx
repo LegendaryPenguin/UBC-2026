@@ -582,7 +582,7 @@ export function VoicePanel({
         {status === "transcribing" ? <Button onClick={() => cancelInFlight("transcription")} kind="secondary">Cancel transcription</Button> : null}
         {status === "thinking" ? <Button onClick={() => cancelInFlight("research")} kind="secondary">Cancel research</Button> : null}
         <Button onClick={() => void ask()} kind="secondary" disabled={isBusy || !transcript.trim()}>
-          {status === "thinking" ? "Reviewing…" : clarificationPrompt ? "Send clarification" : context === "view" ? "Ask about this view" : context === "compare" ? "Explain scenarios" : "Ask question"}
+        {status === "thinking" ? "Reviewing…" : clarificationPrompt ? "Send clarification" : context === "view" ? "Ask about this view" : context === "compare" ? "Explain scenarios" : context === "payoff" ? "Explain this basket" : "Ask question"}
         </Button>
         {status === "speaking" ? <Button onClick={stopPlayback} kind="secondary">Stop speaking</Button> : (
           <Button onClick={() => void speak()} kind="ghost" disabled={!answer || voiceAvailability !== "available" || isBusy}>Play spoken reply</Button>
@@ -610,7 +610,7 @@ export function VoicePanel({
             setProposalSaved(false);
             setNotice("Question edited. Ask again to refresh the research reply.");
           }}
-          placeholder={clarificationPrompt ? "Answer the clarification…" : context === "compare" ? "Explain how the custom payout differs by scenario from the ticket basket…" : "Ask about evidence, rules, or the view you want to express…"}
+          placeholder={clarificationPrompt ? "Answer the clarification…" : context === "compare" ? "Explain how the custom payout differs by scenario from the ticket basket…" : context === "payoff" ? "Ask how each scenario pays, where this basket differs from your view, or what happens if you are wrong…" : "Ask about evidence, rules, or the view you want to express…"}
           maxLength={3_000}
           disabled={!canEdit}
         />

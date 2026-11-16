@@ -11,6 +11,8 @@ import { ThesisWorkspaceTabs } from "@/components/ThesisWorkspaceTabs";
 import { ThesisViewPanel } from "@/components/ThesisViewPanel";
 import { MarketPriceHistory } from "@/components/MarketPriceHistory";
 import { useModeChange } from "@/lib/use-mode-change";
+import { useGeminiMarketStream } from "@/lib/gemini/use-market-stream";
+import { GeminiLiveMarketFeed } from "@/components/GeminiLiveMarketFeed";
 
 export default function ThesisEditor() {
   const { id } = useParams<{ id: string }>();
@@ -62,6 +64,21 @@ export default function ThesisEditor() {
   }, [thesis?.topicSlug]);
 
   useModeChange(() => { void refreshMarketData(); });
+
+  const historyPredicates = thesis
+    ? [thesis.lowerThreshold, thesis.upperThreshold]
+      .filter((threshold): threshold is number => threshold != null)
+      .map((threshold) => family?.predicates.find((predicate) => predicate.threshold === threshold))
+      .filter((predicate) => predicate != null)
+    : [];
+  const historyContracts = historyPredicates
+    .map((predicate) => family?.contracts.find((contract) => contract.id === predicate.contractId))
+    .filter((contract) => contract != null);
+  const selectedRuleContracts = !family || !thesis
+    ? []
+    : thesis.template === "binary" ? family.contracts.slice(0, 1) : historyContracts;
+  const liveContract = family?.mode === "live" ? selectedRuleContracts[0] ?? null : null;
+  const marketFeed = useGeminiMarketStream(liveContract?.instrumentSymbol ?? null, Boolean(liveContract));
 
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -133,15 +150,6 @@ export default function ThesisEditor() {
   if (loading) return <p role="status">Loading thesis…</p>;
   if (error && !thesis) return <Empty title="Thesis unavailable">{error}</Empty>;
   if (!thesis) return <Empty title="Thesis unavailable">This view could not be found.</Empty>;
-  const historyPredicates = [thesis.lowerThreshold, thesis.upperThreshold]
-    .filter((threshold): threshold is number => threshold != null)
-    .map((threshold) => family?.predicates.find((predicate) => predicate.threshold === threshold))
-    .filter((predicate) => predicate != null);
-  const historyContracts = historyPredicates
-    .map((predicate) => family?.contracts.find((contract) => contract.id === predicate.contractId))
-    .filter((contract) => contract != null);
-  const selectedRuleContracts = thesis.template === "binary" ? family?.contracts.slice(0, 1) ?? [] : historyContracts;
-
   return (
     <div className="space-y-4">
       <p className="text-xs uppercase tracking-wide text-muted">{thesis.topicSlug.replaceAll("-", " ")}</p>
@@ -160,12 +168,27 @@ export default function ThesisEditor() {
           <div className="space-y-4">
             <MarketPriceHistory
               illustrative={family.mode === "replay"}
-              series={historyContracts.map((contract, index) => ({
+              liveSession={Boolean(liveContract)}
+              series={selectedRuleContracts.map((contract, index) => ({
                 label: contract!.label,
                 color: index === 0 ? "#3559E0" : "#8D6CEB",
-                points: contract!.priceHistory || [],
+                points: [
+                  ...(contract!.priceHistory || []),
+                  ...(contract!.id === liveContract?.id ? marketFeed.trades.map((trade) => ({ timestamp: trade.eventAt, price: trade.price })) : []),
+                ],
               }))}
             />
+            {liveContract ? <GeminiLiveMarketFeed
+              status={marketFeed.status}
+              book={marketFeed.book}
+              trades={marketFeed.trades}
+              error={marketFeed.error}
+              retry={marketFeed.retry}
+              restBid={liveContract.bid}
+              restAsk={liveContract.ask}
+              lastUpdateAt={marketFeed.lastUpdateAt}
+              connectedAt={marketFeed.connectedAt}
+            /> : null}
             <Card>
               <h2 className="font-serif text-xl">{family.title} · market expectations</h2>
               <p className="mt-1 text-sm text-muted">{family.question}</p>
