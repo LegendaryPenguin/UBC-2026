@@ -69,6 +69,8 @@ export default function TopicPage() {
 
   const initialHistory = family.predicates.slice(0, 2).map((predicate) => family.contracts.find((contract) => contract.id === predicate.contractId)).filter((contract) => contract != null);
   const depth = family.contracts[0]?.orderBook;
+  const contractRulesUrl = family.contracts[0]?.termsUrl || null;
+  const eventRulesUrl = family.sourceEvent.sourceUrl && family.sourceEvent.sourceUrl !== contractRulesUrl ? family.sourceEvent.sourceUrl : null;
   const singleBinary = family.predicates.length === 1 && family.contracts.length === 1;
   return (
     <div className="space-y-4">
@@ -121,12 +123,15 @@ export default function TopicPage() {
           <Card>
             <h2 className="font-serif text-xl">Resolution rules</h2>
             <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+              {family.contracts[0]?.description ? <div className="sm:col-span-2"><dt className="text-muted">Exact Gemini contract wording</dt><dd className="mt-1 whitespace-pre-wrap">{family.contracts[0].description}</dd></div> : <div className="sm:col-span-2"><dt className="text-muted">Exact Gemini contract wording</dt><dd className="mt-1">Gemini did not include contract-level wording in this response. Use the contract rules link when available.</dd></div>}
+              {family.contracts[0]?.strike ? <div><dt className="text-muted">Gemini strike</dt><dd>{family.contracts[0].strike.type || "Type not listed"}{family.contracts[0].strike.value ? ` · ${family.contracts[0].strike.value}` : " · value not available"}{family.contracts[0].strike.availableAt ? ` · available ${formatTime(family.contracts[0].strike.availableAt)}` : ""}</dd></div> : null}
               <div><dt className="text-muted">Observation</dt><dd>{formatTime(family.observationTime)}</dd></div>
-              <div><dt className="text-muted">Source</dt><dd>{family.sourceEvent.sourceAgency || "Gemini listed source"} / {family.sourceEvent.sourceIndex || "see terms"}</dd></div>
+              <div><dt className="text-muted">Source</dt><dd>{family.sourceEvent.sourceAgency || "Gemini listed source"} / {family.contracts[0]?.source || family.sourceEvent.sourceIndex || "see terms"}</dd></div>
               <div><dt className="text-muted">Market status</dt><dd className="capitalize">{family.sourceEvent.status}</dd></div>
               <div><dt className="text-muted">Trade cutoff</dt><dd>{family.closeTime ? formatTime(family.closeTime) : "Not provided by this market response"}</dd></div>
             </dl>
-            {family.sourceEvent.sourceUrl ? <a className="mt-3 inline-block text-sm text-action" href={family.sourceEvent.sourceUrl} target="_blank" rel="noreferrer">Open original Gemini rules</a> : null}
+            {contractRulesUrl ? <a className="mt-3 inline-block text-sm text-action underline" href={contractRulesUrl} target="_blank" rel="noreferrer">Open exact Gemini contract rules</a> : null}
+            {eventRulesUrl ? <a className="mt-3 inline-block text-sm text-action" href={eventRulesUrl} target="_blank" rel="noreferrer">Open event-level Gemini rules</a> : null}
             <p className="mt-3 break-all border-t border-line pt-3 text-xs text-muted">Source snapshot received {formatTime(family.sourceEvent.fetchedAt)} · SHA-256 {family.sourceEvent.payloadHash}</p>
           </Card>
           <Card>

@@ -458,7 +458,12 @@ export function VoicePanel({
   async function speak() {
     if (!answer) return;
     releasePlayback();
-    const spokenAnswer = answer.replace(/\[(ev-[a-z0-9-]+)\]/gi, " ").replace(/\s+/g, " ").trim();
+    const spokenAnswer = answer
+      .replace(/\[(ev-[a-z0-9-]+)\]/gi, " ")
+      .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/gi, "$1")
+      .replace(/https?:\/\/\S+/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
     const spokenSources = citations.length
       ? ` Sources: ${citations.map((citation) => citation.title).join("; ")}.`
       : "";

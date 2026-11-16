@@ -11,6 +11,7 @@ import type {
 import { familyHash } from "@/lib/payoffs/hash";
 import { formatThreshold } from "@/lib/payoffs/compile";
 import type { GeminiContract, GeminiEvent, GeminiOrderbook } from "@/lib/gemini/client";
+import { geminiRichText } from "@/lib/gemini/types";
 
 const THRESHOLD_RE = /\$?\s*([\d,]+(?:\.\d+)?)\s+or above/i;
 
@@ -84,7 +85,15 @@ export function toSourceContract(event: GeminiEvent, contract: GeminiContract, r
     eventId: event.id,
     ticker: contract.ticker ?? "",
     label: contract.label,
-    termsUrl: contract.termsAndConditionsUrl ?? event.termsLink ?? null,
+    description: geminiRichText(contract.description) || null,
+    // Event-level terms are not necessarily the exact rules for this contract.
+    termsUrl: contract.termsAndConditionsUrl ?? null,
+    source: contract.source ?? null,
+    strike: contract.strike ? {
+      value: contract.strike.value ?? null,
+      type: contract.strike.type ?? null,
+      availableAt: contract.strike.availableAt ?? null,
+    } : null,
     expiryDate: contract.expiryDate ?? event.expiryDate ?? null,
     effectiveDate: contract.effectiveDate ?? event.effectiveDate ?? null,
     status: mapStatus(contract.status ?? event.status),

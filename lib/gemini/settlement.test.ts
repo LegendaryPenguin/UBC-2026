@@ -13,6 +13,7 @@ function settledEvent(): GeminiEvent {
     status: "settled",
     expiryDate: "2026-11-20T23:59:00.000Z",
     resolvedAt: "2026-11-20T23:59:10.000Z",
+    termsLink: "https://example.com/event-rules",
     contracts: [
       {
         id: "contract-95",
@@ -23,6 +24,7 @@ function settledEvent(): GeminiEvent {
         resolutionSide: "yes",
         resolvedAt: "2026-11-20T23:59:10.000Z",
         expiryDate: "2026-11-20T23:59:00.000Z",
+        termsAndConditionsUrl: null,
       },
       {
         id: "contract-100",
@@ -55,6 +57,7 @@ describe("Gemini settlement source matching", () => {
     expect(result.scenario.index).toBe(1);
     expect(result.sourceSnapshot.contracts).toHaveLength(1);
     expect(result.sourceSnapshot.contracts[0].id).toBe("contract-95");
+    expect(result.sourceSnapshot.contracts[0].termsAndConditionsUrl).toBeNull();
   });
 
   it("rejects a selected-contract mismatch even when the event is settled", () => {

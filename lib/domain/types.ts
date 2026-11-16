@@ -37,7 +37,10 @@ export interface SourceContract {
   eventId: string;
   ticker: string;
   label: string;
+  description?: string | null;
   termsUrl: string | null;
+  source?: string | null;
+  strike?: { value: string | null; type: string | null; availableAt: string | null } | null;
   expiryDate: string | null;
   effectiveDate: string | null;
   status: MarketStatus;

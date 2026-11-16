@@ -95,6 +95,21 @@ export interface GeminiListParams {
   offset?: number;
 }
 
+function cleanGeminiRichText(text: string): string {
+  return text.replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/gi, "$1").replace(/\s+/g, " ").trim();
+}
+
+export function geminiRichText(value: unknown): string {
+  if (typeof value === "string") return cleanGeminiRichText(value);
+  if (Array.isArray(value)) return cleanGeminiRichText(value.map(geminiRichText).filter(Boolean).join(" "));
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.value === "string") return cleanGeminiRichText(record.value);
+    return cleanGeminiRichText([record.text, record.content, record.children].map(geminiRichText).filter(Boolean).join(" "));
+  }
+  return "";
+}
+
 export function flattenEvents(events: GeminiEvent[]): GeminiEvent[] {
   const result: GeminiEvent[] = [];
   const seen = new Set<string>();

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, modeFromStorage } from "@/lib/client";
-import { flattenEvents, type GeminiEvent } from "@/lib/gemini/types";
+import { flattenEvents, geminiRichText, type GeminiEvent } from "@/lib/gemini/types";
 import { Button, Card, Empty, Field, inputCls } from "@/components/ui";
 import { formatTime } from "@/lib/format";
 import type { ThesisRevision } from "@/lib/domain/types";
@@ -41,17 +41,6 @@ type SubmittedIntent = {
   price: string;
   message: string;
 };
-
-function richText(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.map(richText).filter(Boolean).join(" ");
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    if (typeof record.value === "string") return record.value;
-    return [record.text, record.content, record.children].map(richText).filter(Boolean).join(" ");
-  }
-  return "";
-}
 
 function contractsFor(event: GeminiEvent) {
   const seen = new Set<string>();
@@ -150,8 +139,8 @@ export default function GeminiEventPage() {
 
   const { event } = data;
   const contracts = contractsFor(event);
-  const description = richText(event.description);
-  const sourceUrl = event.termsLink || contracts.find((contract) => contract.termsAndConditionsUrl)?.termsAndConditionsUrl;
+  const description = geminiRichText(event.description);
+  const sourceUrl = event.termsLink ?? null;
   const resolved = event.status === "settled" || contracts.some((contract) => contract.resolutionSide != null);
   const tradeableContracts = contracts.filter((contract) => contract.instrumentSymbol?.startsWith("GEMI-"));
   const activeContracts = tradeableContracts.filter((contract) => contract.status?.toLowerCase() === "active");
@@ -251,7 +240,7 @@ export default function GeminiEventPage() {
           <div><dt className="text-xs text-muted">Trading volume</dt><dd>{event.volume || "Not listed"}</dd></div>
           <div><dt className="text-xs text-muted">Liquidity</dt><dd>{event.liquidity || "Not listed"}</dd></div>
         </dl>
-        {sourceUrl ? <a className="mt-4 inline-block text-sm text-action underline" href={sourceUrl} target="_blank" rel="noreferrer">Open Gemini terms</a> : <p className="mt-4 text-xs text-muted">Gemini did not include a terms link in this response.</p>}
+        {sourceUrl ? <a className="mt-4 inline-block text-sm text-action underline" href={sourceUrl} target="_blank" rel="noreferrer">Open Gemini event-level terms</a> : <p className="mt-4 text-xs text-muted">Gemini did not include an event-level terms link. Contract-specific links, when supplied, are shown with each contract.</p>}
       </Card>
 
       {resolved ? (
@@ -285,7 +274,23 @@ export default function GeminiEventPage() {
               </tr></thead>
               <tbody>{contracts.map((contract) => (
                 <tr key={contract.id}>
-                  <td className="border-b border-line py-2 pr-3">{contract.label}<span className="block text-xs text-muted">{contract.eventTitle}</span></td>
+                  <td className="border-b border-line py-2 pr-3">
+                    {contract.label}
+                    <span className="block text-xs text-muted">{contract.eventTitle}</span>
+                    {geminiRichText(contract.description) ? (
+                      <span className="mt-1 block max-w-lg whitespace-normal text-xs text-muted">{geminiRichText(contract.description)}</span>
+                    ) : <span className="mt-1 block text-xs text-muted">Contract wording not included in this response.</span>}
+                    {contract.strike ? (
+                      <span className="mt-1 block text-xs text-muted">
+                        Strike: {contract.strike.type || "type not listed"} · {contract.strike.value || "value not available"}
+                        {contract.strike.availableAt ? ` · available ${formatTime(contract.strike.availableAt)}` : ""}
+                      </span>
+                    ) : null}
+                    {contract.source ? <span className="mt-1 block text-xs text-muted">Settlement source: {contract.source}</span> : null}
+                    {contract.termsAndConditionsUrl ? (
+                      <a className="mt-1 inline-block text-xs text-action underline" href={contract.termsAndConditionsUrl} target="_blank" rel="noreferrer">Exact contract rules</a>
+                    ) : <span className="mt-1 block text-xs text-muted">No contract-specific rules link supplied.</span>}
+                  </td>
                   <td className="border-b border-line py-2 pr-3 font-mono text-xs">{contract.instrumentSymbol || contract.ticker || "Not listed"}</td>
                   <td className="border-b border-line py-2 pr-3">{contract.status || event.status}</td>
                   <td className="border-b border-line py-2 pr-3">{contract.prices?.bestBid || contract.prices?.sell?.yes || "—"} / {contract.prices?.bestAsk || contract.prices?.buy?.yes || "—"}</td>

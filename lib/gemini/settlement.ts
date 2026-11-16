@@ -60,7 +60,7 @@ export function settledGeminiOutcome(params: {
       resolutionSide: contract.resolutionSide,
       resolvedAt: contract.resolvedAt,
       settlementValue: contract.settlementValue ?? null,
-      termsAndConditionsUrl: contract.termsAndConditionsUrl ?? event.termsLink ?? null,
+      termsAndConditionsUrl: contract.termsAndConditionsUrl ?? null,
     })),
   };
   const canonical = JSON.stringify(sourceSnapshot);

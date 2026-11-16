@@ -84,7 +84,7 @@ function reply(body: unknown, ok = true, audio = false): FakeReply {
 
 function researchReply(proposed?: unknown): FakeReply {
   return reply({
-    answer: "A bounded range differs from a threshold ticket [ev-resistance].",
+    answer: "A bounded range differs from a threshold ticket [ev-resistance]. See [the Gemini rules](https://example.com/rules).",
     citations: [{ id: "ev-resistance", title: "Friday resistance level" }],
     proposed,
   });
@@ -169,7 +169,7 @@ describe("VoicePanel interaction flows", () => {
     const question = screen.getByLabelText("Your question");
     fireEvent.change(question, { target: { value: "What does Friday settlement mean?" } });
     fireEvent.click(screen.getByRole("button", { name: "Ask question" }));
-    await screen.findByText("A bounded range differs from a threshold ticket [ev-resistance].");
+    await screen.findByText(/A bounded range differs from a threshold ticket \[ev-resistance\]/);
 
     expect(JSON.parse(String(requests("/api/research")[0].init?.body)).question).toBe("What does Friday settlement mean?");
   });
@@ -278,13 +278,15 @@ describe("VoicePanel interaction flows", () => {
     const question = await screen.findByLabelText("Editable transcript or question");
     fireEvent.change(question, { target: { value: "Explain the comparison." } });
     fireEvent.click(screen.getByRole("button", { name: "Ask question" }));
-    await screen.findByText("A bounded range differs from a threshold ticket [ev-resistance].");
+    await screen.findByText(/A bounded range differs from a threshold ticket \[ev-resistance\]/);
     fireEvent.click(screen.getByRole("button", { name: "Play spoken reply" }));
     await screen.findByRole("button", { name: "Stop speaking" });
 
     const speechRequest = requests("/api/voice")[0];
     const speechText = JSON.parse(String(speechRequest.init?.body)).text as string;
     expect(speechText).not.toContain("ev-resistance");
+    expect(speechText).not.toContain("https://");
+    expect(speechText).toContain("the Gemini rules");
     expect(speechText).toContain("Friday resistance level");
     fireEvent.click(screen.getByRole("button", { name: "Stop speaking" }));
     expect(MockAudio.current.pause).toHaveBeenCalled();

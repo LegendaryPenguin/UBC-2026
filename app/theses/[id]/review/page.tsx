@@ -259,6 +259,9 @@ export default function ReviewPage() {
                     <p className="font-medium">{contract.label}</p>
                     <p className="mt-1 text-sm text-muted">{contract.instrumentSymbol || contract.id} · {side.toUpperCase()} · target payout {payout} USDC</p>
                     <p className="mt-1 text-xs text-muted">Status: {contract.status.replaceAll("_", " ")} · expiry {contract.expiryDate ? new Date(contract.expiryDate).toLocaleString() : "not supplied"}</p>
+                    {contract.description ? <p className="mt-2 whitespace-pre-wrap text-sm">{contract.description}</p> : <p className="mt-2 text-xs text-muted">Contract-level resolution wording was not included in this response.</p>}
+                    {contract.strike ? <p className="mt-1 text-xs text-muted">Gemini strike: {contract.strike.type || "type not listed"} · {contract.strike.value || "value not available"}{contract.strike.availableAt ? ` · available ${new Date(contract.strike.availableAt).toLocaleString()}` : ""}</p> : null}
+                    {contract.source ? <p className="mt-1 text-xs text-muted">Settlement source: {contract.source}</p> : null}
                     {contract.termsUrl ? <a className="mt-2 inline-block text-sm text-action underline" href={contract.termsUrl} target="_blank" rel="noreferrer">Open Gemini contract rules</a> : <p className="mt-2 text-xs text-muted">Gemini did not provide a separate contract rules link.</p>}
                   </li>
                 ) : <li key={index} className="rounded-lg border border-line p-3 text-sm text-bad">A selected contract is no longer present. Return to Compare and reload the market.</li>)}

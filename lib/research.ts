@@ -106,7 +106,13 @@ export function researchReply(input: {
   if (family.predicates.length === 1 && family.contracts.length === 1) {
     const contract = family.contracts[0];
     const suggested = proposeView(q, family, input.thesis);
-    const answer = `${family.title}. The selected contract is “${contract.label}.” YES means Gemini resolves that exact proposition as YES; NO means it resolves NO. Observation: ${family.observationTime || "not published"}. Check the linked terms for the full resolution rule. This view covers this one contract only; it does not imply a price range or a different deadline. Research and the payoff preview are available without placing an order.`;
+    const exactWording = contract.description ? ` Gemini's contract wording: ${contract.description}` : " The exact contract wording was not included in the market response; open the linked rules before relying on a settlement detail.";
+    const source = contract.source || family.sourceEvent.sourceIndex;
+    const sourceNote = source ? ` Listed settlement source: ${source}.` : " Gemini did not list a settlement source in this response.";
+    const termsNote = contract.termsUrl
+      ? "Open the exact contract rules link for the complete resolution rule."
+      : "Gemini did not return a contract-specific rules link; event-level terms should not be treated as a substitute.";
+    const answer = `${family.title}. The selected contract is “${contract.label}.”${exactWording} YES means Gemini resolves that exact proposition as YES; NO means it resolves NO. Observation: ${family.observationTime || "not published"}.${sourceNote} ${termsNote} This view covers this one contract only; it does not imply a price range or a different deadline. Research and the payoff preview are available without placing an order.`;
     return { ...withEvidenceCitations(answer), proposed: suggested };
   }
 

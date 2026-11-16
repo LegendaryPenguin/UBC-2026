@@ -35,4 +35,28 @@ describe("research and editable view proposals", () => {
     });
     expect(liveReply.citations).toEqual([]);
   });
+
+  it("explains the exact Gemini contract wording and source for a live binary thesis", async () => {
+    const { families } = await listTopics("replay");
+    const base = families.find((candidate) => candidate.predicates.length >= 2)!;
+    const contract = { ...base.contracts[0], description: "If BTC is $95,000 or above at expiry, this resolves YES. Otherwise, NO.", source: "LS-LRRR-XBTUSD" };
+    const family = { ...base, predicates: [base.predicates[0]], contracts: [contract] };
+    const answer = researchReply({ question: "Explain this contract.", family }).answer;
+
+    expect(answer).toContain(contract.description);
+    expect(answer).toContain("LS-LRRR-XBTUSD");
+    expect(answer).toContain("does not imply a price range or a different deadline");
+  });
+
+  it("does not suggest event-level terms replace missing contract rules", async () => {
+    const { families } = await listTopics("replay");
+    const base = families.find((candidate) => candidate.predicates.length >= 2)!;
+    const contract = { ...base.contracts[0], termsUrl: null, description: null };
+    const family = { ...base, predicates: [base.predicates[0]], contracts: [contract] };
+    const answer = researchReply({ question: "Explain this contract.", family }).answer;
+
+    expect(answer).toContain("exact contract wording was not included");
+    expect(answer).toContain("did not return a contract-specific rules link");
+    expect(answer).toContain("event-level terms should not be treated as a substitute");
+  });
 });
