@@ -17,6 +17,7 @@ type GeminiDetail = {
   fetchedAt: string;
   payloadHash: string;
   compatibleTopicSlug: string | null;
+  compatibleTopics?: { slug: string; contractId?: string; contractLabel?: string }[];
 };
 
 type GeminiConnectionStatus = {
@@ -106,11 +107,17 @@ export default function GeminiEventPage() {
     api<GeminiDetail>(`/api/gemini/events/${encodeURIComponent(ticker)}?mode=${mode}`)
       .then((response) => {
         setData(response);
-        const first = contractsFor(response.event).find((contract) => contract.instrumentSymbol?.startsWith("GEMI-"));
-        if (first) {
-          setSelectedSymbol(first.instrumentSymbol || first.ticker || "");
-          setQuantity(first.quantityMinimum || "");
-          setPrice(first.prices?.buy?.yes || first.priceMinimum || "");
+        const markets = contractsFor(response.event).filter((contract) => contract.instrumentSymbol?.startsWith("GEMI-"));
+        const query = new URLSearchParams(window.location.search);
+        const requestedSymbol = query.get("symbol");
+        const requestedOutcome = query.get("outcome");
+        const selected = markets.find((contract) => contract.instrumentSymbol === requestedSymbol) || markets[0];
+        if (selected) {
+          const selectedOutcome = requestedOutcome === "no" ? "no" : "yes";
+          setSelectedSymbol(selected.instrumentSymbol || selected.ticker || "");
+          setOutcome(selectedOutcome);
+          setQuantity(selected.quantityMinimum || "");
+          setPrice(selected.prices?.buy?.[selectedOutcome] || selected.priceMinimum || "");
         }
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Event details could not be loaded"))
@@ -423,7 +430,15 @@ export default function GeminiEventPage() {
         <p className="mt-2 text-sm text-muted">Resolution terms, finality, and corrections must be qualified before this event can back a Thesis quote or payout.</p>
       </Card>
 
-      {data.compatibleTopicSlug ? <Button href={`/topics/${data.compatibleTopicSlug}`}>Form a Thesis view</Button> : <p className="text-xs text-muted">This event does not match a currently supported multi-threshold Thesis family.</p>}
+      {data.compatibleTopics?.length ? (
+        <Card>
+          <h2 className="font-serif text-xl">Research a contract</h2>
+          <p className="mt-1 text-sm text-muted">Each contract opens its own YES/NO view. Related thresholds stay separate until their settlement rules are verified together.</p>
+          <div className="mt-3 grid gap-2">
+            {data.compatibleTopics.map((topic) => <Button key={topic.slug} href={`/topics/${topic.slug}`} kind="secondary">Research · {topic.contractLabel || topic.contractId || "Gemini contract"}</Button>)}
+          </div>
+        </Card>
+      ) : <p className="text-xs text-muted">No contract in this event has a current, documented instrument symbol for a Thesis view.</p>}
     </div>
   );
 }

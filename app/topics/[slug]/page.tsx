@@ -14,6 +14,7 @@ import { useModeChange } from "@/lib/use-mode-change";
 export default function TopicPage() {
   const { slug } = useParams<{ slug: string }>();
   const [family, setFamily] = useState<MarketFamily | null>(null);
+  const [relatedContracts, setRelatedContracts] = useState<{ slug: string; label: string; instrumentSymbol: string; bid: string | null; ask: string | null }[]>([]);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -22,8 +23,9 @@ export default function TopicPage() {
     const mode = modeFromStorage() === "live" ? "live" : "replay";
     setError("");
     try {
-      const res = await api<{ family: MarketFamily; evidence: EvidenceItem[] }>(`/api/topics/${slug}?mode=${mode}`);
+      const res = await api<{ family: MarketFamily; relatedContracts: typeof relatedContracts; evidence: EvidenceItem[] }>(`/api/topics/${slug}?mode=${mode}`);
       setFamily(res.family);
+      setRelatedContracts(res.relatedContracts || []);
       setEvidence(res.evidence);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Topic data could not be loaded.");
@@ -45,9 +47,10 @@ export default function TopicPage() {
           topicSlug: family.slug,
           familyId: family.id,
           familyVersion: family.version,
-          template: family.predicates.length >= 2 ? "range" : "directional",
-          lowerThreshold: lower,
-          upperThreshold: upper,
+          mode: modeFromStorage(),
+          template: family.predicates.length === 1 && family.contracts.length === 1 ? "binary" : family.predicates.length >= 2 ? "range" : "directional",
+          lowerThreshold: family.predicates.length === 1 && family.contracts.length === 1 ? null : lower,
+          upperThreshold: family.predicates.length === 1 && family.contracts.length === 1 ? null : upper,
           direction: "yes",
           rationale: "",
           evidenceIds: evidence.map((e) => e.id),
@@ -65,20 +68,23 @@ export default function TopicPage() {
   if (!family) return <p>Loading topic…</p>;
 
   const initialHistory = family.predicates.slice(0, 2).map((predicate) => family.contracts.find((contract) => contract.id === predicate.contractId)).filter((contract) => contract != null);
+  const depth = family.contracts[0]?.orderBook;
+  const singleBinary = family.predicates.length === 1 && family.contracts.length === 1;
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted"><Link href="/explore">Explore</Link> / Research</p>
       <h1 className="font-serif text-3xl">{family.title}</h1>
       {error ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{error}. Showing the previously loaded {family.mode} data. <button type="button" className="text-action underline" onClick={() => void loadTopic()}>Retry</button></p> : null}
-      <p className="text-sm text-muted">{family.question} · Settlement {formatTime(family.observationTime)}</p>
+      <p className="text-sm text-muted">{family.question} · Observation {formatTime(family.observationTime)}</p>
+      {family.mode === "live" && family.predicates.length === 1 ? <p className="rounded-lg border border-line bg-white p-3 text-sm text-muted">This research view uses one Gemini contract with YES/NO outcomes. Related contracts remain separate until their settlement rules are verified as one compatible family.</p> : null}
       {family.mode === "replay" ? <p className="rounded-lg bg-[#FFF8E7] p-3 text-xs text-muted">Illustrative replay market and evidence. Values are demonstration fixtures, not current Gemini inventory or news.</p> : null}
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,0.85fr)]">
         <div className="space-y-4">
           <MarketPriceHistory illustrative={family.mode === "replay"} series={initialHistory.map((contract, index) => ({ label: contract!.label, color: index === 0 ? "#3559E0" : "#8D6CEB", points: contract!.priceHistory || [] }))} />
           <Card>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="font-serif text-xl">Related Gemini contracts</h2>
-              <span className="text-xs text-muted">{family.freshness} market references</span>
+              <h2 className="font-serif text-xl">{singleBinary ? "Selected Gemini contract" : "Related Gemini contracts"}</h2>
+              <span className="text-xs text-muted">{family.freshness} market reference{singleBinary ? "" : "s"}</span>
             </div>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-left text-sm">
@@ -96,14 +102,32 @@ export default function TopicPage() {
             <p className="mt-2 text-xs text-muted">Displayed prices are references and may not have executable size. Source: Gemini event {family.sourceEvent.ticker}.</p>
           </Card>
           <Card>
+            <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="font-serif text-xl">Gemini order book</h2><span className="text-xs text-muted">{depth ? "Snapshot" : "No depth returned"}</span></div>
+            {depth ? <>
+              <p className="mt-1 text-xs text-muted">Received {formatTime(depth.receivedAt)} · Gemini did not provide a source timestamp in this response. Depth can change before an order is submitted.</p>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                {([["Bids", depth.bids], ["Asks", depth.asks]] as const).map(([label, levels]) => <div key={label}>
+                  <h3 className="text-sm font-medium">{label}</h3>
+                  {levels.length ? <div className="mt-1 space-y-1">{levels.map((level, index) => <div key={`${label}-${index}`} className="grid grid-cols-2 rounded bg-surface px-2 py-1 text-xs"><span>{level.price}</span><span className="text-right">{level.quantity}</span></div>)}</div> : <p className="mt-1 text-xs text-muted">No levels returned.</p>}
+                </div>)}
+              </div>
+            </> : <p className="mt-2 text-sm text-muted">Gemini returned no order-book levels for this contract. Bid/ask and last-trade values remain reference prices; they do not prove available size or an executable cost.</p>}
+          </Card>
+          {relatedContracts.length ? <Card>
+            <h2 className="font-serif text-xl">Related Gemini contracts</h2>
+            <p className="mt-1 text-xs text-muted">Each remains a separate YES/NO proposition until its settlement rules are verified as a compatible family.</p>
+            <div className="mt-3 grid gap-2">{relatedContracts.map((contract) => <Link key={contract.slug} href={`/topics/${contract.slug}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line p-3 text-sm hover:border-action"><span>{contract.label}</span><span className="text-xs text-muted">YES bid {contract.bid ?? "—"} · ask {contract.ask ?? "—"}</span></Link>)}</div>
+          </Card> : null}
+          <Card>
             <h2 className="font-serif text-xl">Resolution rules</h2>
             <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
               <div><dt className="text-muted">Observation</dt><dd>{formatTime(family.observationTime)}</dd></div>
               <div><dt className="text-muted">Source</dt><dd>{family.sourceEvent.sourceAgency || "Gemini listed source"} / {family.sourceEvent.sourceIndex || "see terms"}</dd></div>
               <div><dt className="text-muted">Market status</dt><dd className="capitalize">{family.sourceEvent.status}</dd></div>
-              <div><dt className="text-muted">Trade cutoff</dt><dd>{formatTime(family.closeTime)}</dd></div>
+              <div><dt className="text-muted">Trade cutoff</dt><dd>{family.closeTime ? formatTime(family.closeTime) : "Not provided by this market response"}</dd></div>
             </dl>
             {family.sourceEvent.sourceUrl ? <a className="mt-3 inline-block text-sm text-action" href={family.sourceEvent.sourceUrl} target="_blank" rel="noreferrer">Open original Gemini rules</a> : null}
+            <p className="mt-3 break-all border-t border-line pt-3 text-xs text-muted">Source snapshot received {formatTime(family.sourceEvent.fetchedAt)} · SHA-256 {family.sourceEvent.payloadHash}</p>
           </Card>
           <Card>
             <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="font-serif text-xl">Evidence</h2>{family.mode === "replay" ? <span className="text-xs text-muted">Illustrative</span> : null}</div>
@@ -121,7 +145,7 @@ export default function TopicPage() {
           <VoicePanel slug={family.slug} family={family} evidence={evidence} title="What do you think will happen?" />
           <Card>
             <h2 className="font-serif text-xl">Your view</h2>
-            <p className="mt-2 text-sm text-muted">Speak or type an opinion. Thesis proposes a range from listed contracts; edit and confirm it before moving to Build.</p>
+            <p className="mt-2 text-sm text-muted">{singleBinary ? "Speak or type an opinion. For this contract, choose whether Gemini resolves its exact proposition YES or NO. Edit and confirm before moving to Build." : "Speak or type an opinion. Choose supported boundaries from the listed contracts, edit the proposal, and confirm before moving to Build."}</p>
             <div className="mt-3"><Button onClick={formView} disabled={busy}>{busy ? "Saving draft…" : "Form a view manually"}</Button></div>
           </Card>
         </aside>

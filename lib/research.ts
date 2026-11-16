@@ -30,6 +30,19 @@ export function proposeView(question: string, family: MarketFamily, thesis?: The
   });
   const picked = [...new Set(matching)].sort((a, b) => a - b);
 
+  if (family.predicates.length === 1 && family.contracts.length === 1) {
+    if (!/\b(yes|no|long|short|bullish|bearish|rise|fall|up|down|expect|think|view|thesis|set|change|draft|create)\b/.test(q)) return undefined;
+    const direction = /\b(no|short|bearish|fall|down|below|under)\b/.test(q) ? "no" : "yes";
+    return {
+      template: "binary",
+      direction,
+      lowerThreshold: null,
+      upperThreshold: null,
+      rationale: thesis?.rationale ?? question.trim(),
+      invalidation: thesis?.invalidation ?? "",
+    };
+  }
+
   if (/\b(range|interval|between|outside|narrow|wider)\b/.test(q) && thresholds.length >= 2) {
     let lower = picked[0] ?? thesis?.lowerThreshold ?? thresholds[0];
     let upper = picked[1] ?? thesis?.upperThreshold ?? thresholds[1];
@@ -88,6 +101,13 @@ export function researchReply(input: {
   }
   if (!family) {
     return withEvidenceCitations("Pick a supported topic first. I can explain listed thresholds, source rules, and how a range view differs from a single YES ticket. I cannot place a trade.");
+  }
+
+  if (family.predicates.length === 1 && family.contracts.length === 1) {
+    const contract = family.contracts[0];
+    const suggested = proposeView(q, family, input.thesis);
+    const answer = `${family.title}. The selected contract is “${contract.label}.” YES means Gemini resolves that exact proposition as YES; NO means it resolves NO. Observation: ${family.observationTime || "not published"}. Check the linked terms for the full resolution rule. This view covers this one contract only; it does not imply a price range or a different deadline. Research and the payoff preview are available without placing an order.`;
+    return { ...withEvidenceCitations(answer), proposed: suggested };
   }
 
   const suggested = proposeView(q, family, input.thesis);

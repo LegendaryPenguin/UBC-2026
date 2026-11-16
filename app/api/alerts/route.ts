@@ -4,12 +4,29 @@ import { mutate, readStore, uid } from "@/lib/server/store";
 
 export const dynamic = "force-dynamic";
 
-const ALERT_TYPES = new Set(["price", "quote", "source", "cutoff", "claim"]);
-
 export async function GET() {
   const ctx = currentSession();
   if (!ctx) return fail("AUTH", "Sign in required", 401);
-  const store = readStore();
+  const now = new Date().toISOString();
+  const store = mutate((state) => {
+    for (const alert of state.alerts) {
+      if (alert.accountId !== ctx.account.id || alert.type !== "claim" || alert.paused || alert.triggeredAt || !alert.positionId) continue;
+      const position = state.positions.find((item) => item.id === alert.positionId && item.accountId === ctx.account.id);
+      if (!position || !["resolved", "voided", "claimed"].includes(position.status)) continue;
+      alert.triggeredAt = now;
+      state.notifications.unshift({
+        id: uid("n"),
+        accountId: ctx.account.id,
+        title: position.status === "claimed" ? "Position claim confirmed" : "Position outcome available",
+        body: `${position.topicSlug} · ${position.mode} position is ${position.status}. Review the position and its settlement record.`,
+        href: `/positions/${position.id}`,
+        category: "trading",
+        read: false,
+        createdAt: now,
+      });
+    }
+    return state;
+  });
   return ok({
     alerts: store.alerts.filter((alert) => alert.accountId === ctx.account.id),
     notifications: store.notifications.filter((item) => item.accountId === ctx.account.id)
@@ -20,28 +37,26 @@ export async function GET() {
 export async function POST(req: Request) {
   const ctx = currentSession();
   if (!ctx) return fail("AUTH", "Sign in required", 401);
-  let body: { name?: unknown; type?: unknown; topicSlug?: unknown; threshold?: unknown };
+  let body: { name?: unknown; type?: unknown; positionId?: unknown };
   try {
     body = await readJson<typeof body>(req);
   } catch {
     return fail("INVALID", "Provide alert details as JSON.");
   }
   const name = typeof body.name === "string" ? body.name.trim() : "";
-  const topicSlug = body.topicSlug == null || body.topicSlug === "" ? null : body.topicSlug;
-  const threshold = body.threshold == null ? "" : body.threshold;
-  if (name.length < 1 || name.length > 80 || typeof body.type !== "string" || !ALERT_TYPES.has(body.type) ||
-    typeof threshold !== "string" || threshold.length > 80 ||
-    (topicSlug !== null && (typeof topicSlug !== "string" || !/^[a-z0-9][a-z0-9-]{0,79}$/.test(topicSlug)))) {
-    return fail("INVALID", "Alert name, type, topic, or threshold is invalid.");
+  if (name.length < 1 || name.length > 80 || body.type !== "claim" || typeof body.positionId !== "string" || body.positionId.length > 100) {
+    return fail("INVALID", "Choose a name and an owned position for a settlement alert.");
   }
+  const position = readStore().positions.find((item) => item.id === body.positionId && item.accountId === ctx.account.id);
+  if (!position) return fail("NOT_FOUND", "Position not found", 404);
   const alert = {
     id: uid("al"),
     accountId: ctx.account.id,
     name,
-    type: body.type,
-    topicSlug,
-    positionId: null,
-    threshold,
+    type: "claim",
+    topicSlug: position.topicSlug,
+    positionId: position.id,
+    threshold: "",
     channel: "inbox" as const,
     paused: false,
     createdAt: new Date().toISOString(),

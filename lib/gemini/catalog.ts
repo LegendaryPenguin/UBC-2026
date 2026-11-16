@@ -38,7 +38,14 @@ export async function refreshLiveFamilies(): Promise<Cache> {
     for (const event of flattenEvents(response.data)) {
       if (event.category?.toLowerCase() !== "crypto") continue;
       const family = familyFromEvent(event, fetchedAt, "live", true);
-      if (family) families.push(family);
+      if (family) {
+        families.push(family);
+        continue;
+      }
+      for (const contract of event.contracts ?? []) {
+        const binary = binaryFromEvent(event, fetchedAt, "live", true, contract.id);
+        if (binary) families.push(binary);
+      }
     }
     cache.live = families;
     cache.fetchedAt = fetchedAt;
@@ -83,5 +90,5 @@ export async function getTopic(slug: string, mode: "live" | "replay"): Promise<M
 }
 
 export function featuredSlug(): string {
-  return "btc2611202200";
+  return recordedFamilies()[0]?.slug ?? "btc2611202200";
 }

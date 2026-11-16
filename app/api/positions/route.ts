@@ -13,7 +13,7 @@ const arcClient = createPublicClient({
   transport: http(process.env.NEXT_PUBLIC_RPC_URL || "https://rpc.testnet.arc.io"),
 });
 
-type StoredQuote = SignedQuote & { thesisId?: string; accountId?: string; recordedScenarioIndex?: number };
+type StoredQuote = SignedQuote & { thesisId?: string; accountId?: string; recordedScenarioIndex?: number; sourceTicker?: string; sourceContractIds?: string[] };
 type AcceptanceChainData = {
   chainPositionId: string;
   status: PositionRecord["status"];
@@ -139,6 +139,8 @@ export async function POST(req: Request) {
         finalizationDelay: quote.finalizationDelay,
         familyId: thesis.familyId,
         topicSlug: thesis.topicSlug,
+        sourceTicker: quote.sourceTicker,
+        sourceContractIds: quote.sourceContractIds,
         createdAt: now,
       };
       store.positions.push(record);
@@ -218,6 +220,8 @@ export async function POST(req: Request) {
       finalizationDelay: quote.finalizationDelay,
       familyId: thesis.familyId,
       topicSlug: thesis.topicSlug,
+      sourceTicker: quote.sourceTicker,
+      sourceContractIds: quote.sourceContractIds,
       createdAt: new Date().toISOString(),
     };
     store.positions.push(record);

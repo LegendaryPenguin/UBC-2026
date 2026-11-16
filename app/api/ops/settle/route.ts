@@ -11,7 +11,7 @@ import { mutate, readStore, uid } from "@/lib/server/store";
 
 export const dynamic = "force-dynamic";
 
-type StoredQuote = SignedQuote & { thesisId?: string; accountId?: string };
+type StoredQuote = SignedQuote & { thesisId?: string; accountId?: string; sourceTicker?: string; sourceContractIds?: string[] };
 type ChainPosition = readonly [string, string, string, string, bigint, bigint, bigint, bigint, bigint, bigint, number, number, bigint, bigint, number, number, bigint, string];
 type SettlementAction = "propose" | "finalize" | "void";
 
@@ -102,11 +102,11 @@ export async function POST(req: Request) {
       }
       let fetched;
       try {
-        fetched = await getEvent(position.topicSlug.toUpperCase());
+        fetched = await getEvent((quote.sourceTicker || position.sourceTicker || position.topicSlug).toUpperCase());
       } catch {
         return fail("SOURCE_UNAVAILABLE", "Gemini's current event result could not be fetched. No settlement transaction was sent.", 503);
       }
-      if (fetched.event.ticker.toLowerCase() !== position.topicSlug.toLowerCase()) {
+      if (fetched.event.ticker.toLowerCase() !== (quote.sourceTicker || position.sourceTicker || position.topicSlug).toLowerCase()) {
         return fail("SOURCE_INCONSISTENT", "Gemini returned a different event ticker.", 409);
       }
       try {
@@ -115,6 +115,7 @@ export async function POST(req: Request) {
           fetchedAt: fetched.fetchedAt,
           payloadHash: fetched.hash,
           expectedFamilyHash: quote.familyHash,
+          expectedContractIds: quote.sourceContractIds || position.sourceContractIds,
           expectedPayouts: quote.payouts,
           expectedLabels: quote.scenarioLabels,
         });

@@ -79,6 +79,18 @@ export default function ThesisEditor() {
     setNotice("");
   }
 
+  function changeTemplate(template: ThesisRevision["template"]) {
+    if (!thesis) return;
+    const next = template === "binary"
+      ? { ...thesis, template, lowerThreshold: null, upperThreshold: null, direction: thesis.direction || "yes" }
+      : template === "directional"
+        ? { ...thesis, template, lowerThreshold: family?.predicates[0]?.threshold ?? null, upperThreshold: null, direction: thesis.direction || "yes" }
+        : { ...thesis, template, lowerThreshold: family?.predicates[0]?.threshold ?? null, upperThreshold: family?.predicates[1]?.threshold ?? null, direction: null };
+    setThesis(next);
+    setDirty(true);
+    setNotice("");
+  }
+
   async function save(action: "save" | "confirm" | "duplicate" = "save") {
     if (!thesis) return;
     setSaving(action);
@@ -87,7 +99,7 @@ export default function ThesisEditor() {
     try {
       const res = await api<{ thesis: ThesisRevision }>(`/api/theses/${id}`, {
         method: "PATCH",
-        body: JSON.stringify({ ...thesis, action: action === "save" ? undefined : action }),
+        body: JSON.stringify({ ...thesis, action: action === "save" ? undefined : action, mode: modeFromStorage() }),
       });
       if (action === "duplicate") {
         window.location.href = `/theses/${res.thesis.id}`;
@@ -230,27 +242,30 @@ export default function ThesisEditor() {
           <p className="mt-1 text-sm text-muted">Edit the conditions that would support your idea. Save creates a draft version; confirm only after reviewing the wording.</p>
         </div>
         <Field label="Template">
-          <select className={inputCls()} value={thesis.template} onChange={(event) => change("template", event.target.value as ThesisRevision["template"])}>
-            <option value="directional">Directional</option>
-            <option value="range">Range</option>
-            <option value="outside">Outside range</option>
-            <option value="stepped">Stepped</option>
+          <select className={inputCls()} value={thesis.template} onChange={(event) => changeTemplate(event.target.value as ThesisRevision["template"])}>
+            {family?.predicates.length === 1 && family.contracts.length === 1 ? <option value="binary">Single Gemini contract</option> : <option value="directional">Directional threshold</option>}
+            {family && family.predicates.length >= 2 ? <><option value="range">Range</option><option value="outside">Outside range</option></> : null}
           </select>
         </Field>
-        {thesis.template === "directional" ? (
+        {thesis.template === "directional" || thesis.template === "binary" ? (
           <Field label="Direction">
             <select className={inputCls()} value={thesis.direction || "yes"} onChange={(event) => change("direction", event.target.value as "yes" | "no")}>
-              <option value="yes">Pays at or above the threshold</option>
-              <option value="no">Pays below the threshold</option>
+              {thesis.template === "binary" ? <><option value="yes">YES · contract resolves YES</option><option value="no">NO · contract resolves NO</option></> : <><option value="yes">Pays at or above the threshold</option><option value="no">Pays below the threshold</option></>}
             </select>
           </Field>
         ) : null}
-        <Field label="Lower / directional threshold">
-          <input className={inputCls()} type="number" value={thesis.lowerThreshold ?? ""} onChange={(event) => change("lowerThreshold", event.target.value === "" ? null : Number(event.target.value))} />
-        </Field>
-        {thesis.template !== "directional" ? (
+        {thesis.template !== "binary" ? <Field label={thesis.template === "directional" ? "Listed threshold" : "Lower threshold"}>
+          <select className={inputCls()} value={thesis.lowerThreshold ?? ""} onChange={(event) => change("lowerThreshold", event.target.value === "" ? null : Number(event.target.value))}>
+            <option value="">Choose a listed threshold</option>
+            {family?.predicates.map((predicate) => <option key={predicate.id} value={predicate.threshold}>{predicate.label}</option>)}
+          </select>
+        </Field> : <p className="text-sm text-muted">This view is tied to: {family?.contracts[0]?.label || "the selected Gemini contract"}</p>}
+        {thesis.template === "range" || thesis.template === "outside" ? (
           <Field label="Upper threshold">
-            <input className={inputCls()} type="number" value={thesis.upperThreshold ?? ""} onChange={(event) => change("upperThreshold", event.target.value === "" ? null : Number(event.target.value))} />
+            <select className={inputCls()} value={thesis.upperThreshold ?? ""} onChange={(event) => change("upperThreshold", event.target.value === "" ? null : Number(event.target.value))}>
+              <option value="">Choose an upper threshold</option>
+              {family?.predicates.filter((predicate) => thesis.lowerThreshold == null || predicate.threshold > thesis.lowerThreshold).map((predicate) => <option key={predicate.id} value={predicate.threshold}>{predicate.label}</option>)}
+            </select>
           </Field>
         ) : null}
         <Field label="Rationale">
@@ -263,7 +278,7 @@ export default function ThesisEditor() {
       {reviewingConfirmation ? (
         <Card className="space-y-3">
           <h2 className="font-serif text-xl">Review this view</h2>
-          <p className="text-sm">{thesis.template === "directional" ? `${thesis.direction?.toUpperCase() || "YES"} at ${thesis.lowerThreshold ?? "an unset threshold"}` : `${thesis.template} from ${thesis.lowerThreshold ?? "an unset lower bound"} to ${thesis.upperThreshold ?? "an unset upper bound"}`}</p>
+          <p className="text-sm">{thesis.template === "binary" ? `${thesis.direction?.toUpperCase() || "YES"} · ${family?.contracts[0]?.label || "selected contract"}` : thesis.template === "directional" ? `${thesis.direction?.toUpperCase() || "YES"} at ${thesis.lowerThreshold ?? "an unset threshold"}` : `${thesis.template} from ${thesis.lowerThreshold ?? "an unset lower bound"} to ${thesis.upperThreshold ?? "an unset upper bound"}`}</p>
           <p className="text-xs text-muted">Confirming versions this view and opens payoff design. It does not request a quote, approve USDC, or submit a transaction.</p>
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => void save("confirm")} disabled={saving !== null}>{saving === "confirm" ? "Confirming…" : "Confirm view and open payoff design"}</Button>

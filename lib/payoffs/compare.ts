@@ -1,5 +1,5 @@
 import type { MarketFamily, PayoffSpec } from "@/lib/domain/types";
-import { compileDirectional, compileRange, twoTicketAlternative } from "@/lib/payoffs/compile";
+import { compileBinary, compileDirectional, compileRange, twoTicketAlternative } from "@/lib/payoffs/compile";
 
 export function scaleToMax(spec: PayoffSpec, maxPayout: bigint): PayoffSpec {
   if (spec.maxPayout === 0n) return spec;
@@ -27,6 +27,8 @@ export function buildComparisons(
     ticket = compileDirectional(family, bounds.lower, "yes", M);
     const rawTwo = twoTicketAlternative(family, bounds.lower, bounds.upper, M);
     twoTicket = rawTwo ? scaleToMax(rawTwo, M) : null;
+  } else if (custom.template === "binary" && bounds.direction) {
+    ticket = compileBinary(family, bounds.direction, M);
   } else if (bounds.threshold != null && bounds.direction) {
     ticket = compileDirectional(family, bounds.threshold, bounds.direction, M);
   }

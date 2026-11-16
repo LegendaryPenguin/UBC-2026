@@ -80,7 +80,7 @@ export async function POST(req: Request) {
     try {
       family = await getTopic(body.slug, body.mode === "live" ? "live" : "replay");
       if (!family) return fail("UNSUPPORTED_FAMILY", "Topic not found or not a compatible family.", 404);
-      evidence = evidenceForSlug(family.slug, family.mode);
+      evidence = evidenceForSlug(family.sourceEvent.ticker.toLowerCase(), family.mode);
     } catch {
       return fail("GEMINI_UNAVAILABLE", "Topic data could not be loaded. Try again or switch to Replay.", 503);
     }

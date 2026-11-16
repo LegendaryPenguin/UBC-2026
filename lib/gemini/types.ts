@@ -19,6 +19,17 @@ export interface GeminiPricePoint {
   price: string;
 }
 
+export interface GeminiOrderbookLevel {
+  side?: "buy" | "sell";
+  price: string;
+  quantity: string;
+}
+
+export interface GeminiOrderbook {
+  bids?: GeminiOrderbookLevel[];
+  asks?: GeminiOrderbookLevel[];
+}
+
 export interface GeminiContract {
   id: string;
   label: string;
@@ -64,6 +75,7 @@ export interface GeminiEvent {
   settlement?: { value?: string | null } | null;
   termsLink?: string | null;
   sourceDetails?: { agency?: string; index?: string } | null;
+  contractOrderbooks?: Record<string, GeminiOrderbook> | null;
   contracts?: GeminiContract[];
   events?: GeminiEvent[];
 }

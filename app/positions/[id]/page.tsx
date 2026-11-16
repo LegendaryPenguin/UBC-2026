@@ -224,7 +224,7 @@ export default function PositionPage() {
           }}>Switch to Arc testnet</Button>
         ) : null}
         <Button href={`/positions/${id}/exit`} kind="ghost">Exit options</Button>
-        <Button href="/alerts" kind="ghost">Manage alerts</Button>
+        <Button href={`/alerts?positionId=${encodeURIComponent(position.id)}`} kind="ghost">Set settlement alert</Button>
       </div>
     </div>
   );

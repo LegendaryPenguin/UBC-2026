@@ -1,5 +1,6 @@
 import type {
   Freshness,
+  MarketDepthSnapshot,
   MarketFamily,
   MarketStatus,
   Predicate,
@@ -9,7 +10,7 @@ import type {
 } from "@/lib/domain/types";
 import { familyHash } from "@/lib/payoffs/hash";
 import { formatThreshold } from "@/lib/payoffs/compile";
-import type { GeminiContract, GeminiEvent } from "@/lib/gemini/client";
+import type { GeminiContract, GeminiEvent, GeminiOrderbook } from "@/lib/gemini/client";
 
 const THRESHOLD_RE = /\$?\s*([\d,]+(?:\.\d+)?)\s+or above/i;
 
@@ -59,10 +60,27 @@ export function toSourceEvent(event: GeminiEvent, fetchedAt: string, hash: strin
   };
 }
 
-export function toSourceContract(event: GeminiEvent, contract: GeminiContract): SourceContract {
+function normalizeLevels(levels: GeminiOrderbook["bids"]): { price: string; quantity: string }[] {
+  if (!Array.isArray(levels)) return [];
+  return levels.flatMap((level) => {
+    const price = typeof level.price === "string" ? level.price : "";
+    const quantity = typeof level.quantity === "string" ? level.quantity : "";
+    if (!/^(?:0|1|0?\.\d+)$/.test(price) || !/^\d+(?:\.\d+)?$/.test(quantity) || Number(quantity) <= 0) return [];
+    return [{ price, quantity }];
+  }).slice(0, 20);
+}
+
+export function toSourceContract(event: GeminiEvent, contract: GeminiContract, receivedAt?: string): SourceContract {
+  const rawBook = contract.instrumentSymbol ? event.contractOrderbooks?.[contract.instrumentSymbol] : undefined;
+  let orderBook: MarketDepthSnapshot | null = null;
+  if (rawBook && receivedAt) {
+    const bids = normalizeLevels(rawBook.bids);
+    const asks = normalizeLevels(rawBook.asks);
+    if (bids.length || asks.length) orderBook = { bids, asks, receivedAt, sourceTime: null };
+  }
   return {
     id: contract.id,
-    instrumentSymbol: contract.instrumentSymbol ?? `${event.ticker}:${contract.ticker ?? contract.id}`,
+    instrumentSymbol: contract.instrumentSymbol ?? "",
     eventId: event.id,
     ticker: contract.ticker ?? "",
     label: contract.label,
@@ -81,6 +99,7 @@ export function toSourceContract(event: GeminiEvent, contract: GeminiContract): 
     noAsk: contract.prices?.buy?.no ?? null,
     lastTrade: contract.prices?.lastTradePrice ?? null,
     priceHistory: contract.priceHistory ?? null,
+    orderBook,
   };
 }
 
@@ -124,7 +143,12 @@ export function familyFromEvent(
   hash: string,
   live: boolean,
 ): MarketFamily | null {
-  const contracts = (event.contracts ?? []).map((c) => toSourceContract(event, c));
+  // A label-shaped threshold is not sufficient evidence that contracts share
+  // an observation rule. Live multi-contract families need an explicit review
+  // record; until one exists, the live catalog uses standalone binary markets.
+  if (live) return null;
+
+  const contracts = (event.contracts ?? []).map((c) => toSourceContract(event, c, fetchedAt));
   const predicates: Predicate[] = [];
   for (const contract of event.contracts ?? []) {
     const threshold = parseThreshold(contract.label);
@@ -184,11 +208,21 @@ export function binaryFromEvent(
   fetchedAt: string,
   hash: string,
   live: boolean,
+  contractId?: string,
+  allowResolved = false,
 ): MarketFamily | null {
-  const contract = event.contracts?.[0];
-  if (!contract) return null;
+  const contract = contractId
+    ? event.contracts?.find((candidate) => candidate.id === contractId)
+    : event.contracts?.find((candidate) => Boolean(candidate.instrumentSymbol) &&
+      (!live || (candidate.status === "active" && candidate.marketState !== "closed")));
+  if (!contract || !contract.instrumentSymbol) return null;
+  if (live && allowResolved && (event.status !== "settled" || contract.status !== "settled")) return null;
+  if (live && !allowResolved && (event.status !== "active" || contract.status !== "active" || contract.marketState === "closed")) return null;
   const sourceEvent = toSourceEvent(event, fetchedAt, hash);
-  const sourceContract = toSourceContract(event, contract);
+  const sourceContract = toSourceContract(event, contract, fetchedAt);
+  const slugPart = (value: string, max: number) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, max).replace(/-+$/g, "");
+  const slug = `gm-${slugPart(event.ticker, 34)}-${slugPart(contract.id, 38)}`.slice(0, 79).replace(/-+$/g, "");
+  const observationTime = contract.expiryDate ?? event.expiryDate ?? null;
   const predicates: Predicate[] = [
     {
       id: contract.id,
@@ -204,8 +238,8 @@ export function binaryFromEvent(
     {
       id: "no",
       index: 0,
-      label: "NO / Down",
-      detail: "Resolves NO",
+      label: `NO · ${contract.label}`,
+      detail: `Gemini resolves ${contract.label} as NO`,
       minInclusive: null,
       maxExclusive: 1,
       predicateYes: { [contract.id]: false },
@@ -213,36 +247,40 @@ export function binaryFromEvent(
     {
       id: "yes",
       index: 1,
-      label: "YES / Up",
-      detail: "Resolves YES",
+      label: `YES · ${contract.label}`,
+      detail: `Gemini resolves ${contract.label} as YES`,
       minInclusive: 1,
       maxExclusive: null,
       predicateYes: { [contract.id]: true },
     },
   ];
-  const slug = event.ticker.toLowerCase();
+  const title = event.title;
+  const question = typeof contract.description === "string" && contract.description.trim()
+    ? contract.description
+    : contract.label;
   return {
-    id: event.ticker,
+    id: `${event.ticker}:${contract.id}`,
     slug,
     version: "1",
     mode: live ? "live" : "replay",
-    title: event.title,
-    question: event.description || event.title,
-    observationTime: event.expiryDate ?? null,
+    title,
+    question,
+    observationTime,
     sourceEvent,
     contracts: [sourceContract],
     predicates,
     scenarios,
-    closeTime: event.expiryDate ?? null,
-    longstopTime: event.expiryDate
-      ? new Date(Date.parse(event.expiryDate) + 7 * 24 * 3600 * 1000).toISOString()
+    // Gemini documents expiry/observation separately from a guaranteed trade cutoff.
+    closeTime: live ? null : observationTime,
+    longstopTime: observationTime
+      ? new Date(Date.parse(observationTime) + 7 * 24 * 3600 * 1000).toISOString()
       : null,
     familyHash: familyHash({
       slug,
       version: "1",
       contractIds: [sourceContract.id],
       scenarioLabels: scenarios.map((s) => s.label),
-      observationTime: event.expiryDate ?? null,
+      observationTime,
     }),
     quotesAvailable: false,
     freshness: freshness(fetchedAt, event.expiryDate ?? null, live),

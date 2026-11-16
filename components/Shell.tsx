@@ -52,9 +52,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 bg-white px-3 py-2">
         Skip to content
       </a>
-      <header className="sticky top-0 z-20 border-b border-line bg-[#F4F2ED]/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-          <Link href="/explore" className="font-serif text-2xl">Thesis</Link>
+      <header className="sticky top-0 z-20 border-b border-line bg-[#F7F5F0]/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-[1600px] items-center gap-4 px-4 py-3 lg:px-7">
+          <Link href="/explore" className="flex shrink-0 items-center gap-2 font-serif text-2xl" aria-label="Thesis home">
+            <span aria-hidden="true" className="flex h-7 items-center gap-1">
+              <span className="h-5 w-2 -skew-x-[22deg] rounded-sm bg-action" />
+              <span className="h-6 w-2 -skew-x-[22deg] rounded-sm bg-[#7FA2FF]" />
+            </span>
+            Thesis
+          </Link>
           <nav className="hidden gap-1 text-sm md:flex" aria-label="Primary">
             {NAV.map(([label, href]) => (
               <Link
@@ -110,7 +116,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
         ) : null}
       </header>
-      <div className="mx-auto max-w-6xl px-4 py-6 pb-24 md:pb-6">
+      <div className="mx-auto w-full max-w-[1600px] px-3 py-5 pb-24 sm:px-5 lg:px-7 lg:py-7 md:pb-7">
         <main id="main">{children}</main>
       </div>
       <nav className="fixed bottom-0 left-0 right-0 z-20 grid grid-cols-3 border-t border-line bg-white md:hidden" aria-label="Primary mobile">

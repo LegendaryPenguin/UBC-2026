@@ -370,10 +370,10 @@ export function VoicePanel({
       setAnswer(result.answer);
       setCitations(result.citations || []);
       setProposal(result.proposed ? {
-        template: result.proposed.template || thesis?.template || (family.predicates.length >= 2 ? "range" : "directional"),
+        template: result.proposed.template || thesis?.template || (family.predicates.length === 1 && family.contracts.length === 1 ? "binary" : family.predicates.length >= 2 ? "range" : "directional"),
         direction: result.proposed.direction ?? thesis?.direction ?? "yes",
-        lowerThreshold: result.proposed.lowerThreshold ?? thesis?.lowerThreshold ?? family.predicates[0]?.threshold ?? null,
-        upperThreshold: result.proposed.upperThreshold ?? thesis?.upperThreshold ?? family.predicates[1]?.threshold ?? null,
+        lowerThreshold: result.proposed.template === "binary" ? null : result.proposed.lowerThreshold ?? thesis?.lowerThreshold ?? family.predicates[0]?.threshold ?? null,
+        upperThreshold: result.proposed.template === "binary" ? null : result.proposed.upperThreshold ?? thesis?.upperThreshold ?? family.predicates[1]?.threshold ?? null,
         rationale: result.proposed.rationale ?? thesis?.rationale ?? transcript.trim(),
         invalidation: result.proposed.invalidation ?? thesis?.invalidation ?? "",
       } : null);
@@ -398,13 +398,14 @@ export function VoicePanel({
 
   function validProposal() {
     if (!proposal) return false;
-    if (proposal.template === "directional") return proposal.lowerThreshold != null;
+    if (proposal.template === "binary") return family.predicates.length === 1 && family.contracts.length === 1 && Boolean(proposal.direction);
+    if (proposal.template === "directional") return proposal.lowerThreshold != null && Boolean(proposal.direction);
     return proposal.lowerThreshold != null && proposal.upperThreshold != null && proposal.lowerThreshold < proposal.upperThreshold;
   }
 
   async function applyProposal() {
     if (!proposal || !validProposal()) {
-      setError("Choose listed thresholds with a lower value below the upper value before saving.");
+      setError(proposal?.template === "binary" ? "Choose YES or NO for the selected Gemini contract." : "Choose listed thresholds with a lower value below the upper value before saving.");
       return;
     }
     setSavingProposal(true);
@@ -415,10 +416,11 @@ export function VoicePanel({
         const result = await api<{ thesis: ThesisRevision }>(`/api/theses/${thesis.id}`, {
           method: "PATCH",
           body: JSON.stringify({
+            mode: modeFromStorage(),
             template: proposal.template,
-            direction: proposal.template === "directional" ? proposal.direction : null,
-            lowerThreshold: proposal.lowerThreshold,
-            upperThreshold: proposal.template === "directional" ? null : proposal.upperThreshold,
+            direction: proposal.template === "directional" || proposal.template === "binary" ? proposal.direction : null,
+            lowerThreshold: proposal.template === "binary" ? null : proposal.lowerThreshold,
+            upperThreshold: proposal.template === "directional" || proposal.template === "binary" ? null : proposal.upperThreshold,
             rationale: proposal.rationale,
             invalidation: proposal.invalidation,
             evidenceIds: thesis.evidenceIds,
@@ -431,13 +433,14 @@ export function VoicePanel({
         const result = await api<{ thesis: ThesisRevision }>("/api/theses", {
           method: "POST",
           body: JSON.stringify({
+            mode: modeFromStorage(),
             topicSlug: family.slug,
             familyId: family.id,
             familyVersion: family.version,
             template: proposal.template,
-            direction: proposal.template === "directional" ? proposal.direction : null,
-            lowerThreshold: proposal.lowerThreshold,
-            upperThreshold: proposal.template === "directional" ? null : proposal.upperThreshold,
+            direction: proposal.template === "directional" || proposal.template === "binary" ? proposal.direction : null,
+            lowerThreshold: proposal.template === "binary" ? null : proposal.lowerThreshold,
+            upperThreshold: proposal.template === "directional" || proposal.template === "binary" ? null : proposal.upperThreshold,
             rationale: proposal.rationale || transcript.trim(),
             invalidation: proposal.invalidation,
             evidenceIds: evidence.map((item) => item.id),
@@ -455,6 +458,11 @@ export function VoicePanel({
   async function speak() {
     if (!answer) return;
     releasePlayback();
+    const spokenAnswer = answer.replace(/\[(ev-[a-z0-9-]+)\]/gi, " ").replace(/\s+/g, " ").trim();
+    const spokenSources = citations.length
+      ? ` Sources: ${citations.map((citation) => citation.title).join("; ")}.`
+      : "";
+    const speechText = `${spokenAnswer}${spokenSources}`.slice(0, 3_000);
     const controller = new AbortController();
     speechControllerRef.current = controller;
     setStatus("speaking");
@@ -464,7 +472,7 @@ export function VoicePanel({
       const response = await fetch("/api/voice", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: answer }),
+        body: JSON.stringify({ text: speechText }),
         signal: controller.signal,
       });
       if (!response.ok) {
@@ -607,26 +615,24 @@ export function VoicePanel({
           ) : <p className="text-xs text-muted">Review and edit every field. Confirming the button creates a draft only; it does not confirm a position or request a quote.</p>}
           <Field label="Payoff template">
             <select className={inputCls()} value={proposal.template} onChange={(event) => editProposal({ template: event.target.value as ViewTemplate })}>
-              <option value="directional">Directional</option>
-              <option value="range">Range</option>
-              <option value="outside">Outside range</option>
+              {family.predicates.length === 1 && family.contracts.length === 1 ? <option value="binary">Single contract</option> : <option value="directional">Directional</option>}
+              {family.predicates.length >= 2 ? <><option value="range">Range</option><option value="outside">Outside range</option></> : null}
             </select>
           </Field>
-          {proposal.template === "directional" ? (
+          {proposal.template === "directional" || proposal.template === "binary" ? (
             <Field label="Direction">
               <select className={inputCls()} value={proposal.direction || "yes"} onChange={(event) => editProposal({ direction: event.target.value as "yes" | "no" })}>
-                <option value="yes">YES · pays at or above the threshold</option>
-                <option value="no">NO · pays below the threshold</option>
+                {proposal.template === "binary" ? <><option value="yes">YES · contract proposition resolves YES</option><option value="no">NO · contract proposition resolves NO</option></> : <><option value="yes">YES · pays at or above the threshold</option><option value="no">NO · pays below the threshold</option></>}
               </select>
             </Field>
           ) : null}
-          <Field label={proposal.template === "directional" ? "Threshold" : "Lower threshold"}>
+          {proposal.template !== "binary" ? <Field label={proposal.template === "directional" ? "Threshold" : "Lower threshold"}>
             <select className={inputCls()} value={proposal.lowerThreshold ?? ""} onChange={(event) => editProposal({ lowerThreshold: event.target.value === "" ? null : Number(event.target.value) })}>
               <option value="">Choose a listed threshold</option>
               {thresholds.map((value) => <option value={value} key={value}>{value}</option>)}
             </select>
-          </Field>
-          {proposal.template !== "directional" ? (
+          </Field> : null}
+          {proposal.template === "range" || proposal.template === "outside" ? (
             <Field label="Upper threshold">
               <select className={inputCls()} value={proposal.upperThreshold ?? ""} onChange={(event) => editProposal({ upperThreshold: event.target.value === "" ? null : Number(event.target.value) })}>
                 <option value="">Choose a listed threshold above the lower bound</option>
@@ -640,7 +646,7 @@ export function VoicePanel({
           <Field label="I would reconsider if">
             <textarea className={`${inputCls()} min-h-16 py-2`} maxLength={2_000} value={proposal.invalidation} onChange={(event) => editProposal({ invalidation: event.target.value })} />
           </Field>
-          {proposal.template !== "directional" && proposal.lowerThreshold != null && proposal.upperThreshold != null && proposal.lowerThreshold >= proposal.upperThreshold ? (
+          {(proposal.template === "range" || proposal.template === "outside") && proposal.lowerThreshold != null && proposal.upperThreshold != null && proposal.lowerThreshold >= proposal.upperThreshold ? (
             <p className="text-sm text-bad">Choose an upper threshold above the lower threshold.</p>
           ) : null}
           {proposalSaved ? <p className="text-sm text-muted">Saved as a draft revision. Review the view before confirming it.</p> : null}

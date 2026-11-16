@@ -4,6 +4,9 @@
 
 :root {
   color-scheme: light;
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --font-mono: "SFMono-Regular", Consolas, monospace;
 }
 
 html,
@@ -12,8 +15,10 @@ body {
 }
 
 body {
-  background: #f4f2ed;
+  background: #f7f5f0;
   color: #182329;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
 }
 
 *:focus-visible {

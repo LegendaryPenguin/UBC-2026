@@ -6,6 +6,10 @@ import { Button, Card } from "@/components/ui";
 
 function viewLabel(thesis: ThesisRevision, family?: MarketFamily | null) {
   const unit = family?.predicates[0]?.unit || "USD";
+  if (thesis.template === "binary") {
+    const proposition = family?.contracts[0]?.label || "selected contract";
+    return `${thesis.direction?.toUpperCase() || "YES"} · ${proposition}`;
+  }
   if (thesis.template === "directional") {
     const threshold = thesis.lowerThreshold == null ? "a threshold" : formatThreshold(thesis.lowerThreshold, unit);
     return thesis.direction === "no" ? `Below ${threshold}` : `At or above ${threshold}`;

@@ -99,6 +99,29 @@ export function compileDirectional(
   );
 }
 
+export function compileBinary(
+  family: MarketFamily,
+  direction: Direction,
+  maxPayout: bigint,
+): PayoffSpec {
+  if (family.predicates.length !== 1 || family.contracts.length !== 1) {
+    throw new CompileError("INCOMPATIBLE_RULES", "A binary view needs exactly one explicitly selected Gemini contract.");
+  }
+  const predicate = family.predicates[0];
+  const payouts = family.scenarios.map((scenario) => {
+    const yes = scenario.predicateYes[predicate.id] === true;
+    return (direction === "yes" ? yes : !yes) ? maxPayout : 0n;
+  });
+  return spec(
+    family,
+    "binary",
+    maxPayout,
+    payouts,
+    [predicate.contractId],
+    [`Pays only when the selected Gemini contract resolves ${direction.toUpperCase()}.`, `Contract proposition: ${predicate.label}`],
+  );
+}
+
 export function compileRange(
   family: MarketFamily,
   lower: number,
@@ -174,6 +197,10 @@ export function compileView(
   },
   maxPayout: bigint,
 ): PayoffSpec {
+  if (template === "binary") {
+    if (!args.direction) throw new CompileError("INCOMPATIBLE_RULES", "Binary views need a YES or NO outcome.");
+    return compileBinary(family, args.direction, maxPayout);
+  }
   if (template === "directional") {
     if (args.threshold == null || !args.direction) {
       throw new CompileError("INCOMPATIBLE_RULES", "Directional views need a threshold and side.");

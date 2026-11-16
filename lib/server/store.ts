@@ -202,7 +202,9 @@ export interface StoreShape {
   incidents: { id: string; title: string; body: string; at: string; state: string }[];
 }
 
-const FILE = path.join(process.cwd(), ".data", "store.json");
+const FILE = process.env.THESIS_STORE_FILE
+  ? path.resolve(process.env.THESIS_STORE_FILE)
+  : path.join(process.cwd(), ".data", "store.json");
 
 function empty(): StoreShape {
   return {

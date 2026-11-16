@@ -3,12 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, modeFromStorage } from "@/lib/client";
-import type { EvidenceItem, MarketFamily, SignedQuote, ThesisRevision } from "@/lib/domain/types";
+import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
 import { formatUsdc, formatUsdcFixed, parseUsdc } from "@/lib/format";
 import { compileView } from "@/lib/payoffs/compile";
 import { buildComparisons, estimateBasketCost, estimateSingleTicketCost } from "@/lib/payoffs/compare";
 import { Button, Card, Field, inputCls } from "@/components/ui";
-import { useAccount } from "wagmi";
 import { VoicePanel } from "@/components/VoicePanel";
 import { evidenceForSlug } from "@/lib/evidence";
 import { PayoffChart } from "@/components/PayoffChart";
@@ -23,6 +22,9 @@ type Mode = "replay" | "paper" | "live";
 function defaultBasket(thesis: ThesisRevision, family: MarketFamily, max: string): BasketLeg[] {
   let half = "50";
   try { half = formatUsdc(parseUsdc(max) / 2n); } catch { /* use the visible default */ }
+  if (thesis.template === "binary" && family.predicates.length === 1) {
+    return [{ contractId: family.predicates[0].contractId, side: thesis.direction || "yes", payoutAmount: max, enabled: true }];
+  }
   if (thesis.template === "range" && thesis.lowerThreshold != null && thesis.upperThreshold != null) {
     const lower = family.predicates.find((predicate) => predicate.threshold === thesis.lowerThreshold);
     const upper = family.predicates.find((predicate) => predicate.threshold === thesis.upperThreshold);
@@ -46,7 +48,6 @@ function belowCostLabels(values: bigint[], labels: string[], cost: bigint | null
 
 export default function ComparePage() {
   const { id } = useParams<{ id: string }>();
-  const { address } = useAccount();
   const [thesis, setThesis] = useState<ThesisRevision | null>(null);
   const [family, setFamily] = useState<MarketFamily | null>(null);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
@@ -55,12 +56,9 @@ export default function ComparePage() {
   const [basket, setBasket] = useState<BasketLeg[]>([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState("");
   const [selected, setSelected] = useState<ConstructionChoice>("gemini-basket");
-  const [quote, setQuote] = useState<SignedQuote | null>(null);
   const [quoteCapability, setQuoteCapability] = useState(false);
   const [geminiTradeState, setGeminiTradeState] = useState("unqualified");
-  const [note, setNote] = useState("");
   const [error, setError] = useState("");
-  const [pending, setPending] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useModeChange(() => window.location.reload());
@@ -85,7 +83,10 @@ export default function ComparePage() {
         setThesis(thesisResult.thesis);
         setFamily(topic.family);
         setEvidence(topic.evidence);
-        setSelectedScenarioId(topic.family.scenarios[0]?.id || "");
+        const requestedScenario = new URLSearchParams(window.location.search).get("scenario");
+        setSelectedScenarioId(topic.family.scenarios.some((scenario) => scenario.id === requestedScenario)
+          ? requestedScenario!
+          : topic.family.scenarios[0]?.id || "");
         const allowed = new Set(topic.family.contracts.map((contract) => contract.id));
         let restored: BasketLeg[] | null = null;
         try {
@@ -137,25 +138,6 @@ export default function ComparePage() {
     }
   }, [thesis, family, budget, basket]);
 
-  async function requestArcQuote() {
-    if (!thesis || !quoteCapability || mode === "replay") return;
-    setPending(true);
-    setError("");
-    setNote("");
-    try {
-      const response = await api<{ quote: SignedQuote; note: string }>("/api/quotes", {
-        method: "POST",
-        body: JSON.stringify({ thesisId: id, mode, maxPayout: budget, taker: address }),
-      });
-      setQuote(response.quote);
-      setNote(response.note);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Quote request failed. Your comparison remains available to retry.");
-    } finally {
-      setPending(false);
-    }
-  }
-
   function choose(value: ConstructionChoice) {
     setSelected(value);
     try { sessionStorage.setItem(`thesis-construction:${id}`, value); } catch { /* selection is still active */ }
@@ -167,10 +149,6 @@ export default function ComparePage() {
     const url = new URL(window.location.href);
     url.searchParams.set("maxPayout", value);
     window.history.replaceState({}, "", url);
-    if (quote) {
-      setQuote(null);
-      setNote("Maximum payout changed. Request a fresh quote before reviewing trade terms.");
-    }
   }
 
   const budgetValid = (() => {
@@ -214,21 +192,17 @@ export default function ComparePage() {
   const labels = family.scenarios.map((scenario) => scenario.label);
   const basketValues = calculations?.basketRows.map((row) => row.payout) || [];
   const basketMaximum = basketValues.reduce((maximum, value) => value > maximum ? value : maximum, 0n);
-  const arcCost = quote ? BigInt(quote.premium) + BigInt(quote.fee) : null;
   const basketShortfalls = belowCostLabels(basketValues, labels, calculations?.basketCost?.total ?? null);
   const singleShortfalls = belowCostLabels(ticket?.rows.map((row) => row.payout) || [], labels, calculations?.singleCost?.total ?? null);
-  const arcShortfalls = belowCostLabels(calculations?.desired?.rows.map((row) => row.payout) || [], labels, arcCost);
+  const arcShortfalls = belowCostLabels(calculations?.desired?.rows.map((row) => row.payout) || [], labels, null);
   const selectedName = activeConstruction === "gemini-basket" ? "Gemini basket" : activeConstruction === "gemini-single" ? "One Gemini position" : "Arc custom position";
   const selectedCost = activeConstruction === "gemini-basket"
     ? calculations?.basketCost ? `~${formatUsdc(calculations.basketCost.total)} USDC before fees` : "Reference cost unavailable"
     : activeConstruction === "gemini-single"
       ? calculations?.singleCost ? `~${formatUsdc(calculations.singleCost.total)} USDC before fees` : "Reference cost unavailable"
-      : quote ? `${formatUsdc(arcCost || 0n)} USDC including quote fee` : "Not quoted";
-  const action = activeConstruction === "arc-custom" && showArc
-    ? quote ? { label: quote.signature === "0x" ? "Review paper quote" : "Review Arc quote", href: `/quotes/${quote.id}` } : { label: mode === "paper" ? "Request paper quote" : "Request Arc quote", onClick: () => void requestArcQuote(), disabled: pending || !budgetValid }
-    : activeConstruction === "gemini-basket" ? { label: "Edit basket", href: `/theses/${id}/build` }
-      : activeConstruction === "gemini-single" ? { label: "Open Gemini market", href: `/gemini/${family.sourceEvent.ticker}?thesisId=${encodeURIComponent(id)}` }
-        : undefined;
+      : "Not quoted";
+  const reviewHref = `/theses/${id}/review?construction=${activeConstruction}&maxPayout=${encodeURIComponent(budget)}&scenario=${encodeURIComponent(selectedScenarioId)}`;
+  const action = { label: "Review selected construction", href: reviewHref, disabled: !budgetValid };
 
   return (
     <div className="space-y-4">
@@ -237,9 +211,8 @@ export default function ComparePage() {
       <ThesisWorkspaceTabs thesisId={id} current="Compare" />
       {family.mode === "replay" ? <p className="rounded-lg bg-[#FFF8E7] p-3 text-xs text-muted">Replay prices are recorded demonstration fixtures, not current Gemini quotes. Paper mode can request a simulated Arc quote; no live Gemini order is supported from this data.</p> : null}
       {error ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{error}</p> : null}
-      {note ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">{note}</p> : null}
       <Field label="Desired view maximum payout (USDC)" hint="The custom view and single Gemini ticket use the same gross maximum payout. Edited basket allocations may have a different maximum; it is shown in the table.">
-        <input className={inputCls()} type="number" min="0.01" step="0.01" value={budget} disabled={pending} onChange={(event) => changeBudget(event.target.value)} />
+        <input className={inputCls()} type="number" min="0.01" step="0.01" value={budget} onChange={(event) => changeBudget(event.target.value)} />
       </Field>
       {calculations?.error ? <p role="alert" className="text-sm text-bad">{calculations.error}</p> : null}
       {calculations?.desired ? (
@@ -269,14 +242,12 @@ export default function ComparePage() {
                   <tbody>
                     <tr><td className="border-b border-line py-3 pr-3">Gemini basket · {basket.filter((leg) => leg.enabled).length} legs</td><td className="border-b border-line py-3 pr-3">{formatUsdc(basketMaximum)} USDC</td><td className="border-b border-line py-3 pr-3">{calculations.basketCost ? `~${formatUsdc(calculations.basketCost.total)} before fees` : "Reference cost unavailable"}</td><td className="border-b border-line py-3 pr-3">{basketShortfalls}</td><td className="border-b border-line py-3 pr-3">Independent orders; may fill or fail separately</td><td className="border-b border-line py-3">{geminiTradeState === "available" ? "Native orders qualified" : "Research only · native orders gated"}</td></tr>
                     {ticket && ticketContract ? <tr><td className="border-b border-line py-3 pr-3">One Gemini position · {ticketContract.label}</td><td className="border-b border-line py-3 pr-3">{formatUsdc(ticket.maxPayout)} USDC</td><td className="border-b border-line py-3 pr-3">{calculations.singleCost ? `~${formatUsdc(calculations.singleCost.total)} before fees` : "Reference cost unavailable"}</td><td className="border-b border-line py-3 pr-3">{singleShortfalls}</td><td className="border-b border-line py-3 pr-3">One limit order; may miss range boundaries</td><td className="border-b border-line py-3">{geminiTradeState === "available" ? "Native order qualified" : "Research only · native order gated"}</td></tr> : null}
-                    {showArc ? <tr><td className="border-b border-line py-3 pr-3">Arc custom position</td><td className="border-b border-line py-3 pr-3">{formatUsdc(calculations.desired.maxPayout)} USDC</td><td className="border-b border-line py-3 pr-3">{quote ? `${formatUsdc(arcCost || 0n)} incl. fee` : "Not quoted"}</td><td className="border-b border-line py-3 pr-3">{arcShortfalls}</td><td className="border-b border-line py-3 pr-3">One custom contract with the selected scenario schedule</td><td className="border-b border-line py-3">{mode === "paper" ? "Paper simulation" : quote ? quote.status : "Quote available"}</td></tr> : null}
+                    {showArc ? <tr><td className="border-b border-line py-3 pr-3">Arc custom position</td><td className="border-b border-line py-3 pr-3">{formatUsdc(calculations.desired.maxPayout)} USDC</td><td className="border-b border-line py-3 pr-3">Not quoted</td><td className="border-b border-line py-3 pr-3">{arcShortfalls}</td><td className="border-b border-line py-3 pr-3">One custom contract with the selected scenario schedule</td><td className="border-b border-line py-3">{mode === "paper" ? "Paper simulation available after review" : "Review available; quote depends on configured service"}</td></tr> : null}
                   </tbody>
                 </table>
               </div>
               <p className="mt-3 text-xs text-muted">“Payout below cost” lists losing scenarios when costs are known. Gemini cost estimates use displayed ask-side references, exclude fees, size, and slippage, and are not executable quotes. A Gemini basket uses independent orders, not an exchange combo.</p>
             </Card>
-            {showArc && activeConstruction === "arc-custom" && !quote ? <Button onClick={() => void requestArcQuote()} disabled={pending || !budgetValid}>{pending ? "Requesting…" : mode === "paper" ? "Request paper quote" : "Request Arc quote"}</Button> : null}
-            {showArc && activeConstruction === "arc-custom" && quote ? <Card><h2 className="font-serif text-lg">{quote.signature === "0x" ? "Paper quote ready" : "Arc quote ready"}</h2><p className="mt-2 text-sm text-muted">Premium {formatUsdc(BigInt(quote.premium))} USDC · fee {formatUsdc(BigInt(quote.fee))} USDC · maximum loss {formatUsdc(arcCost || 0n)} USDC</p><div className="mt-3"><Button href={`/quotes/${quote.id}`}>Review exact terms</Button></div></Card> : null}
             {activeConstruction !== "arc-custom" ? <Card><h2 className="font-serif text-lg">No Gemini order submitted</h2><p className="mt-2 text-sm text-muted">{geminiTradeState === "available" ? "This comparison does not submit the basket, because its legs are independent and can partially fill. Review individual orders at the Gemini event." : "Native Gemini trading remains gated until a sandbox order, status lookup, and position/fill retrieval are verified. You can continue with market research and payoff comparisons."}</p></Card> : null}
             <VoicePanel slug={family.slug} family={family} evidence={evidence.length ? evidence : evidenceForSlug(family.slug, family.mode)} thesis={thesis} context="compare" maxPayout={budget} title="Talk through the comparison" />
           </div>

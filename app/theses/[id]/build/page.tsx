@@ -26,6 +26,9 @@ function initialLegs(thesis: ThesisRevision, family: MarketFamily, maximum: stri
   const half = (() => {
     try { return formatUsdc(parseUsdc(maximum) / 2n); } catch { return "50"; }
   })();
+  if (thesis.template === "binary" && family.predicates.length === 1) {
+    return [{ contractId: family.predicates[0].contractId, side: thesis.direction || "yes", payoutAmount: maximum, enabled: true }];
+  }
   if (thesis.template === "range" && thesis.lowerThreshold != null && thesis.upperThreshold != null) {
     const lower = family.predicates.find((predicate) => predicate.threshold === thesis.lowerThreshold);
     const upper = family.predicates.find((predicate) => predicate.threshold === thesis.upperThreshold);

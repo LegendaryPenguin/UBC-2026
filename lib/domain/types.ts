@@ -12,7 +12,7 @@ export type MarketStatus =
   | "invalid"
   | "unknown";
 
-export type ViewTemplate = "directional" | "range" | "outside" | "stepped";
+export type ViewTemplate = "binary" | "directional" | "range" | "outside" | "stepped";
 export type Direction = "yes" | "no";
 
 export interface SourceEvent {
@@ -49,6 +49,19 @@ export interface SourceContract {
   noAsk?: string | null;
   lastTrade: string | null;
   priceHistory?: PricePoint[] | null;
+  orderBook?: MarketDepthSnapshot | null;
+}
+
+export interface OrderBookLevel {
+  price: string;
+  quantity: string;
+}
+
+export interface MarketDepthSnapshot {
+  bids: OrderBookLevel[];
+  asks: OrderBookLevel[];
+  receivedAt: string;
+  sourceTime: string | null;
 }
 
 export interface PricePoint {
@@ -255,6 +268,8 @@ export interface PositionRecord {
   finalizationDelay: number;
   familyId: string;
   topicSlug: string;
+  sourceTicker?: string;
+  sourceContractIds?: string[];
   createdAt: string;
 }
 
@@ -269,6 +284,7 @@ export interface AlertRule {
   channel: "inbox";
   paused: boolean;
   createdAt: string;
+  triggeredAt?: string;
 }
 
 export interface NotificationItem {

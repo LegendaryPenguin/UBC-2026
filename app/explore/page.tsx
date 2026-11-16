@@ -140,7 +140,7 @@ export default function Explore() {
                 <div>
                   <Link href={`/topics/${family.slug}`} className="font-serif text-xl">{family.title}</Link>
                   <p className="mt-1 text-sm text-muted">{family.question}</p>
-                  <p className="mt-2 text-xs text-muted">{family.predicates.length} related Gemini contracts · settles {formatTime(family.observationTime)} · {family.freshness}</p>
+                  <p className="mt-2 text-xs text-muted">{family.predicates.length === 1 ? "1 selected Gemini contract" : `${family.predicates.length} verified Gemini contracts`} · observes {formatTime(family.observationTime)} · {family.freshness}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button onClick={() => void toggleWatch(family)} kind="ghost" disabled={watchingSlug === family.slug}>{watchingSlug === family.slug ? "Saving…" : watched ? "Remove from watchlist" : "Watch topic"}</Button>

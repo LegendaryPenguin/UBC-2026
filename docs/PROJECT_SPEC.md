@@ -1,8 +1,8 @@
 # Thesis — VFINAL reference specification (superseded scope)
 
-> **Active scope, set by the user's later correction:** build the four-board journey in [hackathon-scope.md](hackathon-scope.md): Explore a Gemini question → speak/refine and confirm a view → inspect its basket → compare constructions and review before choosing. Gemini is the priority bounty; ElevenLabs voice and the Arc custom-position path are pursued only as they strengthen these same boards. Use this VFINAL document for detailed behavior, validation, permissions, and recovery only where a feature is retained. Its broader F1–F20 catalog and original execution-to-claim goal are reference material, not the active plan.
+> **Active scope, updated by the user's latest direction:** build the corrected four-board visual journey and the full narrated Thesis flow in [hackathon-scope.md](hackathon-scope.md): Explore a Gemini question → speak/refine and confirm a view → inspect its basket → compare and review → optionally authorize a supported action → follow the position and revisit its history. Gemini is the priority bounty; ElevenLabs voice and the Arc custom-position path support this same journey. Use this VFINAL document for detailed behavior, validation, permissions, and recovery only where a feature is retained. Unrelated F1–F20 modules remain reference material.
 
-**Active target: the corrected storyboard experience, ending at construction comparison and a review that can be canceled safely.** Execution after review, ongoing position management, settlement/claims, and standalone account, monitoring, support, and operations modules are outside the current acceptance target. A control retained in the four boards must still have complete behavior; a reference-only VFINAL module is not a completion blocker.
+**Active target: the complete narrated journey, with the corrected four boards as its core visual workspace.** A user can stop at Research or Compare; when they choose to continue, Review precedes any explicitly authorized supported action, and Portfolio/History show the resulting state. A visible capability must be real or clearly unavailable. Standalone account administration, broad monitoring/support/collaboration, and operator modules remain outside the current target.
 
 Prepared November 14, 2026 (America/Chicago). Proposed product specification; implementation and external-provider availability remain to be verified.
 
@@ -13,7 +13,7 @@ Prepared November 14, 2026 (America/Chicago). Proposed product specification; im
 
 # Original VFINAL product contract — reference material only
 
-This section records the earlier broader product scope, including capabilities beyond the corrected storyboard. The current user-approved storyboard supersedes this catalog where the requested scope differs. Its interaction, validation, financial-safety, source-verification, and recovery details remain applicable to features retained in the four-step journey.
+This section records the earlier broader product scope, including capabilities beyond the corrected narrated journey. The current user-approved scope supersedes this catalog where the requested scope differs. Its interaction, validation, financial-safety, source-verification, and recovery details remain applicable to features retained in the MVP.
 
 “Final” means the target product specification is complete enough to guide implementation and acceptance. It does not claim that integrations have been deployed, audited, approved, or made available by third parties. External capabilities have explicit release gates and unavailable states. Do not fill an unavailable integration with a simulated success.
 
@@ -460,13 +460,13 @@ Usability testing verifies that users can state the winning condition, maximum l
 
 ## F20. Cursor handoff — corrected active scope
 
-Use the four-step storyboard in [hackathon-scope.md](hackathon-scope.md) as the active implementation target. This document remains a reference for detailed behavior when a feature is retained; its standalone modules are deferred unless the central journey depends on them.
+Use the four-board visual storyboard and narrated end-to-end journey in [hackathon-scope.md](hackathon-scope.md) as the active implementation target. This document remains a reference for detailed behavior when a feature is retained; unrelated standalone modules are deferred.
 
-Use the active control-to-handler sequence in [interaction-checklist.md](interaction-checklist.md). Do not turn the full F3–F17 route inventory into a work queue. For each retained control record implementation location, handler, API/contract dependency, validation, pending/success/failure/recovery states, and next action. Keep incomplete provider capabilities behind an honest state; never simulate live execution to make the interface look complete.
+Use the active control-to-handler sequence in [interaction-checklist.md](interaction-checklist.md). Do not turn the full F3–F17 route inventory into a work queue. For each retained control record implementation location, handler, API/contract dependency, validation, permission, pending/success/failure/recovery states, and next action. Keep incomplete provider capabilities behind an honest state; never simulate live execution to make the interface look complete.
 
-Deliver the corrected Explore → Speak/refine → Build → Compare/Review journey and its retained page states. Gemini has priority. Use ElevenLabs in the conversation and explanation actions; keep Arc as a conditional construction option. Preserve source and financial safety. The QuickNode post-trade pipeline, native Gemini order execution, funding providers, and exit contracts are outside this target unless the user expands it.
+Deliver the corrected Explore → Speak/refine → Build → Compare/Review journey, plus the optional supported execution, Portfolio, and History flows described in the user narrative. Gemini has priority. Use ElevenLabs in the conversation and explanation actions; keep Arc as a conditional construction option. Preserve source and financial safety. QuickNode operator automation and unrelated account/support features remain outside this target.
 
-Completion requires the four boards to pass as complete interaction sequences, with every retained control working or clearly unavailable for a verifiable reason. Review must be safe to cancel and must not execute by itself. Do not count separate VFINAL modules as blockers or label the full product complete based on this storyboard.
+Completion requires the four boards and the optional follow-through paths to pass as complete interaction sequences. Review must be safe to cancel; execution requires an explicit user action and a qualified venue. Portfolio and History must accurately reflect the actual paper/testnet/live state, with unavailable provider paths clearly explained. Do not count unrelated VFINAL modules as blockers or label the full product complete based on this MVP.
 
 ### Updated reference links
 
@@ -482,7 +482,7 @@ These extend the official Gemini, Arc, Circle, Linear, and pinned repository ref
 
 # Original VFINAL supplement — technical and product reference
 
-This supplement preserves the earlier product plan and technical detail. Only its corrected scope and execution instructions in sections 2 and 18 are active; the remaining pages are references for features retained in the four-board storyboard. Old P0/P1/P2 labels, route lists, and execution-to-claim acceptance criteria do not expand the active target.
+This supplement preserves the earlier product plan and technical detail. Its scope and execution instructions in sections 2 and 18 are updated for the current MVP; the remaining pages are references for features retained in the narrated user journey. Old P0/P1/P2 labels and unrelated route requirements do not expand the active target.
 
 Supporting research · Original planning date: November 14, 2026.
 
@@ -567,26 +567,27 @@ Gemini is the priority bounty and the primary source for market discovery, contr
 
 ### 2.2 What the demonstration should prove
 
-| Claim | Visible proof within the four boards |
+| Claim | Visible proof in the corrected workspace and narrated follow-through |
 |---|---|
 | Uses Gemini meaningfully | Actual event/contract identifiers, instrument symbols, terms, data freshness, and evidence provenance; unavailable live data is stated plainly |
 | Helps users form a view | Research context, supporting/challenging evidence where available, editable text/transcript, precise proposed view, and explicit confirmation |
 | Makes payoff consequences clear | Supported basket construction, full scenario outcomes, outside-view mismatch, and a comparison on an explicit common basis |
 | Uses ElevenLabs meaningfully | User-initiated voice, editable transcript, shared text/voice actions, spoken explanation where useful, and a complete text fallback |
-| Uses Arc meaningfully when available | A distinct custom construction with honest paper/testnet/live labeling and exact terms in Review; no fabricated quote or successful transaction |
+| Uses Arc meaningfully when available | A distinct custom construction with honest paper/testnet/live labeling, exact terms in Review, and a separate explicit acceptance; no fabricated quote or successful transaction |
+| Follows a position safely | Portfolio and History link to the originating thesis; a position settlement alert creates an in-app update when Alerts is opened/refreshed; unsupported exits remain unavailable |
 | Preserves safety | Review is read-only and cancelable; no wallet/funding requirement for research; no financial action authorized by voice |
 
 ### 2.3 Active priority order
 
-1. Complete and verify the four storyboard boards, including every retained control's validation, permissions, loading/success/error/recovery behavior.
+1. Complete and verify the corrected four storyboard boards and narrated follow-through, including Review, optional supported action, Portfolio, History, and the retained position settlement alert; preserve each control's validation, permissions, loading/success/error/recovery behavior.
 2. Prioritize Gemini live market discovery and exact contract semantics; keep Replay separate and visibly labeled if live access is unavailable.
 3. Integrate ElevenLabs into the same research and clarification flow, preserving manual text controls and keeping credentials server-side.
 4. Surface the Arc custom-position alternative only when it adds value and the configured capability supports it; explain unavailable states honestly.
-5. Keep all other original modules, native order management, post-trade portfolio lifecycle, onchain deployment, settlement, and claims outside this completion target.
+5. Keep unrelated original modules, standalone full native-order administration, broad operator tooling, background/push alerts, support, and collaboration outside this target. The exact qualified single-contract order path, Paper lifecycle, and configured Arc path remain part of the narrated journey when their capability is available.
 
 ### 2.4 Product success criteria
 
-A first-time user can explore a Gemini question, articulate and confirm a supported view by voice or text, inspect the basket's outcomes and mismatch, compare supported constructions, and review then cancel without executing. They can tell live data from Replay, known price/cost from unknown fees, and a proposed view from a confirmed one. Trading is optional and is not required to complete the demonstration.
+A first-time user can explore a Gemini question, articulate and confirm a supported view by voice or text, inspect the basket's outcomes and mismatch, compare supported constructions, and review then cancel without executing. If they continue, a supported Paper or qualified venue action produces an accurately linked Portfolio/History record, with a settlement alert checked on Alerts refresh. They can tell live data from Replay, known price/cost from unknown fees, and a proposed view from a confirmed one. Trading is optional and is not required to complete the demonstration.
 
 ## 3. Reference repositories: precise reuse guidance
 
@@ -1423,7 +1424,7 @@ A solo builder should work in that same dependency order rather than creating al
 
 ### Cut order if behind
 
-Cut share pages, alerts, custom probability editor, additional topics, native Gemini execution, cross-chain funding, stepped payouts, advanced model research, and visual flourishes. Preserve the mismatch comparison, real quote, collateral, claim, and truthful data labels. If necessary, one well-explained binary custom payout is better than an unverified range contract.
+Cut share pages, unrelated alert types and background delivery, custom probability editor, additional topics, unqualified native Gemini execution, cross-chain funding, stepped payouts, advanced model research, and visual flourishes. Preserve the in-app position settlement alert, mismatch comparison, truthful Paper quote/claim, and data labels. If necessary, one well-explained binary custom payout is better than an unverified range contract.
 
 ## 17. Demo, submission, and judging proof
 
@@ -1471,19 +1472,19 @@ Include a small `docs/qualification.md` table: capability, environment, evidence
 
 ## 18. Active execution instructions
 
-Use [hackathon-scope.md](hackathon-scope.md) as the implementation target and [plan-progress.md](plan-progress.md) as the work queue. Gemini live discovery, contract meaning, and source provenance have first priority. Build ElevenLabs voice into the retained research and clarification actions while keeping equivalent manual text controls. Include an Arc custom construction only where it improves the comparison and is actually available.
+Use [hackathon-scope.md](hackathon-scope.md) as the implementation target and [plan-progress.md](plan-progress.md) as the work queue. Gemini live discovery, contract meaning, and source provenance have first priority. Build ElevenLabs voice into research, view clarification, and scenario explanation while keeping equivalent manual text controls. Include an Arc custom construction only where it improves the comparison and is actually available.
 
 Preserve the detailed VFINAL behavior for each retained control: start and goal, enablement, handler, data changes, authorization, immediate and final feedback, cancel/back/refresh, error/retry, and next action. Keep voice proposals visibly editable and unconfirmed until the user confirms them. Financial review is explicit and cancelable; voice cannot authorize an action. Never fabricate live data, costs, liquidity, outcomes, or transaction receipts.
 
 ### Definition of done
 
-- Complete the four storyboard sequences from Explore through a safe, cancelable Review, including loading, success, empty, permission, provider failure, cancel/back, refresh, and retry states.
+- Complete the four storyboard sequences and the optional follow-through from Review through a supported action, Portfolio, and History, including loading, success, empty, permission, provider failure, cancel/back, refresh, and retry states.
 - Verify the actual Gemini contracts and source data shown, or clearly identify what remains unavailable; keep Replay distinct from Live.
 - Verify the shared voice/text actions and manual controls; keep the ElevenLabs credential server-side.
 - Show supported basket and comparison scenarios honestly, with known costs, unknown fees, maximum loss, payout, and settlement terms clearly distinguished.
-- Keep My Theses, Portfolio navigation, and History usable as supporting destinations with accurate empty/unavailable states.
+- Keep My Theses, Portfolio, and History usable, with linked position status, source reasoning, outcome state, and accurate empty/unavailable behavior.
 
-Order placement, post-trade portfolio management, onchain deployment, settlement, and claims are beyond this active target. Do not treat their historical descriptions elsewhere in this reference document as work items.
+Use a truthful Paper or qualified testnet/live execution path. Production readiness, broad native order management, operator automation, and unrelated VFINAL modules remain outside this target; do not present any unqualified capability as working.
 
 ## 19. Research sources and unresolved checks
 

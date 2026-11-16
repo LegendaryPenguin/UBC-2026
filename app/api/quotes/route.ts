@@ -127,8 +127,9 @@ export async function POST(req: Request) {
         return scenario.predicateYes[predicate.id] === (contract?.resolutionSide === "yes");
       }))
       : undefined;
+    const storedQuote = { ...quote, sourceTicker: family.sourceEvent.ticker, sourceContractIds: spec.sourceContractIds };
     mutate((s) => {
-      s.quotes.push({ ...quote, thesisId: thesis.id, accountId: owner, mode: body.mode, recordedScenarioIndex: recordedScenario?.index });
+      s.quotes.push({ ...storedQuote, thesisId: thesis.id, accountId: owner, mode: body.mode, recordedScenarioIndex: recordedScenario?.index });
       thesis.status = "quoted";
     });
     if (ctx) {
@@ -146,7 +147,7 @@ export async function POST(req: Request) {
       });
     }
     return ok({
-      quote,
+      quote: storedQuote,
       spec: {
         ...spec,
         maxPayout: spec.maxPayout.toString(),

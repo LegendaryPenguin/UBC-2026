@@ -1,6 +1,6 @@
 import { getEvent, payloadHash } from "@/lib/gemini/client";
 import { flattenEvents, type GeminiEvent } from "@/lib/gemini/types";
-import { familyFromEvent } from "@/lib/gemini/families";
+import { binaryFromEvent, familyFromEvent } from "@/lib/gemini/families";
 import recorded from "@/fixtures/gemini-crypto-nov20.json";
 import settled from "@/fixtures/gemini-settled-binary.json";
 import { fail, ok } from "@/lib/server/http";
@@ -39,15 +39,25 @@ export async function GET(req: Request, { params }: { params: { ticker: string }
     }
   }
 
-  const compatible = flattenEvents([event])
-    .map((candidate) => familyFromEvent(candidate, fetchedAt, hash, mode === "live"))
-    .find((family) => family !== null);
+  const compatibleTopics = flattenEvents([event]).flatMap((candidate) => {
+    const family = familyFromEvent(candidate, fetchedAt, hash, mode === "live");
+    if (family) return [family];
+    return (candidate.contracts ?? []).flatMap((contract) => {
+      const binary = binaryFromEvent(candidate, fetchedAt, hash, mode === "live", contract.id);
+      return binary ? [binary] : [];
+    });
+  });
   return ok({
     event,
     mode,
     source: mode === "live" ? "Gemini public prediction markets API" : "Recorded Gemini snapshot",
     fetchedAt,
     payloadHash: hash,
-    compatibleTopicSlug: compatible?.slug ?? null,
+    compatibleTopicSlug: compatibleTopics[0]?.slug ?? null,
+    compatibleTopics: compatibleTopics.map((family) => ({
+      slug: family.slug,
+      contractId: family.contracts[0]?.id,
+      contractLabel: family.contracts[0]?.label,
+    })),
   });
 }

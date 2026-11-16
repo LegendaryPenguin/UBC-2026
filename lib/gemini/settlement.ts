@@ -8,6 +8,7 @@ export function settledGeminiOutcome(params: {
   fetchedAt: string;
   payloadHash: string;
   expectedFamilyHash: string;
+  expectedContractIds?: string[];
   expectedPayouts: string[];
   expectedLabels: string[];
 }) {
@@ -15,32 +16,36 @@ export function settledGeminiOutcome(params: {
   if (!event.ticker || event.status !== "settled" || !Array.isArray(event.contracts) || event.contracts.length === 0) {
     throw new Error("Gemini has not reported this event as settled.");
   }
-  const contracts = event.contracts;
-  if (contracts.some((contract) => contract.status !== "settled" ||
+  const allContracts = event.contracts;
+  const candidateFamilies: MarketFamily[] = [];
+  const compatibleFamily = familyFromEvent(event, fetchedAt, payloadHash, true);
+  if (compatibleFamily) candidateFamilies.push(compatibleFamily);
+  for (const contract of allContracts) {
+    const binary = binaryFromEvent(event, fetchedAt, payloadHash, true, contract.id, true);
+    if (binary) candidateFamilies.push(binary);
+  }
+  const family = candidateFamilies.find((candidate) =>
+    candidate.familyHash.toLowerCase() === params.expectedFamilyHash.toLowerCase() &&
+    (!params.expectedContractIds || [...candidate.contracts.map((contract) => contract.id)].sort().join("\n") === [...params.expectedContractIds].sort().join("\n"))
+  );
+  if (!family) throw new Error("Gemini's event rules or selected contract identifiers changed since this position was accepted.");
+  const contracts = allContracts.filter((contract) => family.contracts.some((selected) => selected.id === contract.id));
+  if (contracts.length !== family.contracts.length || contracts.some((contract) => contract.status !== "settled" ||
     (contract.resolutionSide !== "yes" && contract.resolutionSide !== "no") ||
     !contract.resolvedAt || !Number.isFinite(Date.parse(contract.resolvedAt)))) {
-    throw new Error("Every Gemini contract must have a final side and resolution timestamp.");
+    throw new Error("Every contract used by this position must have a final Gemini outcome and resolution timestamp.");
   }
   const resolvedAt = event.resolvedAt || contracts.map((contract) => contract.resolvedAt!).sort().at(-1)!;
   if (!Number.isFinite(Date.parse(resolvedAt))) throw new Error("Gemini's event resolution timestamp is invalid.");
-
-  const family: MarketFamily | null = familyFromEvent(event, fetchedAt, payloadHash, true) ??
-    (contracts.length === 1 ? binaryFromEvent(event, fetchedAt, payloadHash, true) : null);
-  if (!family || family.predicates.length !== contracts.length) {
-    throw new Error("This event's contract set is not a supported exhaustive payoff family.");
-  }
-  if (family.familyHash.toLowerCase() !== params.expectedFamilyHash.toLowerCase()) {
-    throw new Error("Gemini's event rules or contract identifiers changed since this position was accepted.");
-  }
   if (family.scenarios.length !== params.expectedPayouts.length ||
     family.scenarios.map((scenario) => scenario.label).join("\n") !== params.expectedLabels.join("\n")) {
     throw new Error("The source scenarios do not match the immutable position payout schedule.");
   }
 
   const resolvedSides = new Map(contracts.map((contract) => [contract.id, contract.resolutionSide]));
-  const candidates = family.scenarios.filter((scenario) => family.predicates.every((predicate) =>
+  const scenarioCandidates = family.scenarios.filter((scenario) => family.predicates.every((predicate) =>
     scenario.predicateYes[predicate.id] === (resolvedSides.get(predicate.contractId) === "yes")));
-  if (candidates.length !== 1) throw new Error("Gemini's final contract results do not map to one unique scenario.");
+  if (scenarioCandidates.length !== 1) throw new Error("Gemini's final contract results do not map to one unique scenario.");
 
   const sourceSnapshot = {
     id: event.id,
@@ -61,7 +66,7 @@ export function settledGeminiOutcome(params: {
   const canonical = JSON.stringify(sourceSnapshot);
   return {
     family,
-    scenario: candidates[0],
+    scenario: scenarioCandidates[0],
     evidenceHash: keccak256(stringToHex(canonical)),
     payloadHash,
     fetchedAt,

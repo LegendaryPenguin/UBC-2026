@@ -7,14 +7,19 @@ export type {
   GeminiEvent,
   GeminiListParams,
   GeminiListResponse,
+  GeminiOrderbook,
+  GeminiOrderbookLevel,
   GeminiPrices,
   GeminiStatus,
 } from "@/lib/gemini/types";
 
 const BASE = "https://api.gemini.com/v1/prediction-markets";
-let lastApiCheck: { at: string; failed: boolean } | null = null;
+type GeminiApiCheck = { at: string; failed: boolean };
+type GeminiRuntime = typeof globalThis & { __thesisGeminiApiCheck?: GeminiApiCheck };
+const runtime = globalThis as GeminiRuntime;
 
 export function geminiApiHealth() {
+  const lastApiCheck = runtime.__thesisGeminiApiCheck ?? null;
   const at = lastApiCheck?.at ?? null;
   const fresh = at != null && Date.now() - Date.parse(at) < 5 * 60_000;
   const state = !fresh ? "unqualified" : lastApiCheck?.failed ? "degraded" : "available";
@@ -24,7 +29,9 @@ export function geminiApiHealth() {
   return { state, note };
 }
 function recordApiCheck(failed: boolean) {
-  lastApiCheck = { at: new Date().toISOString(), failed };
+  // Next bundles API routes separately; globalThis shares the observation
+  // between the market route and /api/status within the same Node runtime.
+  runtime.__thesisGeminiApiCheck = { at: new Date().toISOString(), failed };
 }
 
 export function payloadHash(value: unknown): string {

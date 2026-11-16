@@ -3,8 +3,10 @@ import { fail, ok, readJson } from "@/lib/server/http";
 import { mutate, readStore, uid } from "@/lib/server/store";
 import { thesisOwner } from "@/lib/server/session";
 import { recordThesisVersion, thesisSnapshot } from "@/lib/server/thesis-history";
+import { getTopic } from "@/lib/gemini/catalog";
+import { compileView } from "@/lib/payoffs/compile";
 
-const VIEW_TEMPLATES: ViewTemplate[] = ["directional", "range", "outside", "stepped"];
+const VIEW_TEMPLATES: ViewTemplate[] = ["binary", "directional", "range", "outside", "stepped"];
 
 function getOwnedThesis(id: string, accountId: string) {
   return readStore().theses.find((thesis) =>
@@ -21,7 +23,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const body = await readJson<Partial<ThesisRevision> & { action?: string; revision?: number }>(req);
+  const body = await readJson<Partial<ThesisRevision> & { action?: string; revision?: number; mode?: string }>(req);
   const accountId = thesisOwner();
   if (!accountId) return fail("AUTH", "Thesis owner required", 401);
   const existing = getOwnedThesis(params.id, accountId);
@@ -75,6 +77,30 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
   if (body.evidenceIds !== undefined && (!Array.isArray(body.evidenceIds) || body.evidenceIds.some((id) => typeof id !== "string"))) {
     return fail("INVALID", "Evidence references are invalid.");
+  }
+
+  if (body.mode !== undefined && !["live", "replay", "paper", "research"].includes(body.mode)) {
+    return fail("INVALID", "Choose Live or Replay market data.");
+  }
+  const viewFieldsChanged = body.template !== undefined || body.direction !== undefined ||
+    body.lowerThreshold !== undefined || body.upperThreshold !== undefined;
+  if (body.action === "confirm" || viewFieldsChanged) {
+    const family = await getTopic(existing.topicSlug, body.mode === "live" ? "live" : "replay");
+    if (!family || family.id !== existing.familyId || family.version !== existing.familyVersion) {
+      return fail("UNSUPPORTED_FAMILY", "The source market changed or is unavailable. Reload it before confirming this view.", 409);
+    }
+    const template = body.template ?? existing.template;
+    if (template === "stepped") return fail("UNSUPPORTED_TEMPLATE", "Stepped views need the scenario editor, which is not available for this market yet.", 409);
+    try {
+      compileView(family, template, {
+        threshold: body.lowerThreshold !== undefined ? body.lowerThreshold : existing.lowerThreshold,
+        direction: body.direction !== undefined ? body.direction : existing.direction,
+        lower: body.lowerThreshold !== undefined ? body.lowerThreshold : existing.lowerThreshold,
+        upper: body.upperThreshold !== undefined ? body.upperThreshold : existing.upperThreshold,
+      }, 100_000000n);
+    } catch (error) {
+      return fail("INCOMPATIBLE_RULES", error instanceof Error ? error.message : "The view does not match this market.", 409);
+    }
   }
 
   let result: ThesisRevision | null = null;
