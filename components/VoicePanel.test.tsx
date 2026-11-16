@@ -174,6 +174,62 @@ describe("VoicePanel interaction flows", () => {
     expect(JSON.parse(String(requests("/api/research")[0].init?.body)).question).toBe("What does Friday settlement mean?");
   });
 
+  it("keeps clarification turns in context and shows a range preview only after the user answers", async () => {
+    class MockAudio {
+      static current: MockAudio;
+      currentTime = 0;
+      onended: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      pause = vi.fn();
+      play = vi.fn().mockResolvedValue(undefined);
+      constructor(_url: string) { MockAudio.current = this; }
+    }
+    vi.stubGlobal("Audio", MockAudio);
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:clarification") });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+    fetchHandler = async (url) => {
+      if (url === "/api/status") return reply({ services: [{ id: "voice", state: "available", note: "" }] });
+      if (url === "/api/research") {
+        const count = requests("/api/research").length;
+        if (count === 1) return reply({ answer: "I need one clarification first.", clarificationPrompt: "Do you mean official settlement or an earlier touch?" });
+        if (count === 2) return reply({ answer: "I will use settlement.", clarificationPrompt: "Would a range between $95,000 and $100,000 at settlement match?" });
+        return reply({ answer: "I drafted an editable range.", proposed: { template: "range", lowerThreshold: 95_000, upperThreshold: 100_000, rationale: "A bounded Friday range.", invalidation: "" } });
+      }
+      if (url === "/api/voice") return reply({}, true, true);
+      if (url === "/api/theses/thesis-1") return reply({ thesis: { ...thesis, revision: 2 } });
+      return reply({ error: { message: "Unexpected request" } }, false);
+    };
+    panel();
+    fireEvent.click(await screen.findByRole("button", { name: "Switch to text" }));
+
+    fireEvent.change(screen.getByLabelText("Your question"), { target: { value: "I expect a rise, but not a breakout." } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask question" }));
+    await screen.findByText("Do you mean official settlement or an earlier touch?");
+    expect(screen.getAllByText("Do you mean official settlement or an earlier touch?")).toHaveLength(1);
+    expect(screen.getByText("I need one clarification first.")).toBeTruthy();
+    expect(screen.queryByText("Suggested view preview")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Play spoken reply" }));
+    await screen.findByRole("button", { name: "Stop speaking" });
+    expect(JSON.parse(String(requests("/api/voice")[0].init?.body)).text).toContain("Do you mean official settlement or an earlier touch?");
+    fireEvent.click(screen.getByRole("button", { name: "Stop speaking" }));
+
+    fireEvent.change(screen.getByLabelText("Your clarification"), { target: { value: "At Friday's settlement." } });
+    fireEvent.click(screen.getByRole("button", { name: "Send clarification" }));
+    await screen.findByText("Would a range between $95,000 and $100,000 at settlement match?");
+
+    fireEvent.change(screen.getByLabelText("Your clarification"), { target: { value: "Yes, use this range." } });
+    fireEvent.click(screen.getByRole("button", { name: "Send clarification" }));
+    await screen.findByText("Suggested view preview");
+
+    const turns = requests("/api/research").map((call) => JSON.parse(String(call.init?.body)));
+    expect(turns[0].conversation).toEqual([{ role: "user", content: "I expect a rise, but not a breakout." }]);
+    expect(turns[1].conversation).toHaveLength(3);
+    expect(turns[1].conversation[2]).toMatchObject({ role: "user", content: "At Friday's settlement." });
+    expect(turns[2].conversation).toHaveLength(5);
+    expect(turns[2].conversation[4]).toMatchObject({ role: "user", content: "Yes, use this range." });
+    expect(requests("/api/theses/thesis-1")).toHaveLength(0);
+  });
+
   it.each([
     ["NotFoundError", "No microphone was found"],
     ["NotReadableError", "microphone is busy in another app"],

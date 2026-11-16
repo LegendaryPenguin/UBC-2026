@@ -18,6 +18,7 @@ type ViewProposal = {
   rationale: string;
   invalidation: string;
 };
+type ResearchTurn = { role: "user" | "assistant"; content: string };
 
 const STATUS_LABEL: Record<VoiceStatus, string> = {
   ready: "Ready",
@@ -68,6 +69,8 @@ export function VoicePanel({
   const [inputMode, setInputMode] = useState<InputMode>("voice");
   const [muted, setMuted] = useState(false);
   const [transcript, setTranscript] = useState("");
+  const [conversation, setConversation] = useState<ResearchTurn[]>([]);
+  const [clarificationPrompt, setClarificationPrompt] = useState("");
   const [answer, setAnswer] = useState("");
   const [languageCode, setLanguageCode] = useState("");
   const [error, setError] = useState("");
@@ -349,16 +352,19 @@ export function VoicePanel({
     setStatus("thinking");
     setError("");
     setNotice("No thesis or financial state changes until you apply an editable view preview.");
+    const nextConversation = [...conversation, { role: "user" as const, content: transcript.trim() }];
     try {
       const result = await api<{
         answer: string;
         citations?: { id: string; title: string }[];
         proposed?: Partial<ThesisRevision>;
+        clarificationPrompt?: string;
       }>("/api/research", {
         method: "POST",
         signal: controller.signal,
         body: JSON.stringify({
           question: transcript.trim(),
+          conversation: nextConversation,
           slug,
           thesisId: thesis?.id,
           mode: modeFromStorage(),
@@ -369,6 +375,14 @@ export function VoicePanel({
       if (!mountedRef.current) return;
       setAnswer(result.answer);
       setCitations(result.citations || []);
+      if (result.clarificationPrompt) {
+        setConversation([...nextConversation, { role: "assistant", content: result.clarificationPrompt }]);
+        setClarificationPrompt(result.clarificationPrompt);
+        setTranscript("");
+      } else {
+        setConversation([]);
+        setClarificationPrompt("");
+      }
       setProposal(result.proposed ? {
         template: result.proposed.template || thesis?.template || (family.predicates.length === 1 && family.contracts.length === 1 ? "binary" : family.predicates.length >= 2 ? "range" : "directional"),
         direction: result.proposed.direction ?? thesis?.direction ?? "yes",
@@ -458,7 +472,7 @@ export function VoicePanel({
   async function speak() {
     if (!answer) return;
     releasePlayback();
-    const spokenAnswer = answer
+    const spokenAnswer = [answer, clarificationPrompt].filter(Boolean).join(" ")
       .replace(/\[(ev-[a-z0-9-]+)\]/gi, " ")
       .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/gi, "$1")
       .replace(/https?:\/\/\S+/gi, "")
@@ -522,6 +536,8 @@ export function VoicePanel({
     if (status === "thinking") researchControllerRef.current?.abort();
     if (status === "speaking") releasePlayback();
     setTranscript("");
+    setConversation([]);
+    setClarificationPrompt("");
     lastRecordingRef.current = null;
     setAnswer("");
     setCitations([]);
@@ -566,7 +582,7 @@ export function VoicePanel({
         {status === "transcribing" ? <Button onClick={() => cancelInFlight("transcription")} kind="secondary">Cancel transcription</Button> : null}
         {status === "thinking" ? <Button onClick={() => cancelInFlight("research")} kind="secondary">Cancel research</Button> : null}
         <Button onClick={() => void ask()} kind="secondary" disabled={isBusy || !transcript.trim()}>
-          {status === "thinking" ? "Reviewing…" : context === "view" ? "Ask about this view" : context === "compare" ? "Explain scenarios" : "Ask question"}
+          {status === "thinking" ? "Reviewing…" : clarificationPrompt ? "Send clarification" : context === "view" ? "Ask about this view" : context === "compare" ? "Explain scenarios" : "Ask question"}
         </Button>
         {status === "speaking" ? <Button onClick={stopPlayback} kind="secondary">Stop speaking</Button> : (
           <Button onClick={() => void speak()} kind="ghost" disabled={!answer || voiceAvailability !== "available" || isBusy}>Play spoken reply</Button>
@@ -576,7 +592,12 @@ export function VoicePanel({
       </div>
       {voiceMessage && inputMode === "voice" ? <p className="mt-2 text-xs text-muted">{voiceMessage}</p> : null}
       {inputMode === "voice" && status === "listening" ? <p className="mt-2 text-xs text-muted">Recording stops automatically after 60 seconds. Mute pauses microphone input without ending the recording.</p> : null}
-      <Field label={inputMode === "voice" ? "Editable transcript or question" : "Your question"}>
+      {clarificationPrompt ? <div className="mt-3 rounded-lg border border-action/30 bg-[#F4F6FF] p-3" role="note">
+        <p className="text-sm font-medium">Clarification needed</p>
+        <p className="mt-1 text-sm">{clarificationPrompt}</p>
+        <p className="mt-2 text-xs text-muted">Your earlier wording is retained for this follow-up. Answer by voice or text, or use Clear to start over.</p>
+      </div> : null}
+      <Field label={clarificationPrompt ? (inputMode === "voice" ? "Spoken clarification or answer" : "Your clarification") : inputMode === "voice" ? "Editable transcript or question" : "Your question"}>
         <textarea
           id={`voice-question-${slug}`}
           className={`${inputCls()} mt-1 min-h-24 py-3`}
@@ -589,7 +610,7 @@ export function VoicePanel({
             setProposalSaved(false);
             setNotice("Question edited. Ask again to refresh the research reply.");
           }}
-          placeholder={context === "compare" ? "Explain how the custom payout differs by scenario from the ticket basket…" : "Ask about evidence, rules, or the view you want to express…"}
+          placeholder={clarificationPrompt ? "Answer the clarification…" : context === "compare" ? "Explain how the custom payout differs by scenario from the ticket basket…" : "Ask about evidence, rules, or the view you want to express…"}
           maxLength={3_000}
           disabled={!canEdit}
         />

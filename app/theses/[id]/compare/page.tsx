@@ -53,6 +53,7 @@ export default function ComparePage() {
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [mode, setMode] = useState<Mode>("replay");
   const [budget, setBudget] = useState("100");
+  const [lastValidBudget, setLastValidBudget] = useState("100");
   const [basket, setBasket] = useState<BasketLeg[]>([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState("");
   const [selected, setSelected] = useState<ConstructionChoice>("gemini-basket");
@@ -72,6 +73,14 @@ export default function ComparePage() {
         const savedBudget = new URLSearchParams(window.location.search).get("maxPayout") || (() => {
           try { return sessionStorage.getItem(`thesis-build-max:${id}`) || "100"; } catch { return "100"; }
         })();
+        const savedValidBudget = (() => {
+          try {
+            const remembered = sessionStorage.getItem(`thesis-build-max-valid:${id}`);
+            if (remembered && parseUsdc(remembered) > 0n) return remembered;
+            if (parseUsdc(savedBudget) > 0n) return savedBudget;
+          } catch { /* use the safe default comparison basis */ }
+          return "100";
+        })();
         const [thesisResult, status] = await Promise.all([
           api<{ thesis: ThesisRevision }>(`/api/theses/${id}`),
           api<{ services: { id: string; state: string }[] }>("/api/status").catch(() => ({ services: [] })),
@@ -80,6 +89,8 @@ export default function ComparePage() {
         if (!active) return;
         setMode(safeMode);
         setBudget(savedBudget);
+        setLastValidBudget(savedValidBudget);
+        try { sessionStorage.setItem(`thesis-build-max-valid:${id}`, savedValidBudget); } catch { /* comparison remains usable without session storage */ }
         setThesis(thesisResult.thesis);
         setFamily(topic.family);
         setEvidence(topic.evidence);
@@ -110,7 +121,7 @@ export default function ComparePage() {
   const calculations = useMemo(() => {
     if (!thesis || !family) return null;
     try {
-      const maxPayout = parseUsdc(budget);
+      const maxPayout = parseUsdc(lastValidBudget);
       const desired = compileView(
         family,
         thesis.template,
@@ -136,7 +147,7 @@ export default function ComparePage() {
     } catch (err) {
       return { desired: null, alternatives: null, basketRows: [], basketCost: null, singleCost: null, error: err instanceof Error ? err.message : "The payoff could not be compared." };
     }
-  }, [thesis, family, budget, basket]);
+  }, [thesis, family, lastValidBudget, basket]);
 
   function choose(value: ConstructionChoice) {
     setSelected(value);
@@ -145,6 +156,12 @@ export default function ComparePage() {
 
   function changeBudget(value: string) {
     setBudget(value);
+    try {
+      if (parseUsdc(value) > 0n) {
+        setLastValidBudget(value);
+        sessionStorage.setItem(`thesis-build-max-valid:${id}`, value);
+      }
+    } catch { /* keep the last valid comparison visible while the user corrects input */ }
     try { sessionStorage.setItem(`thesis-build-max:${id}`, value); } catch { /* comparison remains usable without session storage */ }
     const url = new URL(window.location.href);
     url.searchParams.set("maxPayout", value);
@@ -214,6 +231,7 @@ export default function ComparePage() {
       <Field label="Desired view maximum payout (USDC)" hint="The custom view and single Gemini ticket use the same gross maximum payout. Edited basket allocations may have a different maximum; it is shown in the table.">
         <input className={inputCls()} type="number" min="0.01" step="0.01" value={budget} onChange={(event) => changeBudget(event.target.value)} />
       </Field>
+      {!budgetValid ? <p role="alert" className="text-sm text-bad">Enter a positive amount to update the comparison and review this construction.</p> : null}
       {calculations?.error ? <p role="alert" className="text-sm text-bad">{calculations.error}</p> : null}
       {calculations?.desired ? (
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,0.85fr)]">

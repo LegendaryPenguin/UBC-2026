@@ -59,4 +59,58 @@ describe("research and editable view proposals", () => {
     expect(answer).toContain("did not return a contract-specific rules link");
     expect(answer).toContain("event-level terms should not be treated as a substitute");
   });
+
+  it("clarifies timing and enforces the single-contract YES/NO limit before suggesting a view", async () => {
+    const { families } = await listTopics("replay");
+    const base = families.find((candidate) => candidate.predicates.length >= 2)!;
+    const family = {
+      ...base,
+      predicates: [base.predicates[0]],
+      contracts: [{ ...base.contracts[0], description: "At Friday's settlement, this contract resolves YES above the listed threshold." }],
+    };
+    const turns: { role: "user" | "assistant"; content: string }[] = [
+      { role: "user", content: "I expect a rise, but not a breakout." },
+    ];
+    const timing = researchReply({ question: turns[0].content, conversation: turns, family });
+    expect(timing.clarificationPrompt).toContain("official settlement");
+    expect(timing.proposed).toBeUndefined();
+
+    turns.push({ role: "assistant", content: timing.clarificationPrompt! });
+    turns.push({ role: "user", content: "At Friday's settlement." });
+    const boundary = researchReply({ question: turns.at(-1)!.content, conversation: turns, family });
+    expect(boundary.clarificationPrompt).toContain("only YES or NO");
+    expect(boundary.proposed).toBeUndefined();
+
+    turns.push({ role: "assistant", content: boundary.clarificationPrompt! });
+    turns.push({ role: "user", content: "YES on this contract." });
+    const selected = researchReply({ question: turns.at(-1)!.content, conversation: turns, family });
+    expect(selected.clarificationPrompt).toBeUndefined();
+    expect(selected.proposed).toMatchObject({ template: "binary", direction: "yes" });
+    expect(selected.answer).toContain("does not express a separate upper bound");
+  });
+
+  it("proposes listed settlement boundaries only after the user accepts the clarified range", async () => {
+    const { families } = await listTopics("replay");
+    const family = families.find((candidate) => candidate.predicates.length >= 2)!;
+    const turns: { role: "user" | "assistant"; content: string }[] = [
+      { role: "user", content: "I expect a rise, but not a breakout." },
+    ];
+    const timing = researchReply({ question: turns[0].content, conversation: turns, family });
+    turns.push({ role: "assistant", content: timing.clarificationPrompt! });
+    turns.push({ role: "user", content: "At Friday's settlement." });
+    const bounds = researchReply({ question: turns.at(-1)!.content, conversation: turns, family });
+    expect(bounds.clarificationPrompt).toContain("Would a range from");
+    turns.push({ role: "assistant", content: bounds.clarificationPrompt! });
+    turns.push({ role: "user", content: "Yes, use this range." });
+
+    const evidence = evidenceForSlug(family.slug, "replay");
+    const result = researchReply({ question: turns.at(-1)!.content, conversation: turns, family, evidence });
+    expect(result.proposed).toMatchObject({
+      template: "range",
+      lowerThreshold: family.predicates[0].threshold,
+      upperThreshold: family.predicates[1].threshold,
+    });
+    expect(result.answer).toContain("editable settlement range");
+    expect(result.citations.some((citation) => evidence.find((item) => item.id === citation.id)?.stance === "challenges")).toBe(true);
+  });
 });

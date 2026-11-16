@@ -328,4 +328,37 @@ describe("narrated MVP API flow", () => {
     expect((await alertsGet()).status).toBe(401);
     cookieJar.values.delete("thesis_guest");
   });
+
+  it("clarifies settlement timing and listed boundaries before returning a range proposal", async () => {
+    const list = await json<{ families: { slug: string; sourceEvent: { ticker: string } }[] }>(await topicsGet(request("/api/topics?mode=replay")));
+    const family = list.body.families.find((item) => item.sourceEvent.ticker === "BTC2611202200");
+    expect(family).toBeDefined();
+
+    const turns: { role: "user" | "assistant"; content: string }[] = [
+      { role: "user", content: "I expect a rise, but not a breakout." },
+    ];
+    const first = await json<{ clarificationPrompt?: string; proposed?: unknown }>(await researchPost(request("/api/research", "POST", {
+      question: turns[0].content, conversation: turns, slug: family!.slug, mode: "replay", context: "research",
+    })));
+    expect(first.response.status).toBe(200);
+    expect(first.body.clarificationPrompt).toContain("official settlement");
+    expect(first.body.proposed).toBeUndefined();
+
+    turns.push({ role: "assistant", content: first.body.clarificationPrompt! });
+    turns.push({ role: "user", content: "At Friday's settlement." });
+    const second = await json<{ clarificationPrompt?: string; proposed?: unknown }>(await researchPost(request("/api/research", "POST", {
+      question: turns.at(-1)!.content, conversation: turns, slug: family!.slug, mode: "replay", context: "research",
+    })));
+    expect(second.body.clarificationPrompt).toContain("Would a range from");
+    expect(second.body.proposed).toBeUndefined();
+
+    turns.push({ role: "assistant", content: second.body.clarificationPrompt! });
+    turns.push({ role: "user", content: "Yes, use this range." });
+    const final = await json<{ proposed?: { template: string; lowerThreshold: number; upperThreshold: number }; clarificationPrompt?: string }>(await researchPost(request("/api/research", "POST", {
+      question: turns.at(-1)!.content, conversation: turns, slug: family!.slug, mode: "replay", context: "research",
+    })));
+    expect(final.body.clarificationPrompt).toBeUndefined();
+    expect(final.body.proposed).toMatchObject({ template: "range" });
+    expect(final.body.proposed!.lowerThreshold).toBeLessThan(final.body.proposed!.upperThreshold);
+  });
 });

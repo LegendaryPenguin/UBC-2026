@@ -1,6 +1,6 @@
 import { getTopic } from "@/lib/gemini/catalog";
 import { evidenceForSlug } from "@/lib/evidence";
-import { proposeView, researchReply, type PayoffExplanation } from "@/lib/research";
+import { researchReply, type PayoffExplanation, type ResearchTurn } from "@/lib/research";
 import { buildComparisons } from "@/lib/payoffs/compare";
 import { compileView } from "@/lib/payoffs/compile";
 import { parseUsdc } from "@/lib/format";
@@ -39,7 +39,7 @@ function referencedCitations(answer: string, evidence: { id: string; title: stri
 }
 
 export async function POST(req: Request) {
-  let body: { question?: unknown; slug?: unknown; thesisId?: unknown; mode?: unknown; context?: unknown; maxPayout?: unknown };
+  let body: { question?: unknown; conversation?: unknown; slug?: unknown; thesisId?: unknown; mode?: unknown; context?: unknown; maxPayout?: unknown };
   try {
     body = await readJson<typeof body>(req);
   } catch {
@@ -49,6 +49,27 @@ export async function POST(req: Request) {
   const question = typeof body.question === "string" ? body.question.trim() : "";
   if (!question) return fail("INVALID", "Ask a question.");
   if (question.length > 3_000) return fail("INVALID", "Keep the research question under 3,000 characters.");
+  let conversation: ResearchTurn[] = [{ role: "user", content: question }];
+  if (body.conversation !== undefined) {
+    if (!Array.isArray(body.conversation) || body.conversation.length === 0 || body.conversation.length > 8) {
+      return fail("INVALID", "Research conversation must contain at most eight turns.");
+    }
+    const parsed: ResearchTurn[] = [];
+    let conversationLength = 0;
+    for (const turn of body.conversation) {
+      if (!turn || typeof turn !== "object") return fail("INVALID", "Each conversation turn needs a role and text.");
+      const item = turn as Record<string, unknown>;
+      if ((item.role !== "user" && item.role !== "assistant") || typeof item.content !== "string" || !item.content.trim() || item.content.length > 3_000) {
+        return fail("INVALID", "Each conversation turn needs a supported role and non-empty text.");
+      }
+      conversationLength += item.content.length;
+      parsed.push({ role: item.role, content: item.content.trim() });
+    }
+    if (conversationLength > 6_000 || parsed.at(-1)?.role !== "user" || parsed.at(-1)?.content !== question) {
+      return fail("INVALID", "Keep the research conversation under 6,000 characters and end with your current question.");
+    }
+    conversation = parsed;
+  }
   if (body.slug !== undefined && (typeof body.slug !== "string" || !/^[a-z0-9][a-z0-9-]{0,79}$/i.test(body.slug))) {
     return fail("INVALID", "Choose a valid topic.");
   }
@@ -129,7 +150,11 @@ export async function POST(req: Request) {
     }
   }
 
-  const proposed = family ? proposeView(question, family, thesis) : undefined;
+  const localReply = researchReply({ question, conversation, family, thesis, evidence, comparison });
+  const proposed = localReply.proposed;
+  if (localReply.clarificationPrompt) {
+    return ok({ ...localReply, comparison, provider: "local" });
+  }
   if (process.env.XAI_API_KEY) {
     try {
       const response = await fetch("https://api.x.ai/v1/chat/completions", {
@@ -147,7 +172,7 @@ export async function POST(req: Request) {
             },
             {
               role: "user",
-              content: JSON.stringify({ question, context, family, evidence, thesis, payoffComparison: comparison }),
+              content: JSON.stringify({ question, conversation, context, family, evidence, thesis, payoffComparison: comparison }),
             },
           ],
         }),
@@ -165,5 +190,5 @@ export async function POST(req: Request) {
       // Keep the written local response available if the model is unavailable.
     }
   }
-  return ok({ ...researchReply({ question, family, thesis, evidence, comparison }), proposed, comparison, provider: "local" });
+  return ok({ ...localReply, proposed, comparison, provider: "local" });
 }

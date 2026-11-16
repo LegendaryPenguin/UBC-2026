@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api, modeFromStorage } from "@/lib/client";
 import type { MarketFamily, ThesisRevision } from "@/lib/domain/types";
 import { compileView } from "@/lib/payoffs/compile";
@@ -46,6 +46,7 @@ function initialLegs(thesis: ThesisRevision, family: MarketFamily, maximum: stri
 
 export default function BuildPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [thesis, setThesis] = useState<ThesisRevision | null>(null);
   const [family, setFamily] = useState<MarketFamily | null>(null);
   const [max, setMax] = useState("100");
@@ -139,7 +140,7 @@ export default function BuildPage() {
       sessionStorage.setItem(`thesis-basket:${id}`, JSON.stringify(basket));
       sessionStorage.setItem(`thesis-build-max:${id}`, max);
     } catch { /* Compare still loads with its safe defaults */ }
-    window.location.href = `/theses/${id}/compare?maxPayout=${encodeURIComponent(max)}`;
+    router.push(`/theses/${id}/compare?maxPayout=${encodeURIComponent(max)}`);
   }
 
   if (loading) return <p role="status">Loading basket builder…</p>;

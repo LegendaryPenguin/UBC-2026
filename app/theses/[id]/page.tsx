@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, modeFromStorage } from "@/lib/client";
 import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
@@ -14,6 +14,7 @@ import { useModeChange } from "@/lib/use-mode-change";
 
 export default function ThesisEditor() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [thesis, setThesis] = useState<ThesisRevision | null>(null);
   const [family, setFamily] = useState<MarketFamily | null>(null);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
@@ -102,13 +103,13 @@ export default function ThesisEditor() {
         body: JSON.stringify({ ...thesis, action: action === "save" ? undefined : action, mode: modeFromStorage() }),
       });
       if (action === "duplicate") {
-        window.location.href = `/theses/${res.thesis.id}`;
+        router.push(`/theses/${res.thesis.id}`);
         return;
       }
       setThesis(res.thesis);
       setDirty(false);
       if (action === "confirm") {
-        window.location.href = `/theses/${id}/build`;
+        router.push(`/theses/${id}/build`);
         return;
       }
       setNotice(`Saved as revision ${res.thesis.revision}. Your existing view remains a draft until you confirm it.`);
@@ -121,12 +122,12 @@ export default function ThesisEditor() {
 
   function backToWorkspace() {
     if (dirty && !window.confirm("Discard these unsaved view edits and return to the workspace?")) return;
-    window.location.href = "/workspace";
+    router.push("/workspace");
   }
 
   function openHistory() {
     if (dirty && !window.confirm("Discard these unsaved view edits and open revision history?")) return;
-    window.location.href = `/theses/${id}/history`;
+    router.push(`/theses/${id}/history`);
   }
 
   if (loading) return <p role="status">Loading thesis…</p>;
@@ -139,6 +140,7 @@ export default function ThesisEditor() {
   const historyContracts = historyPredicates
     .map((predicate) => family?.contracts.find((contract) => contract.id === predicate.contractId))
     .filter((contract) => contract != null);
+  const selectedRuleContracts = thesis.template === "binary" ? family?.contracts.slice(0, 1) ?? [] : historyContracts;
 
   return (
     <div className="space-y-4">
@@ -188,13 +190,24 @@ export default function ThesisEditor() {
             </Card>
             <Card>
               <h2 className="font-serif text-xl">Resolution rules</h2>
-              <dl className="mt-3 space-y-2 text-sm">
+              <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                 <div><dt className="text-muted">Observation</dt><dd>{family.observationTime ? new Date(family.observationTime).toLocaleString() : "Not provided"}</dd></div>
-                <div><dt className="text-muted">Source</dt><dd>{family.sourceEvent.sourceAgency || "Gemini listed source"}{family.sourceEvent.sourceIndex ? ` · ${family.sourceEvent.sourceIndex}` : ""}</dd></div>
                 <div><dt className="text-muted">Market status</dt><dd className="capitalize">{family.sourceEvent.status}</dd></div>
                 <div><dt className="text-muted">Trade cutoff</dt><dd>{family.closeTime ? new Date(family.closeTime).toLocaleString() : "Not provided"}</dd></div>
               </dl>
-              {family.sourceEvent.sourceUrl ? <a className="mt-3 inline-block text-sm text-action" href={family.sourceEvent.sourceUrl} target="_blank" rel="noreferrer">Read original Gemini rules</a> : null}
+              <div className="mt-3 space-y-3">
+                {selectedRuleContracts.length ? selectedRuleContracts.map((contract) => (
+                  <div key={contract!.id} className="rounded-lg border border-line p-3 text-sm">
+                    <p className="font-medium">{contract!.label}</p>
+                    <p className="mt-2 text-xs font-medium text-muted">Exact Gemini contract wording</p>
+                    <p className="mt-1 whitespace-pre-wrap">{contract!.description || "Gemini did not include contract-level wording in this response."}</p>
+                    {contract!.strike ? <p className="mt-2 text-xs text-muted">Strike: {contract!.strike.type || "type not listed"} · {contract!.strike.value || "value not available"}{contract!.strike.availableAt ? ` · available ${new Date(contract!.strike.availableAt).toLocaleString()}` : ""}</p> : null}
+                    <p className="mt-1 text-xs text-muted">Settlement source: {contract!.source || family.sourceEvent.sourceIndex || family.sourceEvent.sourceAgency || "not listed"}</p>
+                    {contract!.termsUrl ? <a className="mt-2 inline-block text-sm text-action underline" href={contract!.termsUrl} target="_blank" rel="noreferrer">Open exact Gemini contract rules</a> : <p className="mt-2 text-xs text-muted">No contract-specific rules link was supplied.</p>}
+                  </div>
+                )) : <p className="rounded-lg border border-line p-3 text-sm text-muted">The current view has no mapped contract boundary. Refresh market data or choose listed boundaries before relying on a contract-level rule.</p>}
+              </div>
+              {family.sourceEvent.sourceUrl && !selectedRuleContracts.some((contract) => contract?.termsUrl === family.sourceEvent.sourceUrl) ? <a className="mt-3 inline-block text-sm text-action underline" href={family.sourceEvent.sourceUrl} target="_blank" rel="noreferrer">Open event-level Gemini terms</a> : null}
             </Card>
             {evidence.length ? (
               <Card>

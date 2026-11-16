@@ -22,7 +22,8 @@ Primary navigation is **Explore, My Theses, Portfolio**. A thesis workspace has 
 ### 2. Speak and refine
 
 - Voice and text call the same research/view actions. Microphone permission is requested only after the user starts recording. Transcript text remains visible and editable.
-- Clarify material ambiguity (such as closing price versus touching a range), show the proposed view and relevant supporting/challenging evidence, and keep manual editing available.
+- Clarify material ambiguity (such as official settlement versus a price touch) before proposing a view. Keep the prior turn attached to the answer; for a supported multi-threshold family, ask the user to accept or edit the listed range boundaries. A single YES/NO contract cannot be presented as a bounded range.
+- Show the proposed view and relevant supporting/challenging evidence, and keep manual editing available. Text and voice can answer the same clarification; a preview stays absent until it is resolved.
 - A proposal is a draft until the user confirms it. Confirm validates the supported market semantics and saves a version; failure preserves edits. Cancel/back does not confirm or silently discard dirty work.
 - Permission denial, missing microphone, muted input, interruption, provider/network error, and retry all leave a usable text path. Voice may prepare a review, never authorize a financial action.
 
