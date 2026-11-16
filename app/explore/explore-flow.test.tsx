@@ -5,7 +5,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import type { MarketFamily } from "@/lib/domain/types";
 
 vi.mock("next/link", () => ({ default: ({ children, href, ...props }: React.PropsWithChildren<{ href: string }>) => <a href={href} {...props}>{children}</a> }));
-vi.mock("@/lib/use-mode-change", () => ({ useModeChange: () => undefined }));
 
 import Explore from "@/app/explore/page";
 
@@ -46,13 +45,20 @@ const market: MarketFamily = {
   fetchedAt: "2026-11-15T00:00:00.000Z",
 };
 
+let liveCatalogError = false;
+
 beforeEach(() => {
   localStorage.clear();
   localStorage.setItem("thesis_mode", "live");
+  liveCatalogError = false;
   let postCount = 0;
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url.startsWith("/api/topics?")) return new Response(JSON.stringify({ families: [market], freshnessLabel: "Live Gemini data", liveError: null }), { status: 200 });
+    if (url.startsWith("/api/topics?")) {
+      const mode = new URL(url, "http://localhost").searchParams.get("mode");
+      if (mode === "live" && liveCatalogError) return new Response(JSON.stringify({ families: [], freshnessLabel: "Live Gemini data unavailable", liveError: "Gemini API connection timed out." }), { status: 200 });
+      return new Response(JSON.stringify({ families: [{ ...market, mode: mode === "replay" ? "replay" : "live" }], freshnessLabel: mode === "replay" ? "Labeled walkthrough snapshots" : "Live Gemini data", liveError: null }), { status: 200 });
+    }
     if (url === "/api/watchlists" && init?.method === undefined) return new Response(JSON.stringify({ watchlists: [] }), { status: 200 });
     if (url === "/api/watchlists" && init?.method === "POST") {
       postCount += 1;
@@ -98,5 +104,30 @@ describe("Explore to research flow", () => {
     expect((await screen.findByRole("status")).textContent).toContain("Removed Where will Bitcoin finish Friday?");
     expect(await screen.findByRole("button", { name: "Watch topic" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open research" }).getAttribute("href")).toBe("/topics/btc-friday");
+  });
+
+  it("keeps a confirmed Replay recovery when live Gemini discovery is unavailable", async () => {
+    liveCatalogError = true;
+    const confirm = vi.fn().mockReturnValue(false);
+    vi.stubGlobal("confirm", confirm);
+    render(<Explore />);
+
+    await screen.findByRole("button", { name: "Switch to Replay" });
+    const liveError = screen.getByRole("status");
+    expect(liveError.textContent).toContain("Gemini API connection timed out.");
+    expect(liveError.textContent).toContain("Replay uses labeled walkthrough data.");
+    const switchButton = screen.getByRole("button", { name: "Switch to Replay" });
+    fireEvent.click(switchButton);
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(localStorage.getItem("thesis_mode")).toBe("live");
+    expect(screen.getByRole("button", { name: "Switch to Replay" })).toBeTruthy();
+
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Switch to Replay" }));
+    expect(localStorage.getItem("thesis_mode")).toBe("replay");
+    expect(await screen.findByText("Labeled walkthrough snapshots")).toBeTruthy();
+    expect(await screen.findByRole("link", { name: "Open research" })).toBeTruthy();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input) === "/api/topics?mode=replay&q=")).toBe(true);
+    expect(screen.queryByRole("button", { name: "Switch to Replay" })).toBeNull();
   });
 });

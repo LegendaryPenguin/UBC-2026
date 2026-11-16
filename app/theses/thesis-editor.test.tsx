@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { MarketFamily, ThesisRevision } from "@/lib/domain/types";
 
 const navigation = vi.hoisted(() => ({ push: vi.fn(), historySeries: [] as unknown[] }));
@@ -11,7 +11,6 @@ vi.mock("@/components/VoicePanel", () => ({ VoicePanel: () => <div data-testid="
 vi.mock("@/components/MarketPriceHistory", () => ({ MarketPriceHistory: ({ series }: { series: unknown[] }) => { navigation.historySeries = series; return <div data-testid="price-history" />; } }));
 vi.mock("@/components/GeminiLiveMarketFeed", () => ({ GeminiLiveMarketFeed: () => <div data-testid="live-market-feed" /> }));
 vi.mock("@/lib/gemini/use-market-stream", () => ({ useGeminiMarketStream: () => ({ status: "connected", book: null, trades: [{ kind: "trade", instrumentSymbol: "GEMI-BTCFRIDAY-HI95K", eventAt: "2026-11-15T01:00:00.000Z", tradeId: "trade-1", price: "0.51", quantity: "1" }], error: null, retry: vi.fn() }) }));
-vi.mock("@/lib/use-mode-change", () => ({ useModeChange: () => undefined }));
 
 import ThesisEditor from "@/app/theses/[id]/page";
 
@@ -97,13 +96,16 @@ function family(overrides: Partial<MarketFamily["contracts"][number]> = {}): Mar
 }
 
 let activeFamily: MarketFamily;
+let failTopicRefresh: boolean;
 
 beforeEach(() => {
   activeFamily = family();
+  failTopicRefresh = false;
   navigation.historySeries = [];
   localStorage.setItem("thesis_mode", "live");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
+    if (url.startsWith("/api/topics/") && failTopicRefresh) return new Response(JSON.stringify({ error: { message: "Topic refresh failed." } }), { status: 502 });
     const body = url === "/api/theses/thesis-1"
       ? { thesis }
       : { family: activeFamily, evidence: [] };
@@ -149,6 +151,25 @@ describe("thesis research contract rules", () => {
     expect(screen.getByText("No contract-specific rules link was supplied.")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Open exact Gemini contract rules" })).toBeNull();
     expect(screen.getByRole("link", { name: "Open event-level Gemini terms" })).toBeTruthy();
+  });
+
+  it("refreshes market data on mode changes without losing edits when refresh fails", async () => {
+    render(<ThesisEditor />);
+    expect(await screen.findByText(contract.description!)).toBeTruthy();
+    const rationale = screen.getByLabelText("Rationale") as HTMLTextAreaElement;
+    fireEvent.change(rationale, { target: { value: "Keep my unsaved reasoning." } });
+
+    activeFamily = { ...activeFamily, mode: "replay", freshness: "replay" };
+    localStorage.setItem("thesis_mode", "replay");
+    act(() => window.dispatchEvent(new CustomEvent("thesis:mode-change", { detail: { mode: "replay" } })));
+    expect(await screen.findByText(/Market research refreshed for Replay/)).toBeTruthy();
+    expect((screen.getByLabelText("Rationale") as HTMLTextAreaElement).value).toBe("Keep my unsaved reasoning.");
+
+    failTopicRefresh = true;
+    localStorage.setItem("thesis_mode", "live");
+    act(() => window.dispatchEvent(new CustomEvent("thesis:mode-change", { detail: { mode: "live" } })));
+    expect(await screen.findByText(/Market data could not refresh: Topic refresh failed/)).toBeTruthy();
+    expect((screen.getByLabelText("Rationale") as HTMLTextAreaElement).value).toBe("Keep my unsaved reasoning.");
   });
 
   it("keeps a draft through confirmation cancel and provider failure, then confirms only on explicit retry", async () => {

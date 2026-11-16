@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { api, modeFromStorage } from "@/lib/client";
+import { api, modeFromStorage, requestModeChange } from "@/lib/client";
 import { flattenEvents, type GeminiEvent, type GeminiStatus } from "@/lib/gemini/types";
 import { Button, Card, Empty, Field, inputCls } from "@/components/ui";
 import { formatTime } from "@/lib/format";
@@ -49,6 +49,7 @@ export default function GeminiMarketsPage() {
   const [data, setData] = useState<MarketResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const requestId = useRef(0);
 
   useEffect(() => {
@@ -81,7 +82,7 @@ export default function GeminiMarketsPage() {
     return () => {
       requestId.current += 1;
     };
-  }, [mode, kind, status, category, search, offset]);
+  }, [mode, kind, status, category, search, offset, retryCount]);
 
   function chooseKind(next: EventKind) {
     setKind(next);
@@ -140,7 +141,14 @@ export default function GeminiMarketsPage() {
         </Field>
       ) : null}
 
-      {error ? <Empty title="Gemini data unavailable">{error} You can switch the header mode to Replay to view the recorded examples.</Empty> : null}
+      {error ? <Empty title="Gemini data unavailable">
+        <p>{error} {mode === "live" ? "Retry, switch to Replay, or return to Explore." : "Retry or return to Explore."}</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button kind="ghost" disabled={loading} onClick={() => setRetryCount((count) => count + 1)}>Retry</Button>
+          {mode === "live" ? <Button kind="secondary" onClick={() => requestModeChange("replay")}>Switch to Replay</Button> : null}
+          <Button href="/explore" kind="ghost">Back to Explore</Button>
+        </div>
+      </Empty> : null}
       {loading && !data ? <p className="text-sm text-muted" role="status">Loading Gemini markets…</p> : null}
       {data && events.length === 0 ? (
         <Empty title={kind === "upcoming" && mode === "replay" ? "No recorded upcoming markets" : "No markets found"}>

@@ -19,6 +19,18 @@ export function setMode(mode: "live" | "replay" | "paper") {
 
 export const MODE_CHANGE_EVENT = "thesis:mode-change";
 
+const MODE_CHANGE_CONFIRMATION = "Switching refreshes mode-dependent market data. Any open quote review and unsaved order-form inputs are cleared. Existing orders and positions stay in their original environment. Continue?";
+
 export function announceModeChange(mode: "live" | "replay" | "paper") {
   window.dispatchEvent(new CustomEvent(MODE_CHANGE_EVENT, { detail: { mode } }));
+}
+
+export function requestModeChange(next: "live" | "replay" | "paper") {
+  const current = modeFromStorage();
+  if (current !== next && !window.confirm(MODE_CHANGE_CONFIRMATION)) return false;
+  if (current !== next) {
+    setMode(next);
+    announceModeChange(next);
+  }
+  return true;
 }

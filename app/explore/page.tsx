@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { api, modeFromStorage } from "@/lib/client";
+import { api, modeFromStorage, requestModeChange } from "@/lib/client";
 import type { MarketFamily } from "@/lib/domain/types";
 import { Button, Card, Empty, inputCls } from "@/components/ui";
 import { formatTime } from "@/lib/format";
@@ -96,7 +96,10 @@ export default function Explore() {
         <Button href="/gemini" kind="ghost">All Gemini markets</Button>
       </form>
       {data ? <p className="text-xs text-muted">{data.freshnessLabel}</p> : null}
-      {data?.liveError ? <p role="status" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{data.liveError}. Switch to Replay to inspect the labeled walkthrough data.</p> : null}
+      {data?.liveError ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-bad/30 bg-white p-3">
+        <p role="status" className="text-sm text-bad">{data.liveError}. Replay uses labeled walkthrough data.</p>
+        {modeFromStorage() !== "replay" ? <Button kind="secondary" onClick={() => requestModeChange("replay")}>Switch to Replay</Button> : null}
+      </div> : null}
       {notice ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">{notice}</p> : null}
       {watchError ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{watchError} <Link className="text-action underline" href="/auth">Sign in</Link></p> : null}
 

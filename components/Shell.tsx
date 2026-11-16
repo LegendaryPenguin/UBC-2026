@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { WalletButton } from "@/components/WalletButton";
-import { announceModeChange } from "@/lib/client";
+import { MODE_CHANGE_EVENT, requestModeChange } from "@/lib/client";
 
 const NAV = [
   ["Explore", "/explore"],
@@ -39,12 +39,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setMode(localStorage.getItem("thesis_mode") || "replay");
   }, [path]);
+  useEffect(() => {
+    const syncMode = () => setMode(localStorage.getItem("thesis_mode") || "replay");
+    window.addEventListener(MODE_CHANGE_EVENT, syncMode);
+    return () => window.removeEventListener(MODE_CHANGE_EVENT, syncMode);
+  }, []);
   function changeMode(next: "replay" | "live" | "paper") {
-    const current = localStorage.getItem("thesis_mode") || "replay";
-    if (current !== next && !window.confirm("Switching refreshes mode-dependent market data. Any open quote review and unsaved order-form inputs are cleared. Existing orders and positions stay in their original environment. Continue?")) return false;
-    localStorage.setItem("thesis_mode", next);
+    if (!requestModeChange(next)) return false;
     setMode(next);
-    announceModeChange(next);
     return true;
   }
   return (

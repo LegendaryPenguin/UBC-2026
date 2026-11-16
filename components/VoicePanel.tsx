@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { api, modeFromStorage } from "@/lib/client";
 import { useModeChange } from "@/lib/use-mode-change";
 import { Button, Card, Field, inputCls } from "@/components/ui";
@@ -65,6 +66,7 @@ export function VoicePanel({
   maxPayout?: string;
   title?: string;
 }) {
+  const router = useRouter();
   const [status, setStatus] = useState<VoiceStatus>("ready");
   const [inputMode, setInputMode] = useState<InputMode>("voice");
   const [muted, setMuted] = useState(false);
@@ -460,7 +462,7 @@ export function VoicePanel({
             evidenceIds: evidence.map((item) => item.id),
           }),
         });
-        window.location.href = `/theses/${result.thesis.id}`;
+        router.push(`/theses/${result.thesis.id}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "The suggested view was not saved. Review it and retry.");

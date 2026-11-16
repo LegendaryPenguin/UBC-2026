@@ -58,6 +58,7 @@ export default function GeminiEventPage() {
   const [data, setData] = useState<GeminiDetail | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
   const [connection, setConnection] = useState<GeminiConnectionStatus | null>(null);
   const [tradeCapability, setTradeCapability] = useState<TradeCapability | null>(null);
   const [selectedSymbol, setSelectedSymbol] = useState("");
@@ -111,7 +112,7 @@ export default function GeminiEventPage() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Event details could not be loaded"))
       .finally(() => setLoading(false));
-  }, [ticker]);
+  }, [ticker, retryCount]);
 
   useEffect(() => {
     let active = true;
@@ -134,7 +135,15 @@ export default function GeminiEventPage() {
   }, []);
 
   if (loading) return <p className="text-sm text-muted">Loading Gemini event…</p>;
-  if (error) return <Empty title="Event unavailable">{error} <Link href="/gemini" className="text-action underline">Return to Gemini markets</Link></Empty>;
+  if (error) return (
+    <Empty title="Event unavailable">
+      <p role="alert">{error}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button onClick={() => setRetryCount((current) => current + 1)}>Retry</Button>
+        <Button href="/gemini" kind="ghost">Return to Gemini markets</Button>
+      </div>
+    </Empty>
+  );
   if (!data) return <Empty title="Event unavailable">Gemini did not return an event.</Empty>;
 
   const { event } = data;

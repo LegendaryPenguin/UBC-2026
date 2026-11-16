@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, modeFromStorage } from "@/lib/client";
 import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
@@ -13,22 +13,24 @@ import { useModeChange } from "@/lib/use-mode-change";
 
 export default function TopicPage() {
   const { slug } = useParams<{ slug: string }>();
+  const router = useRouter();
   const [family, setFamily] = useState<MarketFamily | null>(null);
   const [relatedContracts, setRelatedContracts] = useState<{ slug: string; label: string; instrumentSymbol: string; bid: string | null; ask: string | null }[]>([]);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
-  const [error, setError] = useState("");
+  const [topicError, setTopicError] = useState("");
+  const [draftError, setDraftError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const loadTopic = useCallback(async () => {
     const mode = modeFromStorage() === "live" ? "live" : "replay";
-    setError("");
+    setTopicError("");
     try {
       const res = await api<{ family: MarketFamily; relatedContracts: typeof relatedContracts; evidence: EvidenceItem[] }>(`/api/topics/${slug}?mode=${mode}`);
       setFamily(res.family);
       setRelatedContracts(res.relatedContracts || []);
       setEvidence(res.evidence);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Topic data could not be loaded.");
+      setTopicError(err instanceof Error ? err.message : "Topic data could not be loaded.");
     }
   }, [slug]);
 
@@ -38,6 +40,7 @@ export default function TopicPage() {
   async function formView() {
     if (!family) return;
     setBusy(true);
+    setDraftError("");
     try {
       const lower = family.predicates[0]?.threshold ?? null;
       const upper = family.predicates[1]?.threshold ?? null;
@@ -56,15 +59,15 @@ export default function TopicPage() {
           evidenceIds: evidence.map((e) => e.id),
         }),
       });
-      window.location.href = `/theses/${res.thesis.id}`;
+      router.push(`/theses/${res.thesis.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create draft");
+      setDraftError(err instanceof Error ? err.message : "Could not create draft");
     } finally {
       setBusy(false);
     }
   }
 
-  if (error && !family) return <Card><p role="alert" className="text-sm text-bad">{error}</p><div className="mt-3 flex gap-2"><Button onClick={() => void loadTopic()} kind="secondary">Retry</Button><Button href="/explore" kind="ghost">Explore</Button></div></Card>;
+  if (topicError && !family) return <Card><p role="alert" className="text-sm text-bad">{topicError}</p><div className="mt-3 flex gap-2"><Button onClick={() => void loadTopic()} kind="secondary">Retry market data</Button><Button href="/explore" kind="ghost">Explore</Button></div></Card>;
   if (!family) return <p>Loading topic…</p>;
 
   const initialHistory = family.predicates.slice(0, 2).map((predicate) => family.contracts.find((contract) => contract.id === predicate.contractId)).filter((contract) => contract != null);
@@ -76,7 +79,7 @@ export default function TopicPage() {
     <div className="space-y-4">
       <p className="text-sm text-muted"><Link href="/explore">Explore</Link> / Research</p>
       <h1 className="font-serif text-3xl">{family.title}</h1>
-      {error ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{error}. Showing the previously loaded {family.mode} data. <button type="button" className="text-action underline" onClick={() => void loadTopic()}>Retry</button></p> : null}
+      {topicError ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{topicError}. Showing the previously loaded {family.mode} data. <button type="button" className="text-action underline" onClick={() => void loadTopic()}>Retry market data</button></p> : null}
       <p className="text-sm text-muted">{family.question} · Observation {formatTime(family.observationTime)}</p>
       {family.mode === "live" && family.predicates.length === 1 ? <p className="rounded-lg border border-line bg-white p-3 text-sm text-muted">This research view uses one Gemini contract with YES/NO outcomes. Related contracts remain separate until their settlement rules are verified as one compatible family.</p> : null}
       {family.mode === "replay" ? <p className="rounded-lg bg-[#FFF8E7] p-3 text-xs text-muted">Illustrative replay market and evidence. Values are demonstration fixtures, not current Gemini inventory or news.</p> : null}
@@ -151,7 +154,8 @@ export default function TopicPage() {
           <Card>
             <h2 className="font-serif text-xl">Your view</h2>
             <p className="mt-2 text-sm text-muted">{singleBinary ? "Speak or type an opinion. For this contract, choose whether Gemini resolves its exact proposition YES or NO. Edit and confirm before moving to Build." : "Speak or type an opinion. Choose supported boundaries from the listed contracts, edit the proposal, and confirm before moving to Build."}</p>
-            <div className="mt-3"><Button onClick={formView} disabled={busy}>{busy ? "Saving draft…" : "Form a view manually"}</Button></div>
+            {draftError ? <div role="alert" className="mt-3 rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad"><p>{draftError}</p><div className="mt-2"><Button kind="ghost" onClick={() => void formView()} disabled={busy}>Retry draft creation</Button></div></div> : null}
+            <div className="mt-3"><Button onClick={formView} disabled={busy || Boolean(draftError)}>{busy ? "Saving draft…" : "Form a view manually"}</Button></div>
           </Card>
         </aside>
       </div>

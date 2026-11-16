@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
 
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: navigation.push }) }));
 vi.mock("next/link", () => ({ default: ({ children }: { children: React.ReactNode }) => children }));
 
 import { VoicePanel } from "@/components/VoicePanel";
@@ -145,6 +147,7 @@ beforeEach(() => {
     if (url === "/api/voice") return reply({}, true, true);
     return reply({ error: { message: "Unexpected request" } }, false);
   };
+  navigation.push.mockClear();
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     fetchCalls.push({ url, init });
@@ -155,6 +158,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  navigation.push.mockClear();
 });
 
 describe("VoicePanel interaction flows", () => {
@@ -198,6 +202,65 @@ describe("VoicePanel interaction flows", () => {
     await screen.findByText(/A bounded range differs from a threshold ticket \[ev-resistance\]/);
 
     expect(JSON.parse(String(requests("/api/research")[0].init?.body)).question).toBe("What does Friday settlement mean?");
+  });
+
+  it("preserves typed research input after provider failure and retries the shared action", async () => {
+    let researchAttempts = 0;
+    fetchHandler = async (url) => {
+      if (url === "/api/status") return reply({ services: [{ id: "voice", state: "available", note: "" }] });
+      if (url === "/api/research") {
+        researchAttempts += 1;
+        return researchAttempts === 1 ? reply({ error: { message: "Research service timed out." } }, false) : researchReply();
+      }
+      return reply({ error: { message: "Unexpected request" } }, false);
+    };
+    panel();
+    fireEvent.click(await screen.findByRole("button", { name: "Switch to text" }));
+    const question = screen.getByLabelText("Your question");
+    fireEvent.change(question, { target: { value: "What does Friday's exact rule say?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask question" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Research service timed out.");
+    expect((screen.getByLabelText("Your question") as HTMLTextAreaElement).value).toBe("What does Friday's exact rule say?");
+
+    fireEvent.click(screen.getByRole("button", { name: "Ask question" }));
+    expect(await screen.findByText(/A bounded range differs from a threshold ticket/)).toBeTruthy();
+    expect(researchAttempts).toBe(2);
+  });
+
+  it("keeps the written answer when ElevenLabs speech fails and retries playback", async () => {
+    let speechAttempts = 0;
+    class MockAudio {
+      currentTime = 0;
+      onended: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      pause = vi.fn();
+      play = vi.fn().mockResolvedValue(undefined);
+      constructor(_url: string) {}
+    }
+    vi.stubGlobal("Audio", MockAudio);
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:retry-speech") });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+    fetchHandler = async (url) => {
+      if (url === "/api/status") return reply({ services: [{ id: "voice", state: "available", note: "" }] });
+      if (url === "/api/research") return reply({ answer: "The official question settles at Friday's stated deadline.", citations: [] });
+      if (url === "/api/voice") {
+        speechAttempts += 1;
+        return speechAttempts === 1 ? reply({ error: { message: "ElevenLabs speech is temporarily unavailable." } }, false) : reply({}, true, true);
+      }
+      return reply({ error: { message: "Unexpected request" } }, false);
+    };
+    panel();
+    fireEvent.click(await screen.findByRole("button", { name: "Switch to text" }));
+    fireEvent.change(screen.getByLabelText("Your question"), { target: { value: "What is the resolution deadline?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask question" }));
+    expect(await screen.findByText("The official question settles at Friday's stated deadline.")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Play spoken reply" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("ElevenLabs speech is temporarily unavailable.");
+    expect(screen.getByText("The official question settles at Friday's stated deadline.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Play spoken reply" }));
+    expect(await screen.findByRole("button", { name: "Stop speaking" })).toBeTruthy();
+    expect(speechAttempts).toBe(2);
   });
 
   it("keeps clarification turns in context and shows a range preview only after the user answers", async () => {
@@ -287,6 +350,36 @@ describe("VoicePanel interaction flows", () => {
     await waitFor(() => expect(requests("/api/theses/thesis-1")).toHaveLength(1));
     expect(onThesisChange).toHaveBeenCalledWith(expect.objectContaining({ revision: 2 }));
     expect(fetchCalls.some(({ url }) => url.includes("/api/quotes") || url.includes("/api/positions"))).toBe(false);
+  });
+
+  it("keeps a new proposed view editable after a failed save and opens the draft after retry", async () => {
+    let createAttempts = 0;
+    fetchHandler = async (url) => {
+      if (url === "/api/status") return reply({ services: [{ id: "voice", state: "available", note: "" }] });
+      if (url === "/api/research") return researchReply({ template: "range", lowerThreshold: 95_000, upperThreshold: 100_000, rationale: "A bounded Friday range.", invalidation: "" });
+      if (url === "/api/theses") {
+        createAttempts += 1;
+        return createAttempts === 1
+          ? reply({ error: { message: "Draft save timed out." } }, false)
+          : reply({ thesis: { ...thesis, id: "thesis-new", status: "draft" } });
+      }
+      return reply({ error: { message: "Unexpected request" } }, false);
+    };
+    panel({ thesis: undefined });
+    fireEvent.click(await screen.findByRole("button", { name: "Switch to text" }));
+    fireEvent.change(screen.getByLabelText("Your question"), { target: { value: "I expect a move between $95,000 and $100,000." } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask question" }));
+    await screen.findByText("Suggested view preview");
+
+    fireEvent.click(screen.getByRole("button", { name: "Create draft from preview" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Draft save timed out.");
+    expect(screen.getByText("Suggested view preview")).toBeTruthy();
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(fetchCalls.some(({ url }) => url.includes("/api/quotes") || url.includes("/api/positions"))).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create draft from preview" }));
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/theses/thesis-new"));
+    expect(createAttempts).toBe(2);
   });
 
   it("discards an active recording without uploading it", async () => {

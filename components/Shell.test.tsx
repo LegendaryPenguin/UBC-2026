@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/theses/thesis-1" }));
 vi.mock("next/link", () => ({ default: ({ children, href, ...props }: React.PropsWithChildren<{ href: string }>) => <a href={href} {...props}>{children}</a> }));
 vi.mock("@/components/WalletButton", () => ({ WalletButton: () => <button type="button">Connect wallet</button> }));
 
 import { Shell } from "@/components/Shell";
+import { requestModeChange } from "@/lib/client";
 
 describe("workspace shell mode control", () => {
   let modeChanges: CustomEvent[];
@@ -48,5 +49,19 @@ describe("workspace shell mode control", () => {
     expect(selector.value).toBe("paper");
     expect(modeChanges).toHaveLength(1);
     expect(modeChanges[0].detail.mode).toBe("paper");
+  });
+
+  it("keeps the shared mode selector in sync when a page offers a recovery action", async () => {
+    const confirm = vi.fn().mockReturnValue(false);
+    vi.stubGlobal("confirm", confirm);
+    render(<Shell><p>Research workspace</p></Shell>);
+    const selector = await screen.findByRole("combobox", { name: /Mode/ }) as HTMLSelectElement;
+
+    act(() => { expect(requestModeChange("live")).toBe(false); });
+    expect(selector.value).toBe("replay");
+    confirm.mockReturnValue(true);
+    act(() => { expect(requestModeChange("paper")).toBe(true); });
+    expect(selector.value).toBe("paper");
+    expect(localStorage.getItem("thesis_mode")).toBe("paper");
   });
 });
