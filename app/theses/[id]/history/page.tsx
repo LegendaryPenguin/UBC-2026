@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/client";
 import type { ThesisHistoryRecord } from "@/lib/domain/types";
 import { Button, Card, Empty } from "@/components/ui";
@@ -10,6 +10,7 @@ import { formatUsdc } from "@/lib/format";
 
 export default function History() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [versions, setVersions] = useState<ThesisHistoryRecord[]>([]);
   const [currentRevision, setCurrentRevision] = useState(0);
   const [timeline, setTimeline] = useState<{
@@ -47,7 +48,7 @@ export default function History() {
         method: "PATCH",
         body: JSON.stringify({ action: "restore", revision }),
       });
-      window.location.href = `/theses/${result.thesis.id}`;
+      router.push(`/theses/${result.thesis.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Revision could not be restored.");
       setPendingRevision(null);

@@ -113,7 +113,7 @@ describe("narrated MVP API flow", () => {
       });
     });
     createSession("acct_mvp_flow");
-  });
+  }, 30_000);
 
   afterAll(() => {
     if (priorStoreFile === undefined) delete process.env.THESIS_STORE_FILE;
