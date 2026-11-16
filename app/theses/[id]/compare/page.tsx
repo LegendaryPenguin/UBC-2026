@@ -70,8 +70,9 @@ export default function ComparePage() {
       try {
         const currentMode = modeFromStorage();
         const safeMode: Mode = currentMode === "live" || currentMode === "paper" ? currentMode : "replay";
-        const savedBudget = new URLSearchParams(window.location.search).get("maxPayout") || (() => {
-          try { return sessionStorage.getItem(`thesis-build-max:${id}`) || "100"; } catch { return "100"; }
+        const queryBudget = new URLSearchParams(window.location.search).get("maxPayout");
+        const savedBudget = queryBudget !== null ? queryBudget : (() => {
+          try { return sessionStorage.getItem(`thesis-build-max:${id}`) ?? "100"; } catch { return "100"; }
         })();
         const savedValidBudget = (() => {
           try {

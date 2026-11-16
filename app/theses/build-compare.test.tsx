@@ -155,9 +155,19 @@ describe("Build and Compare interaction sequence", () => {
     expect(screen.getByText("Payout by settlement scenario")).toBeTruthy();
 
     view.unmount();
-    render(<ComparePage />);
+    const refreshed = render(<ComparePage />);
     expect(await screen.findByRole("heading", { name: "Compare constructions" })).toBeTruthy();
     expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("0");
+    expect(screen.getByText("Payout by settlement scenario")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Review selected construction" }).hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "" } });
+    expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("");
+    expect(screen.getByRole("alert").textContent).toMatch(/Enter a positive amount/);
+    refreshed.unmount();
+    render(<ComparePage />);
+    expect(await screen.findByRole("heading", { name: "Compare constructions" })).toBeTruthy();
+    expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("");
     expect(screen.getByText("Payout by settlement scenario")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Review selected construction" }).hasAttribute("disabled")).toBe(true);
 
