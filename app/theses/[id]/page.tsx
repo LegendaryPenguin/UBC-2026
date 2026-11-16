@@ -186,7 +186,7 @@ export default function ThesisEditor() {
               retry={marketFeed.retry}
               restBid={liveContract.bid}
               restAsk={liveContract.ask}
-              lastUpdateAt={marketFeed.lastUpdateAt}
+              lastBookUpdateAt={marketFeed.lastBookUpdateAt}
               connectedAt={marketFeed.connectedAt}
             /> : null}
             <Card>

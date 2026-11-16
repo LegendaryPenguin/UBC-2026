@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { MarketFamily, ThesisRevision } from "@/lib/domain/types";
 
-vi.mock("next/navigation", () => ({ useParams: () => ({ id: "thesis-1" }) }));
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useParams: () => ({ id: "thesis-1" }), useRouter: () => ({ push: navigation.push }) }));
 vi.mock("next/link", () => ({ default: ({ children, href, ...props }: React.PropsWithChildren<{ href: string }>) => <a href={href} {...props}>{children}</a> }));
 vi.mock("wagmi", () => ({ useAccount: () => ({ address: undefined }) }));
 vi.mock("@/components/VoicePanel", () => ({ VoicePanel: () => <div data-testid="voice-panel" /> }));
@@ -77,9 +78,12 @@ const market: MarketFamily = {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 let failFirstTopicRead = false;
+let failQuoteRequest = false;
 
 beforeEach(() => {
   failFirstTopicRead = false;
+  failQuoteRequest = false;
+  navigation.push.mockClear();
   localStorage.clear();
   sessionStorage.clear();
   localStorage.setItem("thesis_mode", "paper");
@@ -88,10 +92,14 @@ beforeEach(() => {
     { contractId: "contract-95", side: "yes", payoutAmount: "50", enabled: true },
     { contractId: "contract-100", side: "no", payoutAmount: "50", enabled: true },
   ]));
-  fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === "/api/theses/thesis-1") return new Response(JSON.stringify({ thesis }), { status: 200 });
     if (url === "/api/status") return new Response(JSON.stringify({ services: [{ id: "quotes", state: "available" }, { id: "geminiTrade", state: "unqualified" }] }), { status: 200 });
+    if (url === "/api/quotes" && init?.method === "POST") {
+      if (failQuoteRequest) return new Response(JSON.stringify({ error: { message: "Paper quote service is temporarily unavailable." } }), { status: 503 });
+      return new Response(JSON.stringify({ quote: { id: "quote-paper-1" } }), { status: 200 });
+    }
     if (url.startsWith("/api/topics/") && failFirstTopicRead) {
       failFirstTopicRead = false;
       return new Response(JSON.stringify({ error: { message: "Market data is temporarily unavailable." } }), { status: 503 });
@@ -138,5 +146,32 @@ describe("selected construction review", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByRole("heading", { name: "Review Gemini basket" })).toBeTruthy();
     await waitFor(() => expect(fetchMock.mock.calls.filter(([input]) => String(input).startsWith("/api/topics/")).length).toBe(2));
+  });
+
+  it("requests a Paper quote only after explicit review and routes to its exact terms", async () => {
+    window.history.replaceState({}, "", "/theses/thesis-1/review?construction=arc-custom&maxPayout=100&scenario=between");
+    render(<ReviewPage />);
+
+    expect(await screen.findByRole("heading", { name: "Review Arc custom position" })).toBeTruthy();
+    expect(screen.getByText("Paper simulation")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Request paper quote" })).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/quotes")).toBe(false);
+
+    failQuoteRequest = true;
+    fireEvent.click(screen.getByRole("button", { name: "Request paper quote" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Paper quote service is temporarily unavailable.");
+    expect(screen.getByRole("button", { name: "Request paper quote" })).toBeTruthy();
+    expect(navigation.push).not.toHaveBeenCalled();
+
+    failQuoteRequest = false;
+    fireEvent.click(screen.getByRole("button", { name: "Request paper quote" }));
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/quotes/quote-paper-1"));
+    const quoteRequests = fetchMock.mock.calls.filter(([input]) => String(input) === "/api/quotes");
+    expect(quoteRequests).toHaveLength(2);
+    expect(quoteRequests.every(([, init]) => init?.method === "POST")).toBe(true);
+    expect(quoteRequests.every(([, init]) => JSON.parse(String(init?.body)).thesisId === "thesis-1")).toBe(true);
+    expect(quoteRequests.every(([, init]) => JSON.parse(String(init?.body)).mode === "paper")).toBe(true);
+    expect(quoteRequests.every(([, init]) => JSON.parse(String(init?.body)).maxPayout === "100")).toBe(true);
+    expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/positions")).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useAccount } from "wagmi";
 import { api, modeFromStorage } from "@/lib/client";
 import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
@@ -56,6 +56,7 @@ function labelFor(choice: ConstructionChoice) {
 
 export default function ReviewPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { address } = useAccount();
   const [thesis, setThesis] = useState<ThesisRevision | null>(null);
   const [family, setFamily] = useState<MarketFamily | null>(null);
@@ -175,7 +176,7 @@ export default function ReviewPage() {
         method: "POST",
         body: JSON.stringify({ thesisId: id, mode, maxPayout: budget, ...(address ? { taker: address } : {}) }),
       });
-      window.location.assign(`/quotes/${result.quote.id}`);
+      router.push(`/quotes/${result.quote.id}`);
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "Quote request failed. Your review remains available; retry when ready.");
     } finally {

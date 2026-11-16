@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api, modeFromStorage } from "@/lib/client";
 import type { SignedQuote } from "@/lib/domain/types";
 import { formatUsdc } from "@/lib/format";
@@ -12,11 +12,13 @@ import { useAccount, usePublicClient, useSwitchChain, useWaitForTransactionRecei
 
 export default function QuotePage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { address, chainId } = useAccount();
   const [quote, setQuote] = useState<SignedQuote | null>(null);
   const [error, setError] = useState("");
   const [manualHash, setManualHash] = useState("");
   const [acceptHash, setAcceptHash] = useState<`0x${string}`>();
+  const [paperAccepting, setPaperAccepting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncFailed, setSyncFailed] = useState(false);
   const [step, setStep] = useState("");
@@ -34,16 +36,19 @@ export default function QuotePage() {
   }, [id]);
 
   async function paperAccept() {
-    if (!quote) return;
+    if (!quote || paperAccepting) return;
+    setPaperAccepting(true);
     setError("");
     try {
       const result = await api<{ position: { id: string } }>("/api/positions", {
         method: "POST",
         body: JSON.stringify({ quoteId: quote.id, mode: "paper" }),
       });
-      window.location.href = `/positions/${result.position.id}`;
+      router.push(`/positions/${result.position.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Paper acceptance failed.");
+    } finally {
+      setPaperAccepting(false);
     }
   }
 
@@ -156,7 +161,7 @@ export default function QuotePage() {
         method: "POST",
         body: JSON.stringify({ quoteId: quote.id, mode: "live", txHash: hash }),
       });
-      window.location.href = `/positions/${result.position.id}`;
+      router.push(`/positions/${result.position.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "The confirmed position could not be synchronized.");
       setSyncFailed(true);
@@ -235,7 +240,7 @@ export default function QuotePage() {
         </Card>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        {mode === "paper" && quote.signature === "0x" && quote.status === "available" ? <Button onClick={paperAccept}>Accept paper quote</Button> : null}
+        {mode === "paper" && quote.signature === "0x" && quote.status === "available" ? <Button onClick={paperAccept} disabled={paperAccepting}>{paperAccepting ? "Creating paper position…" : "Accept paper quote"}</Button> : null}
         {mode === "live" && quote.signature !== "0x" && quote.status === "available" && !acceptHash ? <Button onClick={liveAccept} disabled={isPending || syncing}>{isPending || syncing ? "Preparing…" : "Accept exact offer"}</Button> : null}
         {mode === "live" && address && chainId !== arcTestnet.id && !acceptHash ? (
           <Button kind="secondary" onClick={async () => {

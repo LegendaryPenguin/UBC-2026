@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useEffect, useState } from "react";
 import type { GeminiMarketFeedStatus } from "@/lib/gemini/use-market-stream";
@@ -32,7 +32,7 @@ export function GeminiLiveMarketFeed({
   retry,
   restBid,
   restAsk,
-  lastUpdateAt = null,
+  lastBookUpdateAt = null,
   connectedAt = null,
 }: {
   status: GeminiMarketFeedStatus;
@@ -42,7 +42,7 @@ export function GeminiLiveMarketFeed({
   retry: () => void;
   restBid: string | null;
   restAsk: string | null;
-  lastUpdateAt?: number | null;
+  lastBookUpdateAt?: number | null;
   connectedAt?: number | null;
 }) {
   const [now, setNow] = useState(() => Date.now());
@@ -51,11 +51,15 @@ export function GeminiLiveMarketFeed({
     return () => window.clearInterval(timer);
   }, []);
 
-  const freshnessTime = lastUpdateAt ?? connectedAt;
+  const freshnessTime = lastBookUpdateAt ?? connectedAt;
   const dataIsStale = freshnessTime != null && now - freshnessTime > 30_000;
   const liveBid = book ? book.bid : restBid;
   const liveAsk = book ? book.ask : restAsk;
-  const bookTime = book ? new Date(book.eventAt).toLocaleTimeString() : null;
+  const bookTime = !book
+    ? ""
+    : book.eventAt
+      ? ` · last update received ${new Date(book.receivedAt).toLocaleTimeString()} · provider event ${new Date(book.eventAt).toLocaleTimeString()}`
+      : ` · depth snapshot received ${new Date(book.receivedAt).toLocaleTimeString()} · provider timestamp not supplied`;
   const statusLabel = status === "connected"
     ? dataIsStale ? "Connected · no recent market updates" : book ? "Live market updates" : trades.length ? "Connected · trade updates received" : "Connected · waiting for first update"
     : STATUS_LABEL[status];
@@ -66,7 +70,7 @@ export function GeminiLiveMarketFeed({
         <div>
           <h2 className="font-serif text-xl">Live Gemini market data</h2>
           <p className="mt-1 text-xs text-muted" role="status" aria-live="polite">
-            {statusLabel}{bookTime ? ` · last book update ${bookTime}` : ""}
+            {statusLabel}{bookTime}
           </p>
         </div>
         {status === "unavailable" || dataIsStale ? <Button kind="secondary" onClick={retry}>Retry stream</Button> : null}
@@ -76,7 +80,7 @@ export function GeminiLiveMarketFeed({
         <div className="rounded-lg border border-line p-3"><dt className="text-xs text-muted">YES ask</dt><dd className="mt-1 font-semibold">{cents(liveAsk)}</dd><dd className="text-xs text-muted">{book ? book.ask != null ? size(book.askSize) : "No live ask listed" : "REST snapshot or not listed"}</dd></div>
         <div className="rounded-lg border border-line p-3"><dt className="text-xs text-muted">Last streamed trade</dt><dd className="mt-1 font-semibold">{trades.length ? cents(trades[trades.length - 1].price) : book?.lastTrade ? cents(book.lastTrade) : "No trade received"}</dd><dd className="text-xs text-muted">{trades.length ? `${trades[trades.length - 1].quantity} contracts` : book?.lastTradeSize ? size(book.lastTradeSize) : "No execution implied"}</dd></div>
       </dl>
-      {dataIsStale ? <p role="alert" className="mt-3 rounded-lg border border-warn/30 bg-white p-3 text-sm">{lastUpdateAt == null ? "No market data has arrived for 30 seconds." : "The last streamed values may be outdated."} Retry the public feed before relying on them.</p> : null}
+      {dataIsStale ? <p role="alert" className="mt-3 rounded-lg border border-warn/30 bg-white p-3 text-sm">{lastBookUpdateAt == null ? "No book snapshot has arrived for 30 seconds." : "The last book snapshot may be outdated."} Retry the public feed before relying on it.</p> : null}
       {error ? <p role="alert" className="mt-3 rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{error}</p> : null}
       <p className="mt-3 text-xs text-muted">Public Gemini YES-space market data. Prices and displayed size are references only, not a Thesis quote or guaranteed execution. Recent trade points below are collected only while this page is connected.</p>
     </Card>

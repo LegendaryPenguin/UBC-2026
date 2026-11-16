@@ -32,7 +32,7 @@ describe("Gemini live market feed panel", () => {
   it("shows streamed prices, displayed size, and trade data with a clear non-execution label", () => {
     render(<GeminiLiveMarketFeed
       status="connected"
-      book={{ kind: "book", instrumentSymbol: "GEMI-BTC-HI95", eventAt: "2026-11-15T01:00:00.000Z", bid: "0.48", bidSize: "25", ask: "0.52", askSize: "18", lastTrade: "0.51", lastTradeSize: "3" }}
+      book={{ kind: "book", feed: "bookTicker", instrumentSymbol: "GEMI-BTC-HI95", eventAt: "2026-11-15T01:00:00.000Z", receivedAt: "2026-11-15T01:00:00.100Z", bid: "0.48", bidSize: "25", ask: "0.52", askSize: "18", lastTrade: "0.51", lastTradeSize: "3" }}
       trades={[{ kind: "trade", instrumentSymbol: "GEMI-BTC-HI95", eventAt: "2026-11-15T01:01:00.000Z", tradeId: "t1", price: "0.51", quantity: "3" }]}
       error={null}
       retry={vi.fn()}
@@ -50,7 +50,7 @@ describe("Gemini live market feed panel", () => {
   it("does not carry an old REST side forward when the live book reports no price", () => {
     render(<GeminiLiveMarketFeed
       status="connected"
-      book={{ kind: "book", instrumentSymbol: "GEMI-BTC-HI95", eventAt: "2026-11-15T01:00:00.000Z", bid: null, bidSize: null, ask: "0.52", askSize: "18", lastTrade: null, lastTradeSize: null }}
+      book={{ kind: "book", feed: "bookTicker", instrumentSymbol: "GEMI-BTC-HI95", eventAt: "2026-11-15T01:00:00.000Z", receivedAt: "2026-11-15T01:00:00.100Z", bid: null, bidSize: null, ask: "0.52", askSize: "18", lastTrade: null, lastTradeSize: null }}
       trades={[]}
       error={null}
       retry={vi.fn()}
@@ -66,21 +66,21 @@ describe("Gemini live market feed panel", () => {
   it("marks a connected stream stale after updates stop and offers a refresh", () => {
     vi.useFakeTimers();
     const retry = vi.fn();
-    const lastUpdateAt = Date.now();
+    const lastBookUpdateAt = Date.now();
     render(<GeminiLiveMarketFeed
       status="connected"
-      book={{ kind: "book", instrumentSymbol: "GEMI-BTC-HI95", eventAt: "2026-11-15T01:00:00.000Z", bid: "0.48", bidSize: "25", ask: "0.52", askSize: "18", lastTrade: null, lastTradeSize: null }}
+      book={{ kind: "book", feed: "depth5", instrumentSymbol: "GEMI-BTC-HI95", eventAt: null, receivedAt: "2026-11-15T01:00:00.100Z", bid: "0.48", bidSize: "25", ask: "0.52", askSize: "18", lastTrade: null, lastTradeSize: null }}
       trades={[]}
       error={null}
       retry={retry}
       restBid="0.45"
       restAsk="0.55"
-      lastUpdateAt={lastUpdateAt}
+      lastBookUpdateAt={lastBookUpdateAt}
     />);
 
     expect(screen.getByRole("status").textContent).toContain("Live market updates");
     act(() => {
-      vi.setSystemTime(lastUpdateAt + 30_001);
+      vi.setSystemTime(lastBookUpdateAt + 30_001);
       vi.advanceTimersByTime(5_000);
     });
     expect(screen.getByRole("status").textContent).toContain("no recent market updates");
@@ -108,7 +108,7 @@ describe("Gemini live market feed panel", () => {
       vi.setSystemTime(connectedAt + 30_001);
       vi.advanceTimersByTime(5_000);
     });
-    expect(screen.getByRole("alert").textContent).toContain("No market data has arrived");
+    expect(screen.getByRole("alert").textContent).toContain("No book snapshot has arrived");
     fireEvent.click(screen.getByRole("button", { name: "Retry stream" }));
     expect(retry).toHaveBeenCalledOnce();
   });

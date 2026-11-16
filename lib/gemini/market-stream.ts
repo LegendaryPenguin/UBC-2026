@@ -1,8 +1,11 @@
 export type GeminiMarketStreamUpdate =
   | {
       kind: "book";
+      feed: "bookTicker" | "depth5";
       instrumentSymbol: string;
-      eventAt: string;
+      eventAt: string | null;
+      receivedAt: string;
+      updateId?: number;
       bid: string | null;
       bidSize: string | null;
       ask: string | null;
@@ -34,7 +37,26 @@ function eventTime(value: unknown): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-export function parseGeminiMarketStreamMessage(raw: string, expectedSymbol: string): GeminiMarketStreamUpdate | null {
+function depthSide(value: unknown, best: "highest" | "lowest"): { price: string; size: string } | null {
+  if (!Array.isArray(value)) return null;
+  const levels = value.flatMap((level) => {
+    if (!Array.isArray(level) || level.length < 2) return [];
+    const price = decimal(level[0], 0, 1);
+    const size = decimal(level[1], 0, Number.MAX_SAFE_INTEGER);
+    return price != null && size != null && Number(size) > 0 ? [{ price, size }] : [];
+  });
+  return levels.reduce<{ price: string; size: string } | null>((selected, level) => {
+    if (!selected) return level;
+    const improves = best === "highest" ? Number(level.price) > Number(selected.price) : Number(level.price) < Number(selected.price);
+    return improves ? level : selected;
+  }, null);
+}
+
+export function parseGeminiMarketStreamMessage(
+  raw: string,
+  expectedSymbol: string,
+  receivedAt = new Date().toISOString(),
+): GeminiMarketStreamUpdate | null {
   let value: unknown;
   try {
     value = JSON.parse(raw);
@@ -43,15 +65,40 @@ export function parseGeminiMarketStreamMessage(raw: string, expectedSymbol: stri
   }
   if (!value || typeof value !== "object") return null;
   const message = value as Record<string, unknown>;
-  if (message.s !== expectedSymbol) return null;
+  const symbol = typeof message.s === "string" ? message.s : typeof message.symbol === "string" ? message.symbol : null;
+  if (!symbol || symbol.toUpperCase() !== expectedSymbol.toUpperCase()) return null;
+
+  if ("lastUpdateId" in message && "bids" in message && "asks" in message) {
+    const updateId = message.lastUpdateId;
+    if (typeof updateId !== "number" || !Number.isSafeInteger(updateId) || updateId < 0) return null;
+    const bid = depthSide(message.bids, "highest");
+    const ask = depthSide(message.asks, "lowest");
+    return {
+      kind: "book",
+      feed: "depth5",
+      instrumentSymbol: expectedSymbol,
+      eventAt: null,
+      receivedAt,
+      updateId,
+      bid: bid?.price ?? null,
+      bidSize: bid?.size ?? null,
+      ask: ask?.price ?? null,
+      askSize: ask?.size ?? null,
+      lastTrade: null,
+      lastTradeSize: null,
+    };
+  }
+
   const timestamp = eventTime(message.E);
   if (!timestamp) return null;
 
   if ("b" in message || "a" in message) {
     return {
       kind: "book",
+      feed: "bookTicker",
       instrumentSymbol: expectedSymbol,
       eventAt: timestamp,
+      receivedAt,
       bid: decimal(message.b, 0, 1),
       bidSize: decimal(message.B, 0, Number.MAX_SAFE_INTEGER),
       ask: decimal(message.a, 0, 1),

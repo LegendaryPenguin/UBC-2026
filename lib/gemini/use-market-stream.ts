@@ -10,11 +10,11 @@ type FeedState = {
   book: Extract<GeminiMarketStreamUpdate, { kind: "book" }> | null;
   trades: Extract<GeminiMarketStreamUpdate, { kind: "trade" }>[];
   error: string | null;
-  lastUpdateAt: number | null;
+  lastBookUpdateAt: number | null;
   connectedAt: number | null;
 };
 
-const EMPTY: FeedState = { status: "disabled", book: null, trades: [], error: null, lastUpdateAt: null, connectedAt: null };
+const EMPTY: FeedState = { status: "disabled", book: null, trades: [], error: null, lastBookUpdateAt: null, connectedAt: null };
 const MAX_TRADES = 60;
 
 export function useGeminiMarketStream(instrumentSymbol: string | null, enabled: boolean) {
@@ -53,7 +53,7 @@ export function useGeminiMarketStream(instrumentSymbol: string | null, enabled: 
         currentSocket.send(JSON.stringify({
           id: "thesis-public-market",
           method: "SUBSCRIBE",
-          params: [`${instrumentSymbol}@bookTicker`, `${instrumentSymbol}@trade`],
+          params: [`${instrumentSymbol}@depth5`, `${instrumentSymbol}@bookTicker`, `${instrumentSymbol}@trade`],
         }));
       };
       currentSocket.onmessage = (event) => {
@@ -79,13 +79,12 @@ export function useGeminiMarketStream(instrumentSymbol: string | null, enabled: 
         if (!update) return;
         attempts = 0;
         setFeed((current) => update.kind === "book"
-          ? { ...current, status: "connected", book: update, error: null, lastUpdateAt: Date.now() }
+          ? { ...current, status: "connected", book: update, error: null, lastBookUpdateAt: Date.now() }
           : {
               ...current,
               status: "connected",
               trades: [...current.trades.filter((trade) => trade.tradeId !== update.tradeId), update].slice(-MAX_TRADES),
               error: null,
-              lastUpdateAt: Date.now(),
             });
       };
       currentSocket.onerror = () => {
