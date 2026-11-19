@@ -7,6 +7,7 @@ import { useModeChange } from "@/lib/use-mode-change";
 import { Button, Card, Field, inputCls } from "@/components/ui";
 import type { EvidenceItem, MarketFamily, ThesisRevision, ViewTemplate } from "@/lib/domain/types";
 import { AppDialog } from "@/components/AppDialog";
+import { RealtimeVoiceSession } from "@/components/RealtimeVoiceSession";
 
 type VoiceStatus = "ready" | "connecting" | "listening" | "transcribing" | "thinking" | "speaking" | "ended" | "error";
 type VoiceAvailability = "checking" | "available" | "unavailable";
@@ -86,6 +87,7 @@ export function VoicePanel({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [voiceAvailability, setVoiceAvailability] = useState<VoiceAvailability>("checking");
+  const [realtimeAvailable, setRealtimeAvailable] = useState(false);
   const [voiceMessage, setVoiceMessage] = useState("");
   const [citations, setCitations] = useState<{ id: string; title: string }[]>([]);
   const [proposal, setProposal] = useState<ViewProposal | null>(null);
@@ -227,12 +229,15 @@ export function VoicePanel({
       .then(({ services }) => {
         if (!active) return;
         const voice = services.find((service) => service.id === "voice");
+        const realtime = services.find((service) => service.id === "realtimeVoice");
         setVoiceAvailability(voice?.state === "available" ? "available" : "unavailable");
+        setRealtimeAvailable(realtime?.state === "available");
         setVoiceMessage(voice?.state === "available" ? "" : voice?.note || "Voice service is unavailable here. Text research remains available.");
       })
       .catch(() => {
         if (!active) return;
         setVoiceAvailability("unavailable");
+        setRealtimeAvailable(false);
         setVoiceMessage("Voice status could not be loaded. You can still type your question.");
       });
     return () => { active = false; };
@@ -669,8 +674,24 @@ export function VoicePanel({
         <span className="text-xs text-muted" role="status" aria-live="polite">{STATUS_LABEL[status]}</span>
       </div>
       <p className="mt-2 text-sm text-muted">
-        Voice and text use the same research request. Audio is sent only after you stop recording; this app does not save recordings. Provider logging follows your ElevenLabs account settings. Research can suggest a view but never confirms it, accepts a quote, or moves funds.
+        Voice and text use the same research request. Realtime Talk can converse live; Record remains the editable push-to-talk path. Research can suggest a view but never confirms it, accepts a quote, or moves funds.
       </p>
+      <div className="mt-3">
+        <RealtimeVoiceSession
+          available={realtimeAvailable}
+          onError={(message) => setError(message)}
+          onTranscript={(text, role) => {
+            if (role === "user") {
+              setTranscript(text);
+              setInputMode("text");
+              setNotice("Realtime transcript is editable. Review it before asking the research path, or keep talking.");
+            } else {
+              setAnswer(text);
+              setNotice("Realtime reply shown. Confirm any suggested view or destination on screen before continuing.");
+            }
+          }}
+        />
+      </div>
       {status === "listening" || status === "transcribing" || status === "speaking" ? <div className="my-3 flex h-14 items-center justify-center gap-1 rounded-lg border border-[#E5E9F8] bg-[#F7F8FF]" role="status" aria-label={STATUS_LABEL[status]}>{Array.from({ length: 29 }, (_, index) => <span key={index} className="voice-wave-bar" style={{ animationDelay: `${(index % 9) * 80}ms` }} />)}</div> : null}
       <div className="mt-3 flex flex-wrap gap-2">
         {inputMode === "voice" ? (

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { api, dataContextFromStorage, OPEN_ASSISTANT_EVENT } from "@/lib/client";
+import { AppDialog } from "@/components/AppDialog";
+import { RealtimeVoiceSession } from "@/components/RealtimeVoiceSession";
 
 type StructuredAction = { type: "navigate"; label: string; href: string };
 type Message = { id: string; role: "user" | "assistant"; content: string; createdAt: string; action?: StructuredAction };
@@ -63,6 +65,7 @@ export function ContextualAssistant() {
   const [notice, setNotice] = useState("");
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("ready");
   const [voiceAvailable, setVoiceAvailable] = useState(false);
+  const [realtimeAvailable, setRealtimeAvailable] = useState(false);
   const [muted, setMuted] = useState(false);
   const [manageAction, setManageAction] = useState<"rename" | "delete" | null>(null);
   const [threadTitle, setThreadTitle] = useState("");
@@ -91,8 +94,14 @@ export function ContextualAssistant() {
   useEffect(() => {
     let active = true;
     api<{ services: { id: string; state: string }[] }>("/api/status").then(({ services }) => {
-      if (active) setVoiceAvailable(services.some((service) => service.id === "voice" && service.state === "available"));
-    }).catch(() => { if (active) setVoiceAvailable(false); });
+      if (!active) return;
+      setVoiceAvailable(services.some((service) => service.id === "voice" && service.state === "available"));
+      setRealtimeAvailable(services.some((service) => service.id === "realtimeVoice" && service.state === "available"));
+    }).catch(() => {
+      if (!active) return;
+      setVoiceAvailable(false);
+      setRealtimeAvailable(false);
+    });
     return () => { active = false; };
   }, []);
   useEffect(() => {
@@ -322,9 +331,21 @@ export function ContextualAssistant() {
         <footer className="space-y-2 border-t border-line bg-white p-3">
           {error ? <p role="alert" className="rounded-lg bg-[#FFF3F1] p-2 text-sm text-bad">{error}</p> : null}
           {notice ? <p role="status" className="text-xs text-muted">{notice}</p> : null}
+          {realtimeAvailable ? <RealtimeVoiceSession
+            available={realtimeAvailable}
+            compact
+            onError={(message) => setError(message)}
+            onTranscript={(text, role) => {
+              if (role === "user") setDraft(text);
+              else setNotice("Realtime reply received. Consequential actions still require an on-screen confirmation.");
+            }}
+            onPendingAction={(action) => {
+              setNotice(`Review destination · ${action.label}. No navigation happens until you confirm.`);
+            }}
+          /> : null}
           {voiceStatus === "listening" ? <p className="text-xs text-muted">Listening. Mute pauses microphone input; stop transcribes, cancel discards.</p> : null}
           <label htmlFor="assistant-question" className="sr-only">Your question</label>
-          <textarea id="assistant-question" className="min-h-20 w-full resize-y rounded-lg border border-line bg-[#FBFAF8] p-3 text-sm" maxLength={3000} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask about a market, thesis, or next step…" disabled={voiceStatus === "sending" || voiceStatus === "transcribing"} />
+          <textarea id="assistant-question" className="min-h-20 w-full resize-y rounded-lg border border-line bg-[#FBFAF8] p-3 text-sm" maxLength={3000} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask a question or give a task…" disabled={voiceStatus === "sending" || voiceStatus === "transcribing"} />
           <div className="flex flex-wrap justify-end gap-2">
             {voiceAvailable && voiceStatus !== "listening" ? <button type="button" className="min-h-10 rounded-lg border border-line px-3 text-sm" onClick={() => void startRecording()} disabled={voiceStatus !== "ready"}>Record</button> : null}
             {voiceStatus === "listening" ? <>
@@ -336,18 +357,16 @@ export function ContextualAssistant() {
             {voiceStatus === "speaking" ? <button type="button" className="min-h-10 rounded-lg border border-line px-3 text-sm" onClick={stopSpeech}>Interrupt speech</button> : null}
             <button type="button" className="min-h-10 rounded-lg bg-action px-4 text-sm font-semibold text-white disabled:opacity-50" onClick={() => void send()} disabled={!draft.trim() || voiceStatus === "sending" || voiceStatus === "transcribing" || voiceStatus === "listening"}>{voiceStatus === "sending" ? "Thinking…" : voiceStatus === "transcribing" ? "Transcribing…" : "Send"}</button>
           </div>
-          {!voiceAvailable ? <p className="text-right text-xs text-muted">Voice is unavailable; text remains ready.</p> : null}
+          {!voiceAvailable && !realtimeAvailable ? <p className="text-right text-xs text-muted">Voice is unavailable; text remains ready.</p> : null}
         </footer>
       </aside> : null}
-      {manageAction ? <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !managePending) setManageAction(null); }}>
-        <section className="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="assistant-manage-title">
-          <p className="source-pill">Conversation</p>
-          <h2 id="assistant-manage-title" className="mt-3 font-serif text-2xl font-bold">{manageAction === "rename" ? "Rename conversation" : "Delete conversation?"}</h2>
-          {manageAction === "rename" ? <label className="app-field mt-4 block"><span className="mb-1 block text-sm font-semibold">Conversation name</span><input className="app-input min-h-11 w-full px-3" autoFocus maxLength={100} value={threadTitle} onChange={(event) => setThreadTitle(event.target.value)} /></label> : <p className="mt-3 text-sm text-muted">“{current?.title}” and its assistant messages will be removed. Thesis drafts, saved views, evidence, and positions are unchanged.</p>}
-          {error ? <p role="alert" className="mt-3 text-sm text-bad">{error}</p> : null}
-          <div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" className="app-button min-h-11 rounded-lg border border-line px-4 text-sm font-semibold" onClick={() => setManageAction(null)} disabled={managePending}>Cancel</button><button type="button" className={`app-button min-h-11 rounded-lg px-5 text-sm font-semibold text-white disabled:opacity-50 ${manageAction === "delete" ? "bg-bad" : "bg-action"}`} onClick={() => void submitManageThread()} disabled={managePending || manageAction === "rename" && !threadTitle.trim()}>{managePending ? "Saving…" : manageAction === "rename" ? "Save name" : "Delete conversation"}</button></div>
-        </section>
-      </div> : null}
+      <AppDialog open={Boolean(manageAction)} titleId="assistant-manage-title" onClose={() => { if (!managePending) setManageAction(null); }} closeOnBackdrop={!managePending}>
+        <p className="source-pill">Conversation</p>
+        <h2 id="assistant-manage-title" className="mt-3 font-serif text-2xl font-bold">{manageAction === "rename" ? "Rename conversation" : "Delete conversation?"}</h2>
+        {manageAction === "rename" ? <label className="app-field mt-4 block"><span className="mb-1 block text-sm font-semibold">Conversation name</span><input className="app-input min-h-11 w-full px-3" autoFocus maxLength={100} value={threadTitle} onChange={(event) => setThreadTitle(event.target.value)} /></label> : <p className="mt-3 text-sm text-muted">“{current?.title}” and its assistant messages will be removed. Thesis drafts, saved views, evidence, and positions are unchanged.</p>}
+        {error ? <p role="alert" className="mt-3 text-sm text-bad">{error}</p> : null}
+        <div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" className="app-button min-h-11 rounded-lg border border-line px-4 text-sm font-semibold" onClick={() => setManageAction(null)} disabled={managePending}>Cancel</button><button type="button" className={`app-button min-h-11 rounded-lg px-5 text-sm font-semibold text-white disabled:opacity-50 ${manageAction === "delete" ? "bg-bad" : "bg-action"}`} onClick={() => void submitManageThread()} disabled={managePending || manageAction === "rename" && !threadTitle.trim()}>{managePending ? "Saving…" : manageAction === "rename" ? "Save name" : "Delete conversation"}</button></div>
+      </AppDialog>
     </>
   );
 }

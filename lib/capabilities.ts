@@ -13,6 +13,7 @@ export function capabilities(): Record<string, Capability> {
   const escrow = Boolean(process.env.NEXT_PUBLIC_ESCROW);
   const maker = Boolean(process.env.MAKER_PRIVATE_KEY);
   const eleven = Boolean(process.env.ELEVENLABS_API_KEY);
+  const elevenAgent = eleven && Boolean(process.env.ELEVENLABS_AGENT_ID);
   const grok = Boolean(process.env.XAI_API_KEY);
   const qn = Boolean(process.env.QUICKNODE_STREAMS_SECRET);
   const geminiTradeEnabled = process.env.GEMINI_TRADE_ENABLED === "true";
@@ -36,6 +37,12 @@ export function capabilities(): Record<string, Capability> {
       label: "ElevenLabs voice",
       state: eleven ? "available" : "unavailable",
       reason: eleven ? "API key present" : "ELEVENLABS_API_KEY is not set. Use text instead.",
+    },
+    realtimeVoice: {
+      id: "realtimeVoice",
+      label: "ElevenLabs realtime agent",
+      state: elevenAgent ? "available" : "unavailable",
+      reason: elevenAgent ? "Private WebRTC agent configured" : "ELEVENLABS_AGENT_ID is not set. Push-to-talk and text remain available.",
     },
     grok: {
       id: "grok",
@@ -78,6 +85,7 @@ export function statusSnapshot() {
       { id: "geminiTrade", label: "Gemini native orders", state: caps.geminiTrade.state, note: caps.geminiTrade.reason },
       { id: "research", label: "Research model", state: caps.grok.state, note: caps.grok.reason },
       { id: "voice", label: "Voice", state: caps.voice.state, note: caps.voice.reason },
+      { id: "realtimeVoice", label: "Realtime voice", state: caps.realtimeVoice.state, note: caps.realtimeVoice.reason },
       { id: "quotes", label: "Quote service", state: caps.maker.state, note: caps.maker.reason },
       { id: "arc", label: "Arc RPC", state: "available" as const, note: process.env.NEXT_PUBLIC_RPC_URL || "https://rpc.testnet.arc.io" },
       { id: "indexer", label: "Stream indexer", state: caps.streams.state, note: caps.streams.reason },
