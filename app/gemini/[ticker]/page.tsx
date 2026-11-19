@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { api, modeFromStorage } from "@/lib/client";
+import { api, dataContextFromStorage } from "@/lib/client";
 import { flattenEvents, geminiRichText, type GeminiEvent } from "@/lib/gemini/types";
 import { Button, Card, Empty, Field, inputCls } from "@/components/ui";
 import { formatTime } from "@/lib/format";
@@ -78,7 +78,7 @@ export default function GeminiEventPage() {
   const [thesisLinkError, setThesisLinkError] = useState("");
 
   useModeChange(() => {
-    const nextMode = modeFromStorage() === "live" ? "live" : "replay";
+    const nextMode = dataContextFromStorage();
     const url = new URL(window.location.href);
     url.searchParams.set("mode", nextMode);
     window.history.replaceState({}, "", url);
@@ -91,7 +91,7 @@ export default function GeminiEventPage() {
       ? "live"
       : requestedMode === "replay"
         ? "replay"
-        : modeFromStorage() === "live" ? "live" : "replay";
+        : dataContextFromStorage();
     setLoading(true);
     setError("");
     api<GeminiDetail>(`/api/gemini/events/${encodeURIComponent(ticker)}?mode=${mode}`)

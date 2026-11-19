@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, modeFromStorage } from "@/lib/client";
+import { api, dataContextFromStorage, modeFromStorage } from "@/lib/client";
 import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
 import { Button, Card, Empty } from "@/components/ui";
 import { VoicePanel } from "@/components/VoicePanel";
@@ -22,7 +22,7 @@ export default function TopicPage() {
   const [busy, setBusy] = useState(false);
 
   const loadTopic = useCallback(async () => {
-    const mode = modeFromStorage() === "live" ? "live" : "replay";
+    const mode = dataContextFromStorage();
     setTopicError("");
     try {
       const res = await api<{ family: MarketFamily; relatedContracts: typeof relatedContracts; evidence: EvidenceItem[] }>(`/api/topics/${slug}?mode=${mode}`);

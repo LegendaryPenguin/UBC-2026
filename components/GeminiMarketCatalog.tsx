@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { api, modeFromStorage, requestModeChange } from "@/lib/client";
+import { api, dataContextFromStorage, requestDataContextChange } from "@/lib/client";
 import { flattenEvents, type GeminiEvent, type GeminiStatus } from "@/lib/gemini/types";
 import { Button, Card, Empty, Field, inputCls } from "@/components/ui";
 import { formatTime } from "@/lib/format";
 import { useModeChange } from "@/lib/use-mode-change";
+import { AppDialog } from "@/components/AppDialog";
+import type { ThesisRevision } from "@/lib/domain/types";
 
 type EventKind = "events" | "upcoming" | "settled";
 type MarketResponse = {
@@ -63,14 +65,21 @@ export function GeminiMarketCatalog({ embedded = false }: { embedded?: boolean }
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
   const [data, setData] = useState<MarketResponse | null>(null);
+  const [visibleEvents, setVisibleEvents] = useState<GeminiEvent[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [urlInitialized, setUrlInitialized] = useState(false);
+  const [attachEvent, setAttachEvent] = useState<GeminiEvent | null>(null);
+  const [attachFamily, setAttachFamily] = useState<{ slug: string; familyId: string; familyVersion: string; contractLabel?: string } | null>(null);
+  const [theses, setTheses] = useState<ThesisRevision[]>([]);
+  const [attachPending, setAttachPending] = useState("");
+  const [attachError, setAttachError] = useState("");
+  const [researchPending, setResearchPending] = useState("");
   const requestId = useRef(0);
 
   useEffect(() => {
-    setMode(modeFromStorage() === "live" ? "live" : "replay");
+    setMode(dataContextFromStorage());
     const params = new URLSearchParams(window.location.search);
     const initialQuery = params.get("q") || "";
     const initialKind = params.get("kind");
@@ -99,7 +108,7 @@ export function GeminiMarketCatalog({ embedded = false }: { embedded?: boolean }
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   }, [urlInitialized, kind, status, category, search, offset]);
 
-  useModeChange(() => setMode(modeFromStorage() === "live" ? "live" : "replay"));
+  useModeChange(() => setMode(dataContextFromStorage()));
 
   useEffect(() => {
     const current = ++requestId.current;
@@ -111,7 +120,13 @@ export function GeminiMarketCatalog({ embedded = false }: { embedded?: boolean }
     setError("");
     api<MarketResponse>(`/api/gemini/events?${params}`)
       .then((response) => {
-        if (current === requestId.current) setData(response);
+        if (current === requestId.current) {
+          setData(response);
+          setVisibleEvents((items) => offset === 0 ? response.events : [
+            ...items,
+            ...response.events.filter((event) => !items.some((item) => item.ticker === event.ticker)),
+          ]);
+        }
       })
       .catch((err) => {
         if (current === requestId.current) {
@@ -141,7 +156,70 @@ export function GeminiMarketCatalog({ embedded = false }: { embedded?: boolean }
 
   const total = data?.pagination.total ?? 0;
   const pageSize = data?.pagination.limit ?? 50;
-  const events = data?.events ?? [];
+  const events = visibleEvents;
+
+  async function openAttach(event: GeminiEvent) {
+    setAttachEvent(event);
+    setAttachFamily(null);
+    setAttachError("");
+    try {
+      const [detail, library] = await Promise.all([
+        api<{ compatibleTopics: { slug: string; familyId: string; familyVersion: string; contractLabel?: string }[] }>(`/api/gemini/events/${encodeURIComponent(event.ticker)}?mode=${mode}`),
+        api<{ theses: ThesisRevision[] }>("/api/theses"),
+      ]);
+      setAttachFamily(detail.compatibleTopics[0] || null);
+      setTheses(library.theses || []);
+      if (!detail.compatibleTopics.length) setAttachError("This listing does not map to a supported thesis construction yet.");
+    } catch (cause) {
+      setAttachError(cause instanceof Error ? cause.message : "Compatibility could not be checked.");
+    }
+  }
+
+  async function attachToThesis(thesis: ThesisRevision) {
+    if (!attachFamily) return;
+    setAttachPending(thesis.id);
+    setAttachError("");
+    try {
+      await api(`/api/theses/${thesis.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action: "bind", ...attachFamily, mode }),
+      });
+      window.location.href = `/theses/${thesis.id}`;
+    } catch (cause) {
+      setAttachError(cause instanceof Error ? cause.message : "This market could not be attached to the thesis.");
+      setAttachPending("");
+    }
+  }
+
+  async function researchAsNew(event: GeminiEvent) {
+    setResearchPending(event.ticker);
+    setError("");
+    try {
+      const detail = await api<{ compatibleTopics: { slug: string; familyId: string; familyVersion: string }[] }>(`/api/gemini/events/${encodeURIComponent(event.ticker)}?mode=${mode}`);
+      const family = detail.compatibleTopics[0];
+      if (!family) {
+        window.location.href = `/gemini/${encodeURIComponent(event.ticker)}?mode=${mode}`;
+        return;
+      }
+      const result = await api<{ thesis: ThesisRevision }>("/api/theses", {
+        method: "POST",
+        body: JSON.stringify({
+          topicSlug: family.slug,
+          familyId: family.familyId,
+          familyVersion: family.familyVersion,
+          mode,
+          title: event.title,
+          rationale: event.title,
+          direction: "yes",
+          evidenceIds: [],
+        }),
+      });
+      window.location.href = `/theses/${result.thesis.id}`;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The research workspace could not be opened.");
+      setResearchPending("");
+    }
+  }
 
   return (
     <div className={`explore-catalog space-y-4 ${embedded ? "explore-catalog--embedded" : ""}`}>
@@ -168,7 +246,7 @@ export function GeminiMarketCatalog({ embedded = false }: { embedded?: boolean }
         <p>{error} {mode === "live" ? "Retry, switch to Replay, or return to Explore." : "Retry or return to Explore."}</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button kind="ghost" disabled={loading} onClick={() => setRetryCount((count) => count + 1)}>Retry</Button>
-          {mode === "live" ? <Button kind="secondary" onClick={() => requestModeChange("replay")}>Switch to Replay</Button> : null}
+          {mode === "live" ? <Button kind="secondary" onClick={() => requestDataContextChange("replay")}>Switch to Replay</Button> : null}
           <Button href="/explore" kind="ghost">Back to Explore</Button>
         </div>
       </Empty> : null}
@@ -193,22 +271,36 @@ export function GeminiMarketCatalog({ embedded = false }: { embedded?: boolean }
                 <div className="mt-3 grid grid-cols-2 gap-2"><div className="rounded-lg bg-[#F7F6F2] p-2"><p className="text-[11px] text-muted">Closes / result</p><p className="mt-1 text-xs font-medium">{dateLabel(event)}</p></div><div className="rounded-lg bg-[#F7F6F2] p-2"><p className="text-[11px] text-muted">Source</p><p className="mt-1 truncate text-xs font-medium">{event.sourceDetails?.agency || event.source || "Gemini listing"}</p></div></div>
                 <p className="mt-2 text-[11px] text-muted">Updated {data?.fetchedAt ? formatTime(data.fetchedAt) : "time unavailable"} · {mode === "live" ? "Live data" : "Illustrative replay"}</p>
               </div>
-              <Button href={`/gemini/${encodeURIComponent(event.ticker)}?mode=${mode}`} className="mt-4 w-full">Research market →</Button>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <Button kind="ghost" onClick={() => void openAttach(event)}>Use existing thesis</Button>
+                <Button className="w-full" disabled={researchPending === event.ticker} onClick={() => void researchAsNew(event)}>{researchPending === event.ticker ? "Opening Research…" : "Research market →"}</Button>
+              </div>
             </Card>
           );
         })}
       </div>
 
-      {data && total > pageSize ? (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-muted">Showing {offset + 1}–{Math.min(offset + events.length, total)} of {total}</p>
-          <div className="flex gap-2">
-            <Button kind="ghost" disabled={offset === 0 || loading} onClick={() => setOffset((value) => Math.max(value - pageSize, 0))}>Previous</Button>
-            <Button kind="ghost" disabled={offset + pageSize >= total || loading} onClick={() => setOffset((value) => value + pageSize)}>Next</Button>
-          </div>
+      {data && total > events.length ? (
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-sm text-muted">Showing {events.length} of {total}</p>
+          <Button kind="ghost" disabled={loading} onClick={() => setOffset(events.length)}>{loading ? "Loading…" : "Load more"}</Button>
         </div>
       ) : null}
       <p className="text-xs text-muted">Listings, close times, and history come from the selected Gemini data source. Missing prices, rules, or outcomes remain unavailable.</p>
+      <AppDialog open={Boolean(attachEvent)} titleId="attach-market-title" onClose={() => { if (!attachPending) setAttachEvent(null); }}>
+        <div className="flex items-start justify-between gap-3"><div><p className="source-pill">Compatibility check</p><h2 id="attach-market-title" className="mt-3 font-serif text-2xl font-bold">Use an existing thesis</h2></div><button type="button" aria-label="Close thesis picker" className="min-h-10 px-3 text-2xl text-muted" onClick={() => setAttachEvent(null)}>×</button></div>
+        <p className="mt-2 text-sm text-muted">{attachEvent?.title}</p>
+        {attachFamily ? <p className="mt-3 rounded-lg bg-[#F1F5FF] p-3 text-sm">Compatible supported contract: <strong>{attachFamily.contractLabel || attachFamily.slug.replaceAll("-", " ")}</strong></p> : null}
+        {attachError ? <p role="alert" className="mt-3 text-sm text-bad">{attachError}</p> : null}
+        <div className="mt-4 grid max-h-80 gap-2 overflow-y-auto">
+          {theses.filter((thesis) => thesis.status === "draft").map((thesis) => {
+            const canAttach = !thesis.topicSlug || thesis.familyId === attachFamily?.familyId;
+            return <button key={thesis.id} type="button" disabled={!canAttach || Boolean(attachPending) || !attachFamily} onClick={() => void attachToThesis(thesis)} className="rounded-xl border border-line p-3 text-left disabled:opacity-50"><span className="font-semibold">{thesis.title || thesis.rationale.slice(0, 80)}</span><span className="mt-1 block text-xs text-muted">{canAttach ? thesis.topicSlug ? "Already uses this compatible market" : "Question-first draft · compatible" : "Different market family · unavailable"}</span></button>;
+          })}
+          {!theses.some((thesis) => thesis.status === "draft") ? <p className="rounded-lg border border-dashed border-line p-4 text-sm text-muted">No draft theses are available. Start a new thesis from this market instead.</p> : null}
+        </div>
+        <div className="mt-4 flex justify-end gap-2"><Button kind="ghost" onClick={() => setAttachEvent(null)}>Cancel</Button><Button disabled={!attachEvent || Boolean(researchPending)} onClick={() => { if (attachEvent) void researchAsNew(attachEvent); }}>Research as new thesis</Button></div>
+      </AppDialog>
     </div>
   );
 }

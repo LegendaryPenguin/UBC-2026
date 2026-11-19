@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, modeFromStorage } from "@/lib/client";
+import { api, dataContextFromStorage } from "@/lib/client";
 import { useModeChange } from "@/lib/use-mode-change";
 import { Button, Card, Field, inputCls } from "@/components/ui";
 import type { EvidenceItem, MarketFamily, ThesisRevision, ViewTemplate } from "@/lib/domain/types";
+import { AppDialog } from "@/components/AppDialog";
 
 type VoiceStatus = "ready" | "connecting" | "listening" | "transcribing" | "thinking" | "speaking" | "ended" | "error";
 type VoiceAvailability = "checking" | "available" | "unavailable";
@@ -90,6 +91,8 @@ export function VoicePanel({
   const [proposal, setProposal] = useState<ViewProposal | null>(null);
   const [proposalSaved, setProposalSaved] = useState(false);
   const [savingProposal, setSavingProposal] = useState(false);
+  const [differentTopicQuestion, setDifferentTopicQuestion] = useState("");
+  const [startingNewTopic, setStartingNewTopic] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const discardRecordingRef = useRef(false);
   const streamRef = useRef<MediaStream | null>(null);
@@ -372,9 +375,28 @@ export function VoicePanel({
     setNotice(voiceAvailability === "available" ? "Voice mode selected. Recording starts only after you press Record." : voiceMessage);
   }
 
-  async function ask() {
+  function looksLikeDifferentTopic(question: string) {
+    const value = question.toLowerCase();
+    const current = `${slug} ${family.title} ${family.question}`.toLowerCase();
+    const groups = [
+      ["bitcoin", "btc"],
+      ["ethereum", "eth"],
+      ["solana", "sol"],
+      ["rates", "fed", "central bank"],
+      ["inflation", "cpi"],
+    ];
+    const currentGroup = groups.find((group) => group.some((term) => current.includes(term)));
+    const requestedGroup = groups.find((group) => group.some((term) => new RegExp(`\\b${term}\\b`, "i").test(value)));
+    return Boolean(currentGroup && requestedGroup && currentGroup !== requestedGroup);
+  }
+
+  async function ask(keepAsContext = false) {
     if (!transcript.trim()) {
       setError("Type or record a question first.");
+      return;
+    }
+    if (!keepAsContext && thesis && looksLikeDifferentTopic(transcript.trim())) {
+      setDifferentTopicQuestion(transcript.trim());
       return;
     }
     releasePlayback();
@@ -401,7 +423,7 @@ export function VoicePanel({
           conversation: nextConversation,
           slug,
           thesisId: thesis?.id,
-          mode: modeFromStorage(),
+          mode: dataContextFromStorage(),
           context,
           maxPayout,
         }),
@@ -487,7 +509,7 @@ export function VoicePanel({
         const result = await api<{ thesis: ThesisRevision }>(`/api/theses/${thesis.id}`, {
           method: "PATCH",
           body: JSON.stringify({
-            mode: modeFromStorage(),
+            mode: dataContextFromStorage(),
             template: proposal.template,
             direction: proposal.template === "directional" || proposal.template === "binary" ? proposal.direction : null,
             lowerThreshold: proposal.template === "binary" ? null : proposal.lowerThreshold,
@@ -504,7 +526,7 @@ export function VoicePanel({
         const result = await api<{ thesis: ThesisRevision }>("/api/theses", {
           method: "POST",
           body: JSON.stringify({
-            mode: modeFromStorage(),
+            mode: dataContextFromStorage(),
             topicSlug: family.slug,
             familyId: family.id,
             familyVersion: family.version,
@@ -613,11 +635,34 @@ export function VoicePanel({
     setNotice("Question cleared. No saved thesis or financial state changed.");
   }
 
+  async function startSeparateThesis() {
+    if (!differentTopicQuestion) return;
+    setStartingNewTopic(true);
+    setError("");
+    try {
+      const result = await api<{ thesis: ThesisRevision }>("/api/theses", {
+        method: "POST",
+        body: JSON.stringify({
+          title: differentTopicQuestion.slice(0, 100),
+          rationale: differentTopicQuestion,
+          mode: dataContextFromStorage(),
+          evidenceIds: [],
+        }),
+      });
+      router.push(`/theses/${result.thesis.id}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "A separate thesis could not be created.");
+      setStartingNewTopic(false);
+      setDifferentTopicQuestion("");
+    }
+  }
+
   const isBusy = status === "connecting" || status === "listening" || status === "transcribing" || status === "thinking";
   const canEdit = status !== "connecting" && status !== "listening" && status !== "transcribing";
   const thresholds = family.predicates.map((predicate) => predicate.threshold);
 
   return (
+    <>
     <Card className="voice-panel">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-serif text-xl">{title || (context === "view" ? "Clarify your view" : context === "compare" ? "Explain this comparison" : context === "payoff" ? "Talk through the payoff" : "Talk through your research")}</h2>
@@ -756,5 +801,12 @@ export function VoicePanel({
       ) : null}
       {error ? <p className="mt-2 text-sm text-bad" role="alert">{error}</p> : null}
     </Card>
+    <AppDialog open={Boolean(differentTopicQuestion)} titleId={`different-topic-${slug}`} onClose={() => setDifferentTopicQuestion("")} closeOnBackdrop={!startingNewTopic}>
+      <div className="flex items-start justify-between gap-3"><div><p className="source-pill">Change topic</p><h2 id={`different-topic-${slug}`} className="mt-3 font-serif text-2xl font-bold">Start a separate thesis?</h2></div><button type="button" aria-label="Cancel topic change" className="min-h-10 px-3 text-2xl text-muted" onClick={() => setDifferentTopicQuestion("")}>×</button></div>
+      <p className="mt-3 text-sm text-muted">This question appears materially different from the current thesis. Start a separate board, or keep it as additional context here.</p>
+      <div className="mt-4 rounded-xl border border-line bg-[#F8F7F4] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">New question</p><p className="mt-2 text-sm">{differentTopicQuestion}</p></div>
+      <div className="mt-5 flex flex-wrap justify-end gap-2"><Button onClick={() => void startSeparateThesis()} disabled={startingNewTopic}>{startingNewTopic ? "Starting…" : "Start new board"}</Button><Button kind="secondary" onClick={() => { setDifferentTopicQuestion(""); void ask(true); }} disabled={startingNewTopic}>Keep as context</Button><Button kind="ghost" onClick={() => setDifferentTopicQuestion("")} disabled={startingNewTopic}>Cancel</Button></div>
+    </AppDialog>
+    </>
   );
 }

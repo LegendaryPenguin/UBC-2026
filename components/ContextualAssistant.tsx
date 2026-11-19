@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { api, modeFromStorage, OPEN_ASSISTANT_EVENT } from "@/lib/client";
+import { api, dataContextFromStorage, OPEN_ASSISTANT_EVENT } from "@/lib/client";
 
 type StructuredAction = { type: "navigate"; label: string; href: string };
 type Message = { id: string; role: "user" | "assistant"; content: string; createdAt: string; action?: StructuredAction };
@@ -202,7 +202,7 @@ export function ContextualAssistant() {
       if (!action && topicSlug) {
         const result = await api<{ answer?: string; clarificationPrompt?: string }>("/api/research", {
           method: "POST",
-          body: JSON.stringify({ question, conversation: turns, slug: topicSlug, thesisId, mode: modeFromStorage(), context: "research" }),
+          body: JSON.stringify({ question, conversation: turns, slug: topicSlug, thesisId, mode: dataContextFromStorage(), context: "research" }),
         });
         answer = [result.answer, result.clarificationPrompt].filter(Boolean).join("\n\n") || "I could not form a research reply. Try again or switch to text.";
       }

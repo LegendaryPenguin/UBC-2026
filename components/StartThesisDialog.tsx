@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, modeFromStorage, OPEN_ASSISTANT_EVENT } from "@/lib/client";
+import { api, dataContextFromStorage, OPEN_ASSISTANT_EVENT } from "@/lib/client";
 import type { MarketFamily, ThesisRevision } from "@/lib/domain/types";
 
 export function StartThesisDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -37,7 +37,7 @@ export function StartThesisDialog({ open, onClose }: { open: boolean; onClose: (
     setSearching(true);
     setSearchState("");
     try {
-      const mode = modeFromStorage() === "live" ? "live" : "replay";
+      const mode = dataContextFromStorage();
       const result = await api<{ families: MarketFamily[] }>(`/api/topics?mode=${mode}&q=${encodeURIComponent(question.trim())}`);
       setResults(result.families || []);
       setSearchState(result.families?.length ? "Choose the exact listed market that matches your question." : "No compatible market matched. Try a more specific term or browse Explore.");
@@ -47,23 +47,25 @@ export function StartThesisDialog({ open, onClose }: { open: boolean; onClose: (
   }
 
   async function createDraft() {
-    if (!selected || question.trim().length < 8) return;
+    if (question.trim().length < 8) return;
     setCreating(true);
     setError("");
     try {
-      const mode = modeFromStorage();
-      const single = selected.predicates.length === 1 && selected.contracts.length === 1;
+      const mode = dataContextFromStorage();
+      const single = Boolean(selected && selected.predicates.length === 1 && selected.contracts.length === 1);
       const result = await api<{ thesis: ThesisRevision }>("/api/theses", {
         method: "POST",
         body: JSON.stringify({
-          topicSlug: selected.slug,
-          familyId: selected.id,
-          familyVersion: selected.version,
+          topicSlug: selected?.slug,
+          familyId: selected?.id,
+          familyVersion: selected?.version,
           mode,
           title: title.trim() || undefined,
-          template: single ? "binary" : selected.predicates.length >= 2 ? "range" : "directional",
-          lowerThreshold: single ? null : selected.predicates[0]?.threshold ?? null,
-          upperThreshold: !single && selected.predicates.length >= 2 ? selected.predicates[1]?.threshold ?? null : null,
+          ...(selected ? {
+            template: single ? "binary" : selected.predicates.length >= 2 ? "range" : "directional",
+            lowerThreshold: single ? null : selected.predicates[0]?.threshold ?? null,
+            upperThreshold: !single && selected.predicates.length >= 2 ? selected.predicates[1]?.threshold ?? null : null,
+          } : {}),
           direction: "yes",
           rationale: question.trim(),
           evidenceIds: [],
@@ -108,9 +110,9 @@ export function StartThesisDialog({ open, onClose }: { open: boolean; onClose: (
           {selected ? <div className="rounded-lg border border-[#CCD6F5] bg-[#F7F8FF] p-3"><p className="text-xs font-semibold uppercase tracking-wide text-action">Selected market</p><p className="mt-1 font-medium">{selected.title}</p><p className="mt-1 text-sm text-muted">The draft will open on Research with these exact Gemini contract identities. You can refine the supported view before confirming.</p></div> : null}
           <footer className="flex flex-wrap justify-end gap-2 border-t border-line pt-4">
             <button type="button" onClick={onClose} disabled={creating} className="app-button min-h-11 rounded-lg border border-line px-4 text-sm font-semibold">Cancel</button>
-            <button type="button" onClick={() => void createDraft()} disabled={!selected || question.trim().length < 8 || creating} className="app-button min-h-11 rounded-lg bg-action px-5 text-sm font-semibold text-white disabled:opacity-50">{creating ? "Creating draft…" : "Create draft"}</button>
+            <button type="button" onClick={() => void createDraft()} disabled={question.trim().length < 8 || creating} className="app-button min-h-11 rounded-lg bg-action px-5 text-sm font-semibold text-white disabled:opacity-50">{creating ? "Creating draft…" : selected ? "Create market-linked draft" : "Create draft"}</button>
           </footer>
-          <p className="text-center text-xs text-muted">A selected market helps validate the question. Creating a draft does not place or authorize a trade.</p>
+          <p className="text-center text-xs text-muted">Market selection is optional. An unbound draft opens in Research so you can attach a compatible market later. Creating a draft never places or authorizes a trade.</p>
         </form>
       </section>
     </div>

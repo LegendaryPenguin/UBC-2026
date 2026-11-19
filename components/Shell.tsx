@@ -3,11 +3,26 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { api, announceModeChange, MODE_CHANGE_EVENT, MODE_CHANGE_REQUEST_EVENT, OPEN_ASSISTANT_EVENT, setMode } from "@/lib/client";
+import {
+  api,
+  announceModeChange,
+  dataContextFromStorage,
+  executionEnvironmentFromStorage,
+  MODE_CHANGE_EVENT,
+  MODE_CHANGE_REQUEST_EVENT,
+  setDataContext,
+  setExecutionEnvironment,
+  type DataContext,
+  type ExecutionEnvironment,
+} from "@/lib/client";
 import { ContextualAssistant } from "@/components/ContextualAssistant";
+import { AppDialog } from "@/components/AppDialog";
 
 type Mode = "replay" | "live" | "paper";
 type Account = { name?: string | null; email?: string | null } | null;
+type PendingContext =
+  | { axis: "data"; value: DataContext }
+  | { axis: "execution"; value: ExecutionEnvironment };
 
 const NAV = [
   ["Dashboard", "/"],
@@ -40,8 +55,9 @@ function ProfileIcon() {
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
-  const [mode, setCurrentMode] = useState<Mode>("replay");
-  const [pendingMode, setPendingMode] = useState<Mode | null>(null);
+  const [dataContext, setCurrentDataContext] = useState<DataContext>("replay");
+  const [executionEnvironment, setCurrentExecutionEnvironment] = useState<ExecutionEnvironment>("none");
+  const [pendingContext, setPendingContext] = useState<PendingContext | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [modeOpen, setModeOpen] = useState(false);
   const [account, setAccount] = useState<Account>(null);
@@ -49,8 +65,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [signOutError, setSignOutError] = useState("");
 
   useEffect(() => {
-    const next = localStorage.getItem("thesis_mode") as Mode | null;
-    setCurrentMode(next === "live" || next === "paper" ? next : "replay");
+    setCurrentDataContext(dataContextFromStorage());
+    setCurrentExecutionEnvironment(executionEnvironmentFromStorage());
   }, [path]);
 
   useEffect(() => {
@@ -61,12 +77,29 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const syncMode = (event: Event) => {
-      const next = (event as CustomEvent<{ mode?: Mode }>).detail?.mode;
-      setCurrentMode(next === "live" || next === "paper" ? next : "replay");
+      const detail = (event as CustomEvent<{
+        mode?: Mode;
+        dataContext?: DataContext;
+        executionEnvironment?: ExecutionEnvironment;
+      }>).detail;
+      setCurrentDataContext(detail?.dataContext || dataContextFromStorage());
+      setCurrentExecutionEnvironment(detail?.executionEnvironment || executionEnvironmentFromStorage());
     };
     const requestMode = (event: Event) => {
-      const next = (event as CustomEvent<{ mode?: Mode }>).detail?.mode;
-      if (next === "live" || next === "replay" || next === "paper") setPendingMode(next);
+      const detail = (event as CustomEvent<{
+        mode?: Mode;
+        axis?: "data" | "execution";
+        value?: DataContext | ExecutionEnvironment;
+      }>).detail;
+      if (detail?.axis === "data" && (detail.value === "live" || detail.value === "replay")) {
+        setPendingContext({ axis: "data", value: detail.value });
+      } else if (detail?.axis === "execution" && ["none", "paper", "gemini", "arc"].includes(String(detail.value))) {
+        setPendingContext({ axis: "execution", value: detail.value as ExecutionEnvironment });
+      } else if (detail?.mode === "live" || detail?.mode === "replay") {
+        setPendingContext({ axis: "data", value: detail.mode });
+      } else if (detail?.mode === "paper") {
+        setPendingContext({ axis: "execution", value: "paper" });
+      }
     };
     window.addEventListener(MODE_CHANGE_EVENT, syncMode);
     window.addEventListener(MODE_CHANGE_REQUEST_EVENT, requestMode);
@@ -77,25 +110,34 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!pendingMode && !profileOpen && !modeOpen) return;
+    if (!profileOpen && !modeOpen) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      setPendingMode(null);
       setProfileOpen(false);
       setModeOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pendingMode, profileOpen, modeOpen]);
+  }, [profileOpen, modeOpen]);
 
-  const confirmModeChange = useCallback(() => {
-    if (!pendingMode) return;
-    setMode(pendingMode);
-    setCurrentMode(pendingMode);
-    announceModeChange(pendingMode);
-    setPendingMode(null);
+  const confirmContextChange = useCallback(() => {
+    if (!pendingContext) return;
+    if (pendingContext.axis === "data") {
+      setDataContext(pendingContext.value);
+      setCurrentDataContext(pendingContext.value);
+    } else {
+      setExecutionEnvironment(pendingContext.value);
+      setCurrentExecutionEnvironment(pendingContext.value);
+    }
+    const nextData = pendingContext.axis === "data" ? pendingContext.value : dataContext;
+    const nextExecution = pendingContext.axis === "execution" ? pendingContext.value : executionEnvironment;
+    announceModeChange(nextExecution === "paper" ? "paper" : nextData, {
+      dataContext: nextData,
+      executionEnvironment: nextExecution,
+    });
+    setPendingContext(null);
     setModeOpen(false);
-  }, [pendingMode]);
+  }, [dataContext, executionEnvironment, pendingContext]);
 
   async function signOut() {
     setSigningOut(true);
@@ -111,9 +153,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
     } finally { setSigningOut(false); }
   }
 
-  const environmentLabel = mode === "live" ? "Live market data" : mode === "paper" ? "Paper simulation" : "Illustrative demo";
-  const sourceLabel = mode === "live" ? "Live Gemini data" : "Recorded replay data";
-  const executionLabel = mode === "paper" ? "Paper simulation" : "No execution selected";
+  const environmentLabel = executionEnvironment === "paper"
+    ? `${dataContext === "live" ? "Live data" : "Replay"} · Paper`
+    : dataContext === "live" ? "Live market data" : "Illustrative demo";
+  const sourceLabel = dataContext === "live" ? "Live Gemini data" : "Recorded replay data";
+  const executionLabel = executionEnvironment === "paper" ? "Paper simulation"
+    : executionEnvironment === "gemini" ? "Gemini sandbox"
+      : executionEnvironment === "arc" ? "Arc testnet" : "No execution selected";
 
   return (
     <div className="min-h-screen">
@@ -134,7 +180,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <div className="relative">
               <button type="button" className="thesis-env-pill" aria-expanded={modeOpen} aria-controls="environment-menu" onClick={() => { setModeOpen((value) => !value); setProfileOpen(false); }}>
-                <span className={`h-2 w-2 rounded-full ${mode === "live" ? "bg-good" : mode === "paper" ? "bg-[#C57A36]" : "bg-[#718394]"}`} />
+                <span className={`h-2 w-2 rounded-full ${dataContext === "live" ? "bg-good" : executionEnvironment === "paper" ? "bg-[#C57A36]" : "bg-[#718394]"}`} />
                 {environmentLabel}<span aria-hidden="true" className="text-muted">ⓘ</span>
               </button>
               {modeOpen ? <div id="environment-menu" className="thesis-popover absolute right-0 top-11 z-40 w-[min(92vw,330px)] p-4" aria-label="Data and execution context">
@@ -142,7 +188,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   <div><p className="text-xs font-semibold uppercase tracking-wide text-muted">Data context</p><p className="mt-1 font-medium">{sourceLabel}</p></div>
                   <div><p className="text-xs font-semibold uppercase tracking-wide text-muted">Execution environment</p><p className="mt-1 font-medium">{executionLabel}</p><p className="mt-1 text-xs text-muted">Review always names the venue and environment before any approval.</p></div>
                   <div className="grid gap-2 border-t border-line pt-3">
-                    {([ ["replay", "Replay data"], ["live", "Live data"], ["paper", "Paper simulation"] ] as [Mode, string][]).map(([value, label]) => <button key={value} type="button" className={`min-h-10 rounded-lg border px-3 text-left text-sm ${mode === value ? "border-action bg-[#E9EEFF] text-action" : "border-line hover:bg-[#F7F6F2]"}`} onClick={() => { setModeOpen(false); if (mode !== value) setPendingMode(value); }}>{label}{mode === value ? " · current" : ""}</button>)}
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Choose data</p>
+                    {([["replay", "Replay data"], ["live", "Live data"]] as [DataContext, string][]).map(([value, label]) => <button key={value} type="button" className={`min-h-10 rounded-lg border px-3 text-left text-sm ${dataContext === value ? "border-action bg-[#E9EEFF] text-action" : "border-line hover:bg-[#F7F6F2]"}`} onClick={() => { setModeOpen(false); if (dataContext !== value) setPendingContext({ axis: "data", value }); }}>{label}{dataContext === value ? " · current" : ""}</button>)}
+                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Choose execution</p>
+                    {([["none", "Research only"], ["paper", "Paper simulation"], ["gemini", "Gemini sandbox"], ["arc", "Arc testnet"]] as [ExecutionEnvironment, string][]).map(([value, label]) => <button key={value} type="button" className={`min-h-10 rounded-lg border px-3 text-left text-sm ${executionEnvironment === value ? "border-action bg-[#E9EEFF] text-action" : "border-line hover:bg-[#F7F6F2]"}`} onClick={() => { setModeOpen(false); if (executionEnvironment !== value) setPendingContext({ axis: "execution", value }); }}>{label}{executionEnvironment === value ? " · current" : ""}</button>)}
                   </div>
                 </div>
               </div> : null}
@@ -171,13 +220,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </nav>
 
       <ContextualAssistant />
-      {pendingMode ? <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingMode(null); }}>
-        <section className="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="mode-dialog-title">
-          <div className="flex items-start justify-between gap-4"><div><p className="source-pill">Context change</p><h2 id="mode-dialog-title" className="mt-3 font-serif text-2xl font-bold">Switch to {pendingMode === "live" ? "live data" : pendingMode === "paper" ? "Paper simulation" : "Replay data"}?</h2></div><button type="button" aria-label="Cancel context change" className="min-h-10 rounded-lg px-3 text-xl text-muted hover:bg-[#F4F2ED]" onClick={() => setPendingMode(null)}>×</button></div>
+      <AppDialog open={Boolean(pendingContext)} titleId="mode-dialog-title" onClose={() => setPendingContext(null)}>
+        {pendingContext ? <>
+          <div className="flex items-start justify-between gap-4"><div><p className="source-pill">Context change</p><h2 id="mode-dialog-title" className="mt-3 font-serif text-2xl font-bold">Switch to {pendingContext.axis === "data" ? pendingContext.value === "live" ? "live data" : "Replay data" : pendingContext.value === "paper" ? "Paper simulation" : pendingContext.value === "gemini" ? "Gemini sandbox" : pendingContext.value === "arc" ? "Arc testnet" : "research only"}?</h2></div><button type="button" aria-label="Cancel context change" className="min-h-10 rounded-lg px-3 text-xl text-muted hover:bg-[#F4F2ED]" onClick={() => setPendingContext(null)}>×</button></div>
           <p className="mt-3 text-sm text-muted">Your notes and saved view stay in place. Market selections and open offers are revalidated for the new context; a quote tied to another source is cleared. Existing orders and positions remain in their original environment.</p>
-          <div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" className="app-button min-h-11 rounded-lg border border-line px-4 text-sm font-semibold" onClick={() => setPendingMode(null)}>Cancel</button><button type="button" className="app-button min-h-11 rounded-lg bg-action px-5 text-sm font-semibold text-white" onClick={confirmModeChange}>Switch context</button></div>
-        </section>
-      </div> : null}
+          <div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" className="app-button min-h-11 rounded-lg border border-line px-4 text-sm font-semibold" onClick={() => setPendingContext(null)}>Cancel</button><button type="button" className="app-button min-h-11 rounded-lg bg-action px-5 text-sm font-semibold text-white" onClick={confirmContextChange}>Switch context</button></div>
+        </> : null}
+      </AppDialog>
     </div>
   );
 }

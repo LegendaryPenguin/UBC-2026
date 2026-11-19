@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { MarketFamily, PositionRecord, ThesisRevision } from "@/lib/domain/types";
-import { api, modeFromStorage } from "@/lib/client";
+import { api, dataContextFromStorage } from "@/lib/client";
 import { formatUsdc } from "@/lib/format";
 import { formatTime } from "@/lib/format";
 import { Button, Card } from "@/components/ui";
@@ -72,7 +72,7 @@ export default function Dashboard() {
     const slugs = [...new Set(watchlists.flatMap((list) => list.slugs))].slice(0, 3);
     if (!slugs.length) return;
     let active = true;
-    const mode = modeFromStorage() === "live" ? "live" : "replay";
+    const mode = dataContextFromStorage();
     Promise.all(slugs.map((slug) => api<{ families: MarketFamily[] }>(`/api/topics?mode=${mode}&q=${encodeURIComponent(slug)}`).catch(() => ({ families: [] })))).then((results) => {
       if (active) setWatchedFamilies(results.flatMap((result) => result.families).filter((family) => slugs.includes(family.slug)));
     });
@@ -149,7 +149,7 @@ export default function Dashboard() {
 
         <aside className="space-y-4">
           <Card className="space-y-4"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted">Since your last visit</p><h2 className="mt-1 font-serif text-2xl font-bold">A clear next step</h2></div>
-            {recent.length ? <div className="border-t border-line pt-4"><p className="text-xs text-muted">Recently updated thesis</p><h3 className="mt-1 font-semibold">{recent[0].title?.trim() || titleFor(recent[0].topicSlug)}</h3><p className="mt-1 text-sm text-muted">Saved {formatTime(recent[0].updatedAt)} · {recent[0].status}</p><Link href={continueHref(recent[0])} className="mt-3 inline-flex min-h-10 items-center rounded-lg border border-action px-3 text-sm font-semibold text-action">Continue research →</Link></div> : null}
+            {recent.length ? <div className="border-t border-line pt-4"><p className="text-xs text-muted">Recently updated thesis</p><h3 className="mt-1 font-semibold">{recent[0].title?.trim() || titleFor(recent[0].topicSlug)}</h3><p className="mt-1 text-sm text-muted">Saved {formatTime(recent[0].updatedAt)} · {recent[0].status}</p><Link href={`/theses/${recent[0].id}?updates=1`} className="mt-3 inline-flex min-h-10 items-center rounded-lg border border-action px-3 text-sm font-semibold text-action">Review changes →</Link></div> : null}
             {watchedFamilies.slice(0, 2).map((family) => <div key={family.id} className="border-t border-line pt-4"><p className="text-xs text-muted">Watched · retrieved {formatTime(family.fetchedAt)}</p><h3 className="mt-1 font-semibold">{family.title}</h3><p className="mt-1 text-sm text-muted">{family.freshness} market reference</p><Link href={`/topics/${family.slug}`} className="mt-2 inline-flex text-sm font-semibold text-action">Review market →</Link></div>)}
             {!recent.length && !watchedFamilies.length ? <p className="border-t border-line pt-4 text-sm text-muted">There are no new market updates in this saved snapshot. Continue your latest thesis or explore a market.</p> : null}
             <div className="border-t border-line pt-4"><Link href="/explore" className="text-sm font-semibold text-action">Explore markets →</Link></div>

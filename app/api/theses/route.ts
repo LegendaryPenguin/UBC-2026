@@ -11,23 +11,39 @@ const VIEW_TEMPLATES: ViewTemplate[] = ["binary", "directional", "range", "outsi
 export async function GET() {
   const owner = thesisOwner();
   if (!owner) return ok({ theses: [] });
-  const mine = mutate((s) => s.theses.filter((t) => (t as ThesisRevision & { accountId?: string }).accountId === owner));
+  const store = mutate((s) => s);
+  const mine = store.theses
+    .filter((t) => (t as ThesisRevision & { accountId?: string }).accountId === owner)
+    .map((thesis) => {
+      const hasPosition = store.positions.some((position) => position.thesisId === thesis.id && position.accountId === owner);
+      const hasQuote = store.quotes.some((quote) => quote.thesisId === thesis.id && quote.accountId === owner);
+      const archived = Boolean((thesis as ThesisRevision & { archived?: boolean }).archived);
+      return {
+        ...thesis,
+        libraryState: archived ? "archived" as const : hasPosition ? "traded" as const : thesis.status === "draft" ? "draft" as const : "active" as const,
+        canDelete: thesis.status === "draft" && !hasPosition && !hasQuote,
+      };
+    });
   return ok({ theses: mine });
 }
 
 export async function POST(req: Request) {
   const body = await readJson<Partial<ThesisRevision> & { accountId?: string; mode?: string }>(req);
-  if (typeof body.topicSlug !== "string" || typeof body.familyId !== "string") return fail("INVALID", "Topic required");
-  if (body.topicSlug.length > 79 || !/^[a-z0-9][a-z0-9-]{0,78}$/i.test(body.topicSlug)) return fail("INVALID", "Choose a valid topic.");
+  const hasBinding = typeof body.topicSlug === "string" && Boolean(body.topicSlug) &&
+    typeof body.familyId === "string" && Boolean(body.familyId);
+  if (!hasBinding && (typeof body.rationale !== "string" || body.rationale.trim().length < 8)) {
+    return fail("INVALID", "Describe the question you want to research.");
+  }
+  if (hasBinding && (body.topicSlug!.length > 79 || !/^[a-z0-9][a-z0-9-]{0,78}$/i.test(body.topicSlug!))) return fail("INVALID", "Choose a valid topic.");
   const mode = body.mode === "live" ? "live" : "replay";
-  const family = await getTopic(body.topicSlug, mode);
-  if (!family || family.id !== body.familyId || (body.familyVersion && body.familyVersion !== family.version)) {
+  const family = hasBinding ? await getTopic(body.topicSlug!, mode) : null;
+  if (hasBinding && (!family || family.id !== body.familyId || (body.familyVersion && body.familyVersion !== family.version))) {
     return fail("UNSUPPORTED_FAMILY", "This topic changed or is no longer available. Reload it before saving a view.", 409);
   }
-  const template = body.template || (family.predicates.length === 1 ? "binary" : "range");
+  const template = body.template || (family?.predicates.length === 1 ? "binary" : family ? "range" : "directional");
   if (!VIEW_TEMPLATES.includes(template)) return fail("UNSUPPORTED_TEMPLATE", "Choose a supported view template for this market.", 409);
-  const hasViewIntent = body.template !== undefined || body.direction !== undefined || body.lowerThreshold != null || body.upperThreshold != null;
-  if (hasViewIntent) {
+  const hasViewIntent = hasBinding && (body.template !== undefined || body.direction !== undefined || body.lowerThreshold != null || body.upperThreshold != null);
+  if (hasViewIntent && family) {
     try {
       compileView(family, template, {
         threshold: body.lowerThreshold,
@@ -41,9 +57,12 @@ export async function POST(req: Request) {
   }
   const thesis: ThesisRevision & { accountId: string } = {
     id: uid("th"),
-    topicSlug: body.topicSlug,
-    familyId: body.familyId,
-    familyVersion: body.familyVersion || "1",
+    title: typeof body.title === "string" && body.title.trim()
+      ? body.title.trim().slice(0, 100)
+      : hasBinding ? body.topicSlug!.replaceAll("-", " ") : body.rationale!.trim().slice(0, 100),
+    topicSlug: hasBinding ? body.topicSlug! : "",
+    familyId: hasBinding ? body.familyId! : "",
+    familyVersion: hasBinding ? body.familyVersion || family?.version || "1" : "",
     template,
     direction: body.direction ?? null,
     lowerThreshold: body.lowerThreshold ?? null,

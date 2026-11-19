@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, modeFromStorage } from "@/lib/client";
+import { api, dataContextFromStorage, modeFromStorage } from "@/lib/client";
 import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
 import { VoicePanel } from "@/components/VoicePanel";
 import { Button, Card, Empty, Field, inputCls } from "@/components/ui";
@@ -14,6 +14,7 @@ import { useModeChange } from "@/lib/use-mode-change";
 import { useGeminiMarketStream } from "@/lib/gemini/use-market-stream";
 import { GeminiLiveMarketFeed } from "@/components/GeminiLiveMarketFeed";
 import { formatTime } from "@/lib/format";
+import { AppDrawer } from "@/components/AppDrawer";
 
 export default function ThesisEditor() {
   const { id } = useParams<{ id: string }>();
@@ -32,20 +33,31 @@ export default function ThesisEditor() {
   const [evidenceFilter, setEvidenceFilter] = useState<"all" | "supports" | "challenges" | "saved">("all");
   const [savedEvidence, setSavedEvidence] = useState<EvidenceItem[]>([]);
   const [assistantPrompt, setAssistantPrompt] = useState("");
+  const [matchingMarkets, setMatchingMarkets] = useState<MarketFamily[]>([]);
+  const [bindingMarket, setBindingMarket] = useState("");
+  const [selectedEvidence, setSelectedEvidence] = useState<EvidenceItem | null>(null);
+  const [updatesOpen, setUpdatesOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
+    if (new URLSearchParams(window.location.search).get("updates") === "1") setUpdatesOpen(true);
     setLoading(true);
     api<{ thesis: ThesisRevision }>(`/api/theses/${id}`)
       .then(async ({ thesis: current }) => {
         if (!active) return;
         setThesis(current);
-        const mode = modeFromStorage() === "live" ? "live" : "replay";
+        const mode = dataContextFromStorage();
+        if (!current.topicSlug) {
+          const result = await api<{ families: MarketFamily[] }>(`/api/topics?mode=${mode}&q=${encodeURIComponent(current.rationale || current.title || "")}`);
+          if (active) setMatchingMarkets(result.families || []);
+          return;
+        }
         try {
           const topic = await api<{ family: MarketFamily; evidence: EvidenceItem[] }>(`/api/topics/${current.topicSlug}?mode=${mode}`);
           if (active) {
             setFamily(topic.family);
             setEvidence(topic.evidence);
+            setSavedEvidence(topic.evidence.filter((item) => current.evidenceIds.includes(item.id)));
           }
         } catch {
           if (active) setNotice("Topic data is unavailable. Manual editing and saved-view recovery remain available.");
@@ -56,17 +68,14 @@ export default function ThesisEditor() {
     return () => { active = false; };
   }, [id]);
 
-  useEffect(() => {
-    try { setSavedEvidence(JSON.parse(localStorage.getItem(`thesis:saved-evidence:${id}`) || "[]") as EvidenceItem[]); } catch { setSavedEvidence([]); }
-  }, [id]);
-
   const refreshMarketData = useCallback(async () => {
     if (!thesis?.topicSlug) return;
-    const mode = modeFromStorage() === "live" ? "live" : "replay";
+    const mode = dataContextFromStorage();
     try {
       const topic = await api<{ family: MarketFamily; evidence: EvidenceItem[] }>(`/api/topics/${thesis.topicSlug}?mode=${mode}`);
       setFamily(topic.family);
       setEvidence(topic.evidence);
+      setSavedEvidence(topic.evidence.filter((item) => thesis.evidenceIds.includes(item.id)));
       setNotice(`Market research refreshed for ${mode === "live" ? "Live data" : "Replay"}. Your view edits remain here.`);
     } catch (err) {
       setNotice(err instanceof Error ? `Market data could not refresh: ${err.message}. Your view edits remain here.` : "Market data could not refresh. Your view edits remain here.");
@@ -119,6 +128,33 @@ export default function ThesisEditor() {
     setNotice("");
   }
 
+  async function bindMarket(next: MarketFamily) {
+    setBindingMarket(next.id);
+    setError("");
+    try {
+      const result = await api<{ thesis: ThesisRevision }>(`/api/theses/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          action: "bind",
+          topicSlug: next.slug,
+          familyId: next.id,
+          familyVersion: next.version,
+          mode: dataContextFromStorage(),
+        }),
+      });
+      setThesis(result.thesis);
+      setFamily(next);
+      const topic = await api<{ evidence: EvidenceItem[] }>(`/api/topics/${next.slug}?mode=${dataContextFromStorage()}`);
+      setEvidence(topic.evidence || []);
+      setMatchingMarkets([]);
+      setNotice("Market attached. Review its exact rules and refine your view before confirming.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "This market could not be attached.");
+    } finally {
+      setBindingMarket("");
+    }
+  }
+
   async function save(action: "save" | "confirm" | "duplicate" = "save"): Promise<boolean> {
     if (!thesis) return false;
     setSaving(action);
@@ -166,18 +202,29 @@ export default function ThesisEditor() {
     router.push(destination);
   }
 
-  function toggleSavedEvidence(item: EvidenceItem) {
-    setSavedEvidence((current) => {
-      const next = current.some((saved) => saved.id === item.id) ? current.filter((saved) => saved.id !== item.id) : [...current, item];
-      try { localStorage.setItem(`thesis:saved-evidence:${id}`, JSON.stringify(next)); } catch { setNotice("Browser storage is full. This evidence pin could not be saved on this device."); }
-      return next;
-    });
+  async function toggleSavedEvidence(item: EvidenceItem) {
+    if (!thesis) return;
+    const next = savedEvidence.some((saved) => saved.id === item.id)
+      ? savedEvidence.filter((saved) => saved.id !== item.id)
+      : [...savedEvidence, item];
+    setSavedEvidence(next);
+    try {
+      const result = await api<{ thesis: ThesisRevision }>(`/api/theses/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ evidenceIds: next.map((saved) => saved.id), mode: dataContextFromStorage() }),
+      });
+      setThesis(result.thesis);
+      setNotice(next.some((saved) => saved.id === item.id) ? "Evidence saved to this thesis." : "Evidence removed from this thesis.");
+    } catch (cause) {
+      setSavedEvidence(savedEvidence);
+      setError(cause instanceof Error ? cause.message : "Evidence could not be saved.");
+    }
   }
 
   if (loading) return <p role="status">Loading thesis…</p>;
   if (error && !thesis) return <Empty title="Thesis unavailable">{error}</Empty>;
   if (!thesis) return <Empty title="Thesis unavailable">This view could not be found.</Empty>;
-  const workspaceTitle = thesis.title?.trim() || family?.title || thesis.topicSlug.replaceAll("-", " ");
+  const workspaceTitle = thesis.title?.trim() || family?.title || thesis.topicSlug.replaceAll("-", " ") || "Untitled thesis";
   const viewValid = thesis.template === "binary"
     ? Boolean(family?.contracts[0] && (thesis.direction === "yes" || thesis.direction === "no"))
     : thesis.lowerThreshold != null && (thesis.template === "directional" || thesis.upperThreshold != null && thesis.upperThreshold > thesis.lowerThreshold);
@@ -187,7 +234,7 @@ export default function ThesisEditor() {
       <header className="workspace-header">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div><h1 className="workspace-title screen-heading">{workspaceTitle}</h1><p className="mt-2 text-sm text-muted">{family?.question || "Market question unavailable"}{family?.closeTime ? ` · Closes ${formatTime(family.closeTime)}` : ""} · {family?.mode === "live" ? "Gemini live market data" : "Illustrative replay"}</p></div>
-          <div className="flex flex-wrap items-center gap-2"><span role="status" className={`status-pill ${dirty ? "status-pill--warning" : "status-pill--good"}`}>{saving ? "Saving…" : dirty ? "Unsaved changes" : `Revision ${thesis.revision} · ${thesis.status}`}</span><button type="button" onClick={() => void refreshMarketData()} className="min-h-10 rounded-lg border border-line bg-white px-3 text-sm font-semibold">Refresh data</button></div>
+          <div className="flex flex-wrap items-center gap-2">{family && evidence.length ? <button type="button" className="min-h-10 rounded-full bg-[#E9EEFF] px-3 text-sm font-semibold text-action" onClick={() => setUpdatesOpen(true)}>● {evidence.length} updates · New evidence</button> : null}<span role="status" className={`status-pill ${dirty ? "status-pill--warning" : "status-pill--good"}`}>{saving ? "Saving…" : dirty ? "Unsaved changes" : `Revision ${thesis.revision} · ${thesis.status}`}</span><button type="button" onClick={() => void refreshMarketData()} className="min-h-10 rounded-lg border border-line bg-white px-3 text-sm font-semibold">Refresh data</button></div>
         </div>
       </header>
       <ThesisWorkspaceTabs thesisId={id} current="Research" lockedTabs={thesis.status === "draft" ? ["Build", "Compare"] : []} onNavigate={navigateSafely} />
@@ -269,7 +316,7 @@ export default function ThesisEditor() {
                   const pinned = savedEvidence.some((saved) => saved.id === item.id);
                   return <article key={item.id} className="evidence-card">
                     <span className={`status-pill ${item.stance === "supports" ? "status-pill--good" : item.stance === "challenges" ? "status-pill--error" : ""}`}>{item.stance || "context"}</span>
-                    <Link href={`/topics/${thesis.topicSlug}/evidence/${item.id}`} className="mt-2 block font-semibold leading-tight hover:text-action">{item.title}</Link>
+                    <button type="button" onClick={() => setSelectedEvidence(item)} className="mt-2 block text-left font-semibold leading-tight hover:text-action">{item.title}</button>
                     <p className="mt-1 text-[11px] text-muted">{item.publisher} · retrieved {formatTime(item.retrievedAt)}</p>
                     <p className="mt-2 line-clamp-3 text-sm">{item.excerpt}</p>
                     <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-2 text-xs">
@@ -280,7 +327,7 @@ export default function ThesisEditor() {
                   </article>;
                 })}
               </div> : <div className="mt-4 rounded-lg border border-dashed border-line bg-[#FAF9F6] p-5 text-sm text-muted">{evidenceFilter === "saved" ? "No evidence is saved on this device yet." : evidence.length ? "No evidence matches this filter." : "No current evidence cards are available for this market. You can refresh the source or edit your view manually."}<div className="mt-3 flex flex-wrap gap-2">{evidenceFilter === "saved" ? null : <button type="button" className="font-semibold text-action underline" onClick={() => void refreshMarketData()}>Refresh evidence and market data</button>}{evidenceFilter !== "all" ? <button type="button" className="font-semibold text-action underline" onClick={() => setEvidenceFilter("all")}>Show all</button> : null}</div></div>}
-              <p className="mt-3 text-xs text-muted">Evidence pins are stored on this device in this MVP. Original source text and retrieval time are kept with each pin.</p>
+              <p className="mt-3 text-xs text-muted">Evidence pins are saved with this guest or signed-in thesis. Original source text and retrieval time remain visible.</p>
             </Card>
           </div>
           <aside className="view-rail">
@@ -305,7 +352,19 @@ export default function ThesisEditor() {
             />
           </aside>
         </div>
-      ) : null}
+      ) : (
+        <div className="workspace-layout">
+          <Card className="space-y-4">
+            <div><p className="source-pill">Question-first draft</p><h2 className="mt-3 font-serif text-2xl font-bold">Attach a market when you are ready</h2><p className="mt-2 text-sm text-muted">Your question and notes are saved. Choose a compatible listed market to unlock exact rules, confirmation, Build, and Compare.</p></div>
+            <div className="rounded-xl border border-[#CCD6F5] bg-[#F7F8FF] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">Research question</p><p className="mt-2 whitespace-pre-wrap text-sm">{thesis.rationale || thesis.title}</p></div>
+            {matchingMarkets.length ? <div className="grid gap-3">
+              {matchingMarkets.map((market) => <article key={market.id} className="rounded-xl border border-line p-4"><p className="text-xs text-muted">{market.mode === "live" ? "Gemini live market" : "Illustrative replay"} · {market.contracts.length} contract{market.contracts.length === 1 ? "" : "s"}</p><h3 className="mt-1 font-serif text-xl font-bold">{market.title}</h3><p className="mt-1 text-sm text-muted">{market.question}</p><Button className="mt-3" disabled={Boolean(bindingMarket)} onClick={() => void bindMarket(market)}>{bindingMarket === market.id ? "Attaching…" : "Use this market"}</Button></article>)}
+            </div> : <Empty title="No compatible market found">Keep this draft and browse Explore. You can return and attach a market when one becomes available.</Empty>}
+            <Button href={`/explore?q=${encodeURIComponent(thesis.rationale || thesis.title || "")}`}>Browse all markets</Button>
+          </Card>
+          <aside className="view-rail"><Card><h2 className="font-serif text-xl font-bold">Your view</h2><p className="mt-2 text-sm text-muted">A view becomes confirmable after a listed market supplies supported boundaries and settlement rules.</p></Card></aside>
+        </div>
+      )}
       {editingView ? <Card className="space-y-3">
         <div>
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-serif text-2xl font-bold">Edit your view</h2><p className="mt-1 text-sm text-muted">Choose only conditions supported by the listed contract rules. This changes the draft, not an existing position.</p></div><button type="button" className="min-h-10 rounded-lg px-3 text-2xl leading-none text-muted hover:bg-[#F4F2ED]" aria-label="Close view editor" onClick={() => { setEditingView(false); if (!dirty) setNotice(""); }}>×</button></div>
@@ -357,6 +416,13 @@ export default function ThesisEditor() {
         </div>
       ) : null}
       {pendingDestination ? <div className="dialog-backdrop" role="presentation"><section className="dialog-panel space-y-4" role="dialog" aria-modal="true" aria-labelledby="unsaved-title"><div className="flex items-start justify-between gap-3"><div><p className="source-pill status-pill--warning">Unsaved changes</p><h2 id="unsaved-title" className="mt-3 font-serif text-2xl font-bold">Leave this research board?</h2></div><button type="button" aria-label="Stay on this thesis" className="min-h-10 px-3 text-2xl text-muted" onClick={() => setPendingDestination("")}>×</button></div><p className="text-sm text-muted">Your view edits have not been saved. Choose whether to keep them before leaving.</p><div className="flex flex-wrap justify-end gap-2 border-t border-line pt-3"><Button kind="ghost" onClick={() => setPendingDestination("")}>Stay</Button><Button kind="danger" onClick={() => void resolvePendingNavigation("discard")}>Discard unsaved</Button><Button onClick={() => void resolvePendingNavigation("save")} disabled={saving !== null}>{saving === "save" ? "Saving…" : "Save and leave"}</Button></div></section></div> : null}
+      <AppDrawer open={Boolean(selectedEvidence)} titleId="evidence-detail-title" onClose={() => setSelectedEvidence(null)}>
+        {selectedEvidence ? <div className="space-y-4"><div className="flex items-start justify-between gap-3"><div><p className="source-pill">Evidence detail</p><h2 id="evidence-detail-title" className="mt-3 font-serif text-2xl font-bold">{selectedEvidence.title}</h2></div><button type="button" className="min-h-10 px-3 text-2xl text-muted" aria-label="Close evidence detail" onClick={() => setSelectedEvidence(null)}>×</button></div><p className="text-xs text-muted">{selectedEvidence.publisher} · retrieved {formatTime(selectedEvidence.retrievedAt)}</p><div className="rounded-xl border border-line p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">Source claim</p><p className="mt-2 whitespace-pre-wrap text-sm">{selectedEvidence.excerpt}</p></div><div className="rounded-xl bg-[#EEF2FF] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-action">Relationship to view</p><p className="mt-2 text-sm">{selectedEvidence.stance === "supports" ? "Potentially supports the current view." : selectedEvidence.stance === "challenges" ? "Challenges an assumption in the current view." : "Adds context without changing the selected boundaries."}</p></div><div className="flex flex-wrap gap-2"><Button href={selectedEvidence.url}>Open original</Button><Button kind="secondary" onClick={() => toggleSavedEvidence(selectedEvidence)}>{savedEvidence.some((item) => item.id === selectedEvidence.id) ? "Remove from thesis" : "Save to thesis"}</Button><Button kind="ghost" onClick={() => { setAssistantPrompt(`Explain this source in the context of my view: ${selectedEvidence.excerpt}`); setSelectedEvidence(null); }}>Ask about this</Button></div></div> : null}
+      </AppDrawer>
+      <AppDrawer open={updatesOpen} titleId="research-updates-title" onClose={() => setUpdatesOpen(false)}>
+        <div className="flex items-start justify-between gap-3"><div><p className="source-pill">Review updates</p><h2 id="research-updates-title" className="mt-3 font-serif text-2xl font-bold">Since your last snapshot</h2><p className="mt-2 text-sm text-muted">New source material is shown separately. Your confirmed boundaries remain unchanged until you explicitly edit and reconfirm them.</p></div><button type="button" className="min-h-10 px-3 text-2xl text-muted" aria-label="Close research updates" onClick={() => setUpdatesOpen(false)}>×</button></div>
+        <div className="mt-5 grid gap-3">{evidence.map((item) => <article key={item.id} className="rounded-xl border border-line p-4"><p className="font-semibold">{item.title}</p><p className="mt-1 text-xs text-muted">{item.publisher} · {formatTime(item.retrievedAt)}</p><p className="mt-2 line-clamp-3 text-sm">{item.excerpt}</p><div className="mt-3 flex gap-2"><Button kind="secondary" onClick={() => { setUpdatesOpen(false); setSelectedEvidence(item); }}>Review source</Button><Button kind="ghost" onClick={() => toggleSavedEvidence(item)}>{savedEvidence.some((saved) => saved.id === item.id) ? "Saved" : "Save"}</Button></div></article>)}</div>
+      </AppDrawer>
     </div>
   );
 }

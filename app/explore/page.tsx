@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { api, modeFromStorage, requestModeChange } from "@/lib/client";
+import { api, dataContextFromStorage, requestDataContextChange } from "@/lib/client";
 import type { MarketFamily } from "@/lib/domain/types";
 import { Button, Card, Empty, inputCls } from "@/components/ui";
 import { formatTime } from "@/lib/format";
@@ -28,7 +28,7 @@ export default function Explore() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async (query = submittedQuery) => {
-    const mode = modeFromStorage() === "live" ? "live" : "replay";
+    const mode = dataContextFromStorage();
     setLoading(true);
     setError("");
     try {
@@ -45,8 +45,7 @@ export default function Explore() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const requestedView = params.get("view");
-    if (requestedView === "topics" || requestedView === "gemini" || requestedView === "watched" || requestedView === "timeline") setView(requestedView);
+    setView("gemini");
     const initialQuery = params.get("q") || params.get("idea") || "";
     setQ(initialQuery);
     setSubmittedQuery(initialQuery);
@@ -132,7 +131,7 @@ export default function Explore() {
         <h1 className="explore-title screen-heading">Find a question worth exploring</h1>
         <p className="mt-2 text-base text-muted">Browse Gemini markets, check the setup, and research the ideas that interest you.</p>
       </div>
-      <nav className="workspace-tabs flex gap-1 overflow-x-auto border-b border-line" aria-label="Explore views">
+      <nav className="hidden" aria-label="Legacy Explore views" aria-hidden="true">
         {([ ["gemini", "Markets"], ["topics", "Research topics"], ["watched", "Watching"], ["timeline", "Timeline"] ] as [ExploreView, string][]).map(([value, label]) => (
           <button key={value} type="button" aria-current={view === value ? "page" : undefined} onClick={() => chooseView(value)} className={`min-h-11 shrink-0 border-b-2 px-4 py-2 text-sm ${view === value ? "border-action font-semibold text-action" : "border-transparent text-muted hover:text-ink"}`}>{label}</button>
         ))}
@@ -159,7 +158,7 @@ export default function Explore() {
       {data ? <p className="text-xs text-muted">{data.freshnessLabel}</p> : null}
       {data?.liveError ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-bad/30 bg-white p-3">
         <p role="status" className="text-sm text-bad">{data.liveError}. Replay uses labeled walkthrough data.</p>
-        {modeFromStorage() !== "replay" ? <Button kind="secondary" onClick={() => requestModeChange("replay")}>Switch to Replay</Button> : null}
+        {dataContextFromStorage() !== "replay" ? <Button kind="secondary" onClick={() => requestDataContextChange("replay")}>Switch to Replay</Button> : null}
       </div> : null}
       {notice ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">{notice}</p> : null}
       {watchError ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{watchError} <Link className="text-action underline" href="/auth">Sign in</Link></p> : null}

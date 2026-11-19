@@ -616,6 +616,20 @@ summary {
   box-shadow: 0 24px 64px rgb(24 35 41 / 22%);
 }
 
+.dialog-panel.app-drawer {
+  width: min(720px, 94vw);
+  height: calc(100vh - 24px);
+  max-height: none;
+  margin-left: auto;
+  border-radius: 16px 0 0 16px;
+}
+
+.dialog-panel.app-drawer--left {
+  margin-right: auto;
+  margin-left: 0;
+  border-radius: 0 16px 16px 0;
+}
+
 .source-pill,
 .status-pill {
   display: inline-flex;
@@ -794,6 +808,14 @@ summary {
     max-height: min(94vh, 900px);
     border-radius: 18px 18px 0 0;
     padding: 22px 17px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .dialog-panel.app-drawer,
+  .dialog-panel.app-drawer--left {
+    width: 100%;
+    height: min(94vh, 900px);
+    margin: 0;
+    border-radius: 18px 18px 0 0;
   }
 
   .assistant-panel {

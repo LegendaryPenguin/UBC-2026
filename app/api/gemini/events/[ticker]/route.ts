@@ -56,6 +56,8 @@ export async function GET(req: Request, { params }: { params: { ticker: string }
     compatibleTopicSlug: compatibleTopics[0]?.slug ?? null,
     compatibleTopics: compatibleTopics.map((family) => ({
       slug: family.slug,
+      familyId: family.id,
+      familyVersion: family.version,
       contractId: family.contracts[0]?.id,
       contractLabel: family.contracts[0]?.label,
     })),

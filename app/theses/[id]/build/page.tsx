@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { api, modeFromStorage } from "@/lib/client";
+import { api, dataContextFromStorage } from "@/lib/client";
 import type { MarketFamily, ThesisRevision } from "@/lib/domain/types";
 import { compileView } from "@/lib/payoffs/compile";
 import { estimateBasketCost } from "@/lib/payoffs/compare";
@@ -65,7 +65,7 @@ export default function BuildPage() {
     (async () => {
       try {
         const result = await api<{ thesis: ThesisRevision }>(`/api/theses/${id}`);
-        const mode = modeFromStorage() === "live" ? "live" : "replay";
+        const mode = dataContextFromStorage();
         const topic = await api<{ family: MarketFamily }>(`/api/topics/${result.thesis.topicSlug}?mode=${mode}`);
         if (!active) return;
         setThesis(result.thesis);

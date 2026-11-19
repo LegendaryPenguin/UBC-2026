@@ -55,8 +55,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return ok({ thesis: restored });
   }
 
-  if (body.action && !["confirm", "duplicate", "archive"].includes(body.action)) {
+  if (body.action && !["confirm", "duplicate", "archive", "unarchive", "rename", "bind"].includes(body.action)) {
     return fail("INVALID", "Unknown thesis action.");
+  }
+  if (body.title !== undefined && (typeof body.title !== "string" || !body.title.trim() || body.title.trim().length > 100)) {
+    return fail("INVALID", "A thesis title must contain 1–100 characters.");
   }
   if (body.template !== undefined && !VIEW_TEMPLATES.includes(body.template)) {
     return fail("INVALID", "Choose a valid payoff template.");
@@ -81,6 +84,19 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   if (body.mode !== undefined && !["live", "replay", "paper", "research"].includes(body.mode)) {
     return fail("INVALID", "Choose Live or Replay market data.");
+  }
+  let bindingFamily: Awaited<ReturnType<typeof getTopic>> = null;
+  if (body.action === "bind") {
+    if (existing.status !== "draft") return fail("IMMUTABLE", "Only a draft can change its research market.", 409);
+    if (typeof body.topicSlug !== "string" || typeof body.familyId !== "string" ||
+        !/^[a-z0-9][a-z0-9-]{0,78}$/i.test(body.topicSlug)) {
+      return fail("INVALID", "Choose a valid supported market.");
+    }
+    bindingFamily = await getTopic(body.topicSlug, body.mode === "live" ? "live" : "replay");
+    if (!bindingFamily || bindingFamily.id !== body.familyId ||
+        (body.familyVersion && bindingFamily.version !== body.familyVersion)) {
+      return fail("UNSUPPORTED_FAMILY", "This market changed or is no longer compatible. Refresh Explore and choose it again.", 409);
+    }
   }
   const viewFieldsChanged = body.template !== undefined || body.direction !== undefined ||
     body.lowerThreshold !== undefined || body.upperThreshold !== undefined;
@@ -115,6 +131,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       const now = new Date().toISOString();
       const copy = {
         ...thesis,
+        title: `${(body.title ?? thesis.title ?? thesis.topicSlug).trim()} copy`.slice(0, 100),
         ...(body.template !== undefined ? { template: body.template } : {}),
         ...(body.direction !== undefined ? { direction: body.direction } : {}),
         ...(body.lowerThreshold !== undefined ? { lowerThreshold: body.lowerThreshold } : {}),
@@ -137,6 +154,37 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
     if (body.action === "archive") {
       (thesis as ThesisRevision & { archived?: boolean }).archived = true;
+      thesis.updatedAt = new Date().toISOString();
+      result = thesis;
+      return;
+    }
+
+    if (body.action === "unarchive") {
+      (thesis as ThesisRevision & { archived?: boolean }).archived = false;
+      thesis.updatedAt = new Date().toISOString();
+      result = thesis;
+      return;
+    }
+
+    if (body.action === "rename") {
+      thesis.title = body.title!.trim();
+      thesis.updatedAt = new Date().toISOString();
+      result = thesis;
+      return;
+    }
+
+    if (body.action === "bind" && bindingFamily) {
+      const single = bindingFamily.predicates.length === 1 && bindingFamily.contracts.length === 1;
+      thesis.topicSlug = bindingFamily.slug;
+      thesis.familyId = bindingFamily.id;
+      thesis.familyVersion = bindingFamily.version;
+      thesis.template = single ? "binary" : bindingFamily.predicates.length >= 2 ? "range" : "directional";
+      thesis.direction = "yes";
+      thesis.lowerThreshold = single ? null : bindingFamily.predicates[0]?.threshold ?? null;
+      thesis.upperThreshold = !single && bindingFamily.predicates.length >= 2 ? bindingFamily.predicates[1]?.threshold ?? null : null;
+      thesis.revision += 1;
+      thesis.updatedAt = new Date().toISOString();
+      recordThesisVersion(state, thesis, accountId, "Bound research market");
       result = thesis;
       return;
     }
@@ -174,4 +222,30 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   if (!result) return fail("NOT_FOUND", "Thesis not found", 404);
   return ok({ thesis: result });
+}
+
+export async function DELETE(_: Request, { params }: { params: { id: string } }) {
+  const accountId = thesisOwner();
+  if (!accountId) return fail("AUTH", "Thesis owner required", 401);
+  const store = readStore();
+  const thesis = store.theses.find((item) => item.id === params.id &&
+    (item as ThesisRevision & { accountId?: string }).accountId === accountId);
+  if (!thesis) return fail("NOT_FOUND", "Thesis not found", 404);
+  if (thesis.status !== "draft") return fail("IMMUTABLE", "Only an unconfirmed draft can be deleted.", 409);
+  if (store.quotes.some((quote) => quote.thesisId === thesis.id && quote.accountId === accountId) ||
+      store.positions.some((position) => position.thesisId === thesis.id && position.accountId === accountId)) {
+    return fail("IMMUTABLE", "This thesis has financial records and cannot be deleted. Archive it instead.", 409);
+  }
+  mutate((state) => {
+    state.theses = state.theses.filter((item) => item.id !== thesis.id ||
+      (item as ThesisRevision & { accountId?: string }).accountId !== accountId);
+    state.thesisHistory = (state.thesisHistory || []).filter((record) => record.thesisId !== thesis.id || record.accountId !== accountId);
+    for (const conversation of state.conversations) {
+      if (conversation.accountId === accountId && conversation.thesisId === thesis.id) {
+        conversation.kind = "general";
+        conversation.thesisId = null;
+      }
+    }
+  });
+  return ok({ deleted: true, id: thesis.id });
 }

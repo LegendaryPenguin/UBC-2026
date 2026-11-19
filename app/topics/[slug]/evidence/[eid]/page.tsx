@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { api, modeFromStorage } from "@/lib/client";
+import { api, dataContextFromStorage } from "@/lib/client";
 import type { EvidenceItem } from "@/lib/domain/types";
 import { Card } from "@/components/ui";
 import { formatTime } from "@/lib/format";
@@ -11,7 +11,7 @@ export default function EvidencePage() {
   const { slug, eid } = useParams<{ slug: string; eid: string }>();
   const [item, setItem] = useState<EvidenceItem | null>(null);
   useEffect(() => {
-    const mode = modeFromStorage() === "live" ? "live" : "replay";
+    const mode = dataContextFromStorage();
     api<{ evidence: EvidenceItem[] }>(`/api/topics/${slug}?mode=${mode}`).then((r) => {
       setItem(r.evidence.find((e) => e.id === eid) || null);
     });

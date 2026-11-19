@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAccount } from "wagmi";
-import { api, modeFromStorage } from "@/lib/client";
+import { api, dataContextFromStorage, executionEnvironmentFromStorage } from "@/lib/client";
 import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
 import { formatUsdc, formatUsdcFixed, parseUsdc } from "@/lib/format";
 import { compileView } from "@/lib/payoffs/compile";
@@ -89,8 +89,7 @@ export default function ReviewPage() {
           ? requestedChoice
           : savedChoice;
         const nextChoice: ConstructionChoice = currentChoice === "gemini-single" || currentChoice === "arc-custom" ? currentChoice : "gemini-basket";
-        const currentMode = modeFromStorage();
-        const nextMode: Mode = currentMode === "paper" || currentMode === "live" ? currentMode : "replay";
+        const nextMode: Mode = executionEnvironmentFromStorage() === "paper" ? "paper" : dataContextFromStorage();
         const savedBudget = query.get("maxPayout") || (() => {
           try { return sessionStorage.getItem(`thesis-build-max:${id}`) || "100"; } catch { return "100"; }
         })();
@@ -99,7 +98,7 @@ export default function ReviewPage() {
           api<{ thesis: ThesisRevision }>(`/api/theses/${id}`),
           api<{ services: { id: string; state: string }[] }>("/api/status").catch(() => ({ services: [] })),
         ]);
-        const topic = await api<{ family: MarketFamily; evidence: EvidenceItem[] }>(`/api/topics/${thesisResult.thesis.topicSlug}?mode=${nextMode === "live" ? "live" : "replay"}`);
+        const topic = await api<{ family: MarketFamily; evidence: EvidenceItem[] }>(`/api/topics/${thesisResult.thesis.topicSlug}?mode=${dataContextFromStorage()}`);
         if (!active) return;
         setMode(nextMode);
         setChoice(nextChoice);
