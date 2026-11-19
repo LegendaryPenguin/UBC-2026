@@ -115,9 +115,9 @@ describe("Build and Compare interaction sequence", () => {
     expect(JSON.parse(sessionStorage.getItem("thesis-basket:thesis-1")!)[0].enabled).toBe(false);
 
     fireEvent.click(screen.getAllByRole("button", { name: "At least $100,000" })[0]);
-    expect(screen.getByText("Basket 0.00 · view 0.00 USDC · matches")).toBeTruthy();
+    expect(screen.getByText("Basket 0.00 gross · view 0.00 gross USDC · matches")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Restore leg" }));
-    expect(screen.getByText("Basket 50.00 · view 0.00 USDC · differs")).toBeTruthy();
+    expect(screen.getByText("Basket 50.00 gross · view 0.00 gross USDC · differs")).toBeTruthy();
 
     const allocation = screen.getAllByLabelText("Payout allocation (USDC)")[0];
     fireEvent.change(allocation, { target: { value: "75" } });

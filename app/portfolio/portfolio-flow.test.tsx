@@ -99,7 +99,7 @@ afterEach(() => {
 describe("Portfolio and settlement alert follow-through", () => {
   it("opens Orders, Activity, and Alerts inside the same Portfolio surface", async () => {
     render(<Portfolio />);
-    expect(await screen.findByRole("heading", { name: "Portfolio" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Positions with their reasoning attached" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Orders" }));
     expect(await screen.findByRole("heading", { name: "Gemini orders" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Activity" }));
@@ -117,9 +117,11 @@ describe("Portfolio and settlement alert follow-through", () => {
     const explore = await screen.findByRole("link", { name: "Explore markets" });
     expect(explore.getAttribute("href")).toBe("/explore");
 
+    fireEvent.click(screen.getByRole("tab", { name: "Gemini sandbox" }));
     fireEvent.click(screen.getByRole("tab", { name: "Settled history" }));
     expect(await screen.findByText("No settled Gemini positions")).toBeTruthy();
-    expect(screen.getByText("No settled Arc or paper positions")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Paper" }));
+    expect(await screen.findByText("No settled Arc or paper positions")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Back to open positions" }));
     expect(screen.getByRole("tab", { name: "Open positions" }).getAttribute("aria-selected")).toBe("true");
   });

@@ -84,7 +84,7 @@ afterEach(() => {
 describe("Explore to research flow", () => {
   it("searches Gemini markets, recovers from sign-in-required watch, then adds, removes, and opens research", async () => {
     render(<Shell><Explore /></Shell>);
-    fireEvent.click(screen.getByRole("button", { name: "Research topics" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Research topics" }));
     expect(await screen.findByRole("link", { name: "Where will Bitcoin finish Friday?" })).toBeTruthy();
     expect(screen.getByText(/1 selected Gemini contract · observes/)).toBeTruthy();
 
@@ -112,7 +112,7 @@ describe("Explore to research flow", () => {
   it("keeps a confirmed Replay recovery when live Gemini discovery is unavailable", async () => {
     liveCatalogError = true;
     render(<Shell><Explore /></Shell>);
-    fireEvent.click(screen.getByRole("button", { name: "Research topics" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Research topics" }));
 
     await screen.findByRole("button", { name: "Switch to Replay" });
     const liveError = screen.getByRole("status");

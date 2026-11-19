@@ -7,7 +7,12 @@ const { apiMock } = vi.hoisted(() => ({ apiMock: vi.fn() }));
 
 vi.mock("next/link", () => ({ default: ({ children, href, ...props }: React.PropsWithChildren<{ href: string }>) => <a href={href} {...props}>{children}</a> }));
 vi.mock("next/navigation", () => ({ useParams: () => ({ ticker: "BTCFRIDAY" }) }));
-vi.mock("@/lib/client", () => ({ api: apiMock, modeFromStorage: () => "live" }));
+vi.mock("@/lib/client", () => ({
+  api: apiMock,
+  modeFromStorage: () => "live",
+  dataContextFromStorage: () => "live",
+  executionEnvironmentFromStorage: () => "none",
+}));
 vi.mock("@/lib/use-mode-change", () => ({ useModeChange: () => undefined }));
 
 import GeminiEventPage from "@/app/gemini/[ticker]/page";
