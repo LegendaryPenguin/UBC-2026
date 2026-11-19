@@ -1,6 +1,6 @@
-# Thesis website: page and popup inventory
+# Thesis website: pre-restructure page and popup inventory
 
-This document describes the visible pages and shared interactive surfaces in the current website. It lists all **51 page routes** in the app at the time of writing. API endpoints are not listed because they do not render user-facing pages. Routes with bracketed values are templates: for example, `/theses/[id]` needs a real thesis ID.
+This document records the **51 route templates that existed before the Dashboard + Contextual Assistant restructure**. It is the migration baseline, not a requirement to keep every route visible. See [product-restructure-map.md](product-restructure-map.md) for the target disposition of each route. API endpoints are not listed because they do not render user-facing pages. Routes with bracketed values are templates: for example, `/theses/[id]` needs a real thesis ID.
 
 ## Main navigation and shared shell
 

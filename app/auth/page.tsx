@@ -23,7 +23,7 @@ export default function AuthPage() {
         body: JSON.stringify({ action, email, code }),
       });
       if (action === "verify") {
-        window.location.href = "/onboarding";
+        window.location.href = "/settings?tab=account";
       } else {
         setDemo(res.demoCode ?? "");
         setMsg("Your local demo code is ready.");
@@ -38,6 +38,7 @@ export default function AuthPage() {
     <div className="mx-auto max-w-md space-y-4">
       <h1 className="font-serif text-3xl">Sign in</h1>
       <Card className="space-y-3">
+        <p className="text-sm text-muted">This email-code flow is a local development demo, not production Google or wallet authentication. After verification, your guest drafts, watchlists, and assistant conversations move to this account; financial record IDs remain unchanged.</p>
         <Field label="Email" hint="Codes are issued locally for this demo. Responses do not reveal whether the email already exists.">
           <input className={inputCls()} value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>

@@ -72,18 +72,21 @@ afterEach(() => {
 describe("thesis history flow", () => {
   it("shows the recorded position and restores a prior revision as a draft with retry recovery", async () => {
     render(<History />);
-    expect(await screen.findByRole("heading", { name: "Revision history" })).toBeTruthy();
-    expect(screen.getByText("Current revision 2. Restoring a version creates a new draft.")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Thesis history" })).toBeTruthy();
+    expect(screen.getByText(/Revision 2 is current\. Each saved view stays frozen/)).toBeTruthy();
     expect(screen.getByText("The settlement should finish inside the range.")).toBeTruthy();
-    expect(screen.getByText("Position recorded")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open position" }).getAttribute("href")).toBe("/positions/position-1");
+    expect(screen.getByText(/Position · open/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /View in Portfolio/ }).getAttribute("href")).toBe("/positions/position-1");
 
     fireEvent.click(screen.getByRole("button", { name: "Restore as new draft" }));
+    expect(await screen.findByRole("dialog", { name: /Restore revision 1 as a new draft/ })).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: "Restore as new draft" }).at(-1)!);
     expect((await screen.findByRole("alert")).textContent).toContain("The saved revision could not be restored yet.");
     expect(screen.getByText("The settlement should finish inside the range.")).toBeTruthy();
     expect(navigation.push).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Restore as new draft" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Restore as new draft" }).at(-1)!);
     await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/theses/thesis-1"));
     const restoreCalls = fetchMock.mock.calls.filter(([input, init]) => String(input) === "/api/theses/thesis-1" && init?.method === "PATCH");
     expect(restoreCalls).toHaveLength(2);

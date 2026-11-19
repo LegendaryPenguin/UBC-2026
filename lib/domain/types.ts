@@ -124,6 +124,8 @@ export interface MarketFamily {
 
 export interface ThesisRevision {
   id: string;
+  title?: string;
+  archived?: boolean;
   topicSlug: string;
   familyId: string;
   familyVersion: string;

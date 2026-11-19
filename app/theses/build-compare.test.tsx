@@ -107,14 +107,14 @@ afterEach(() => {
 describe("Build and Compare interaction sequence", () => {
   it("edits and restores a basket leg, selects a scenario, persists the draft, and continues to Compare", async () => {
     const view = render(<BuildPage />);
-    expect(await screen.findByRole("heading", { name: "Does this basket match your view?" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Does this construction match your view?" })).toBeTruthy();
     expect(screen.getAllByLabelText("Payout allocation (USDC)")).toHaveLength(2);
 
     fireEvent.click(screen.getAllByRole("button", { name: "Remove leg" })[0]);
     expect(screen.getAllByRole("button", { name: "Restore leg" })).toHaveLength(1);
     expect(JSON.parse(sessionStorage.getItem("thesis-basket:thesis-1")!)[0].enabled).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: "At least $100,000" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "At least $100,000" })[0]);
     expect(screen.getByText("Basket 0.00 · view 0.00 USDC · matches")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Restore leg" }));
     expect(screen.getByText("Basket 50.00 · view 0.00 USDC · differs")).toBeTruthy();
@@ -126,7 +126,7 @@ describe("Build and Compare interaction sequence", () => {
     view.unmount();
     render(<BuildPage />);
     expect(await screen.findByDisplayValue("75")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Compare constructions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Compare options" }));
     await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/theses/thesis-1/compare?maxPayout=100"));
     expect(JSON.parse(sessionStorage.getItem("thesis-basket:thesis-1")!)[0].payoutAmount).toBe("75");
   });
@@ -135,7 +135,7 @@ describe("Build and Compare interaction sequence", () => {
     localStorage.setItem("thesis_mode", "paper");
     const view = render(<ComparePage />);
     expect(await screen.findByRole("heading", { name: "Compare constructions" })).toBeTruthy();
-    expect(screen.getByText(/same maximum gross payout/)).toBeTruthy();
+    expect((screen.getByLabelText(/Comparison basis/) as HTMLSelectElement).value).toBe("equal-max-payout");
     expect(screen.getByRole("button", { name: /Arc custom range/ })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /Arc custom range/ }));
@@ -143,6 +143,10 @@ describe("Build and Compare interaction sequence", () => {
     expect(screen.getAllByText("Arc custom position")).toHaveLength(2);
     const review = screen.getByRole("link", { name: "Review selected construction" });
     expect(review.getAttribute("href")).toContain("construction=arc-custom");
+
+    fireEvent.change(screen.getByLabelText(/Comparison basis/), { target: { value: "per-construction" } });
+    expect(screen.getByText(/Each construction keeps its own payout size/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Comparison basis/), { target: { value: "equal-max-payout" } });
 
     fireEvent.click(screen.getByRole("button", { name: /One Gemini position/ }));
     expect(screen.getByRole("button", { name: /One Gemini position/ }).getAttribute("aria-pressed")).toBe("true");

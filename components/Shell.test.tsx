@@ -3,7 +3,7 @@ import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/theses/thesis-1" }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/theses/thesis-1", useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ children, href, ...props }: React.PropsWithChildren<{ href: string }>) => <a href={href} {...props}>{children}</a> }));
 vi.mock("@/components/WalletButton", () => ({ WalletButton: () => <button type="button">Connect wallet</button> }));
 
@@ -28,40 +28,33 @@ describe("workspace shell mode control", () => {
     localStorage.clear();
   });
 
-  it("requires confirmation, keeps Replay on cancel, and announces a confirmed mode change", async () => {
-    const confirm = vi.fn().mockReturnValue(false);
-    vi.stubGlobal("confirm", confirm);
+  it("requires in-app confirmation and only announces an accepted mode change", async () => {
     render(<Shell><p>Thesis workspace content</p></Shell>);
-    const selector = await screen.findByRole("combobox", { name: /Mode/ }) as HTMLSelectElement;
-    expect(selector.value).toBe("replay");
+    const selector = await screen.findByRole("button", { name: /Illustrative demo/ });
     expect(screen.getAllByRole("link", { name: "My Theses" }).some((link) => link.getAttribute("aria-current") === "page")).toBe(true);
 
-    fireEvent.change(selector, { target: { value: "live" } });
-    expect(confirm).toHaveBeenCalledOnce();
-    expect(confirm.mock.calls[0][0]).toContain("Existing orders and positions stay in their original environment.");
+    fireEvent.click(selector);
+    fireEvent.click(await screen.findByRole("button", { name: "Live data" }));
+    expect(await screen.findByRole("dialog", { name: /Switch to live data/ })).toBeTruthy();
     expect(localStorage.getItem("thesis_mode")).toBe("replay");
-    expect(selector.value).toBe("replay");
     expect(modeChanges).toHaveLength(0);
 
-    confirm.mockReturnValue(true);
-    fireEvent.change(selector, { target: { value: "paper" } });
-    expect(localStorage.getItem("thesis_mode")).toBe("paper");
-    expect(selector.value).toBe("paper");
+    fireEvent.click(screen.getByRole("button", { name: "Switch context" }));
+    expect(localStorage.getItem("thesis_mode")).toBe("live");
     expect(modeChanges).toHaveLength(1);
-    expect(modeChanges[0].detail.mode).toBe("paper");
+    expect(modeChanges[0].detail.mode).toBe("live");
   });
 
-  it("keeps the shared mode selector in sync when a page offers a recovery action", async () => {
-    const confirm = vi.fn().mockReturnValue(false);
-    vi.stubGlobal("confirm", confirm);
+  it("routes page mode-change requests through the same confirmation dialog", async () => {
+    localStorage.setItem("thesis_mode", "live");
     render(<Shell><p>Research workspace</p></Shell>);
-    const selector = await screen.findByRole("combobox", { name: /Mode/ }) as HTMLSelectElement;
+    await screen.findByRole("button", { name: /Live market data/ });
 
-    act(() => { expect(requestModeChange("live")).toBe(false); });
-    expect(selector.value).toBe("replay");
-    confirm.mockReturnValue(true);
+    act(() => { expect(requestModeChange("paper")).toBe(false); });
+    expect(screen.getByRole("dialog", { name: /Switch to Paper simulation/ })).toBeTruthy();
+    expect(localStorage.getItem("thesis_mode")).toBe("live");
+    fireEvent.click(screen.getByRole("button", { name: "Switch context" }));
     act(() => { expect(requestModeChange("paper")).toBe(true); });
-    expect(selector.value).toBe("paper");
     expect(localStorage.getItem("thesis_mode")).toBe("paper");
   });
 });

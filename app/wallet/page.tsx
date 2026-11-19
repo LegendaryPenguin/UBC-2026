@@ -33,11 +33,7 @@ export default function WalletPage() {
           <li>Escrow allowance: {typeof allowance.data === "bigint" ? formatUsdc(allowance.data) : "—"}</li>
         </ul>
       </Card>
-      <div className="flex flex-wrap gap-2">
-        <Button href="/wallet/deposit">Deposit</Button>
-        <Button href="/wallet/withdraw" kind="secondary">Withdraw</Button>
-        <Button href="/activity" kind="ghost">Activity</Button>
-      </div>
+      <Card><p className="text-sm text-muted">Balances are informational. Thesis does not initiate wallet transfers from this page. A wallet is not needed for research or saved theses.</p><Button href="/portfolio?view=activity" kind="ghost">Open Portfolio activity</Button></Card>
     </div>
   );
 }

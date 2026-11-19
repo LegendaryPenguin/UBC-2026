@@ -17,7 +17,7 @@ vi.mock("@/lib/escrow/abi", () => ({ escrowAbi: [] }));
 
 import Portfolio from "@/app/portfolio/page";
 import PositionPage from "@/app/positions/[id]/page";
-import Alerts from "@/app/alerts/page";
+import { PortfolioAlerts as Alerts } from "@/components/PortfolioAlerts";
 
 const position: PositionRecord = {
   id: "position-1",
@@ -97,6 +97,19 @@ afterEach(() => {
 });
 
 describe("Portfolio and settlement alert follow-through", () => {
+  it("opens Orders, Activity, and Alerts inside the same Portfolio surface", async () => {
+    render(<Portfolio />);
+    expect(await screen.findByRole("heading", { name: "Portfolio" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Orders" }));
+    expect(await screen.findByRole("heading", { name: "Gemini orders" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Activity" }));
+    expect(await screen.findByRole("heading", { name: "Activity" })).toBeTruthy();
+    expect(await screen.findByText("No ledger yet")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Alerts" }));
+    expect(await screen.findByRole("heading", { name: "Alerts and updates" })).toBeTruthy();
+    expect(window.location.pathname).toBe("/portfolio");
+  });
+
   it("explains empty open and settled states and returns to the open positions tab", async () => {
     portfolioPositions = [];
     render(<Portfolio />);
@@ -104,11 +117,11 @@ describe("Portfolio and settlement alert follow-through", () => {
     const explore = await screen.findByRole("link", { name: "Explore markets" });
     expect(explore.getAttribute("href")).toBe("/explore");
 
-    fireEvent.click(screen.getByRole("button", { name: "Settled history" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settled history" }));
     expect(await screen.findByText("No settled Gemini positions")).toBeTruthy();
     expect(screen.getByText("No settled Arc or paper positions")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Back to open positions" }));
-    expect(screen.getByRole("button", { name: "Open positions" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("tab", { name: "Open positions" }).getAttribute("aria-selected")).toBe("true");
   });
 
   it("recovers from a local position read error with Retry", async () => {
@@ -135,7 +148,7 @@ describe("Portfolio and settlement alert follow-through", () => {
     expect(screen.queryByRole("button", { name: "Claim payout" })).toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: "thesis" }));
     expect(screen.getByRole("link", { name: "Open thesis" }).getAttribute("href")).toBe("/theses/thesis-1");
-    expect(screen.getByRole("link", { name: "Set settlement alert" }).getAttribute("href")).toBe("/alerts?positionId=position-1");
+    expect(screen.getByRole("link", { name: "Set settlement alert" }).getAttribute("href")).toBe("/portfolio?view=alerts&positionId=position-1");
 
     cleanup();
     window.history.replaceState({}, "", "/alerts?positionId=position-1");

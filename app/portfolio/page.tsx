@@ -6,8 +6,11 @@ import { api } from "@/lib/client";
 import type { PositionRecord } from "@/lib/domain/types";
 import { Button, Card, Empty } from "@/components/ui";
 import { formatUsdc } from "@/lib/format";
+import { PortfolioOrders } from "@/components/PortfolioOrders";
+import { PortfolioActivity } from "@/components/PortfolioActivity";
+import { PortfolioAlerts } from "@/components/PortfolioAlerts";
 
-type PortfolioTab = "positions" | "settled";
+type PortfolioTab = "positions" | "settled" | "orders" | "activity" | "alerts";
 type GeminiPosition = {
   symbol?: string;
   outcome?: string;
@@ -97,35 +100,55 @@ export default function Portfolio() {
 
   useEffect(() => { void loadLocal(); void loadGeminiActive(); }, [loadLocal, loadGeminiActive]);
   useEffect(() => { if (tab === "settled" && geminiSettled.length === 0 && !settledError) void loadGeminiSettled(); }, [tab, geminiSettled.length, settledError, loadGeminiSettled]);
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("view");
+    if (requested === "orders" || requested === "activity" || requested === "alerts") setTab(requested);
+    else if (requested === "settled") setTab("settled");
+  }, []);
+
+  function selectTab(value: PortfolioTab) {
+    setTab(value);
+    const url = new URL(window.location.href);
+    if (value === "positions") url.searchParams.delete("view");
+    else url.searchParams.set("view", value);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }
 
   const cost = positions.reduce((sum, position) => sum + BigInt(position.premium || "0") + BigInt(position.fee || "0"), 0n);
   const settledLocal = positions.filter((position) => ["resolved", "claimed", "voided", "exited"].includes(position.status));
   const openLocal = positions.filter((position) => !["resolved", "claimed", "voided", "exited"].includes(position.status));
 
   return (
-    <div className="space-y-4">
+    <div className="screen-portfolio space-y-4">
       <div>
-        <h1 className="font-serif text-3xl">Portfolio</h1>
+        <h1 className="portfolio-title screen-heading">Portfolio</h1>
         <p className="mt-1 text-sm text-muted">Positions stay linked to the thesis and venue that created them. Gemini values come from Gemini account data; no value is inferred from stale prices.</p>
       </div>
       <Card>
         <p className="text-sm text-muted">Arc and paper cost basis: <span className="font-medium text-ink">{usdc(cost)}</span></p>
         <p className="mt-1 text-xs text-muted">Unrealized value for Arc positions is shown only when a supported exit quote exists. Gemini mark values are supplied by Gemini.</p>
       </Card>
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Portfolio view">
-        {(["positions", "settled"] as PortfolioTab[]).map((value) => (
-          <button key={value} type="button" aria-pressed={tab === value} className={`min-h-11 rounded-lg border px-3 capitalize ${tab === value ? "border-action bg-[#E9EEFF] font-medium text-action" : "border-line text-muted"}`} onClick={() => setTab(value)}>
-            {value === "positions" ? "Open positions" : "Settled history"}
-          </button>
-        ))}
-        <Button onClick={() => { void loadLocal(); if (tab === "positions") void loadGeminiActive(); else void loadGeminiSettled(); }} kind="ghost">Refresh</Button>
-        {tab === "settled" ? <Button onClick={() => setTab("positions")} kind="secondary">Back to open positions</Button> : null}
+      <div className="portfolio-tabs-row">
+        <nav className="portfolio-tabs" aria-label="Portfolio views" role="tablist">
+          {(["positions", "settled", "orders", "activity", "alerts"] as PortfolioTab[]).map((value) => (
+            <button key={value} type="button" role="tab" aria-selected={tab === value} className="portfolio-tab" onClick={() => selectTab(value)}>
+              {{ positions: "Open positions", settled: "Settled history", orders: "Orders", activity: "Activity", alerts: "Alerts" }[value]}
+            </button>
+          ))}
+        </nav>
+        <div className="portfolio-actions">
+          {tab === "settled" ? <Button onClick={() => selectTab("positions")} kind="secondary">Back to open positions</Button> : null}
+          {tab === "positions" || tab === "settled" ? <Button onClick={() => { void loadLocal(); if (tab === "positions") void loadGeminiActive(); else void loadGeminiSettled(); }} kind="ghost">Refresh</Button> : null}
+        </div>
       </div>
 
+      {tab === "orders" ? <PortfolioOrders embedded /> : null}
+      {tab === "activity" ? <PortfolioActivity embedded /> : null}
+      {tab === "alerts" ? <PortfolioAlerts embedded /> : null}
       {tab === "positions" ? (
         <div className="space-y-4">
           <section className="space-y-3">
-            <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="font-serif text-2xl">Gemini positions</h2><Link className="text-sm text-action" href="/orders">Orders</Link></div>
+            <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="font-serif text-2xl">Gemini positions</h2><button className="text-sm text-action" onClick={() => setTab("orders")}>View orders</button></div>
             {geminiError ? <Card><p role="alert" className="text-sm text-bad">{geminiError}</p><div className="mt-3 flex flex-wrap gap-2"><Button onClick={() => void loadGeminiActive()} kind="ghost">Retry</Button><Button href={geminiError.toLowerCase().includes("sign in") ? "/auth" : "/settings/connections"} kind="secondary">{geminiError.toLowerCase().includes("sign in") ? "Sign in" : "Connect Gemini"}</Button></div></Card> : null}
             {geminiLoading ? <p role="status" className="text-sm text-muted">Loading positions from Gemini…</p> : null}
             {!geminiLoading && !geminiError && !geminiActive.length ? <Empty title="No active Gemini positions">
@@ -174,7 +197,7 @@ export default function Portfolio() {
             ))}
           </section>
         </div>
-      ) : (
+      ) : tab === "settled" ? (
         <div className="space-y-4">
           <section className="space-y-3">
             <h2 className="font-serif text-2xl">Gemini settlement history</h2>
@@ -205,7 +228,7 @@ export default function Portfolio() {
             </Empty>}
           </section>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

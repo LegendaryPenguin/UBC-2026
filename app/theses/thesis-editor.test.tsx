@@ -156,6 +156,7 @@ describe("thesis research contract rules", () => {
   it("refreshes market data on mode changes without losing edits when refresh fails", async () => {
     render(<ThesisEditor />);
     expect(await screen.findByText(contract.description!)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Edit view" }));
     const rationale = screen.getByLabelText("Rationale") as HTMLTextAreaElement;
     fireEvent.change(rationale, { target: { value: "Keep my unsaved reasoning." } });
 
@@ -189,21 +190,22 @@ describe("thesis research contract rules", () => {
     render(<ThesisEditor />);
 
     expect(await screen.findByText(contract.description!)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Edit view" }));
     fireEvent.change(screen.getByLabelText("Rationale"), { target: { value: "Edited research rationale." } });
     fireEvent.click(screen.getByRole("button", { name: "Review confirmation" }));
-    expect(screen.getByRole("heading", { name: "Review this view" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("heading", { name: "Review this view" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Confirm this thesis view?" })).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: "Back to editing" }).at(-1)!);
+    expect(screen.queryByRole("heading", { name: "Confirm this thesis view?" })).toBeNull();
     expect(patchCount).toBe(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Review confirmation" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm view and open payoff design" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Confirm view & build" }).at(-1)!);
     expect((await screen.findByRole("alert")).textContent).toContain("Temporary save failure.");
-    expect(screen.getByRole("button", { name: "Confirm view and open payoff design" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Confirm view & build" }).length).toBeGreaterThan(0);
     expect((screen.getByLabelText("Rationale") as HTMLTextAreaElement).value).toBe("Edited research rationale.");
     expect(navigation.push).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Confirm view and open payoff design" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Confirm view & build" }).at(-1)!);
     await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/theses/thesis-1/build"));
     expect(patchCount).toBe(2);
     expect(confirmationPayload).toMatchObject({ action: "confirm", rationale: "Edited research rationale." });

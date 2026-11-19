@@ -1,16 +1,48 @@
-# Hackathon scope: corrected Thesis storyboard
+# Product scope: Dashboard + contextual assistant
 
-This is the active implementation scope and source of truth: the user's corrected four-board storyboard, read top-left, top-right, bottom-left, bottom-right, plus the narrated optional follow-through into execution, Portfolio, and History. VFINAL supplies interaction detail for retained features; it does not expand this target to the full original product catalog.
+This is the active scope, updated by the user's November 18, 2026 restructure note. [product-restructure-map.md](product-restructure-map.md) maps current routes to keep, merge, supporting deep link, private operational, or deferred UI. The old four-board storyboard below remains the detailed reference for the research→view→basket→compare journey, but its earlier three-item navigation and route-heavy presentation are superseded.
 
-**Bounty order:** Gemini is the priority, centered on accurate live market discovery, contract rules, and source provenance. ElevenLabs voice is included in research and view clarification, with equivalent manual text actions. The Arc custom-position path is included in Build/Compare/Review when it adds value and its actual capability is available. These are parts of the same journey, not separate product scopes.
+## Navigation and product frame
 
-Users can stop after research or comparison. If they continue, the active path includes a clear, cancelable Review, explicit authorization for a supported execution, and accurate follow-through in Portfolio and History. Use Paper when live/sandbox capabilities are not qualified; never present simulated success as a real order or transaction. One position settlement alert is included: it checks position state when the user opens or refreshes Alerts and creates an in-app notification; background and push delivery are not included. Full account administration, broad alert infrastructure, collaboration, support, and operator modules remain outside scope. Track progress in [plan-progress.md](plan-progress.md) and controls in [interaction-checklist.md](interaction-checklist.md).
+Use four main destinations: **Dashboard, Explore, My Theses, Portfolio**. The logo and signed-in entry route open Dashboard. Account/settings live in a profile menu. A thesis has a connected Research → Build → optional Compare workspace, with History reachable throughout. Supporting interactions use contextual panels or deep links rather than competing as standalone destinations.
+
+Dashboard is the user's next-step surface: greeting, Start a thesis, prominent recent/current thesis with workflow state and last completed step, other recent theses, verified updates, compact portfolio summary, and Ask Thesis. Empty state invites a question and links to supported topic examples and Explore. “Continue” restores the last meaningful workspace state, including saved inputs and selections.
+
+Explore combines supported Gemini discovery, search, category/status/horizon filters, watched markets, and relevant market movement. Opening a market starts a draft Research context or offers attachment to an existing thesis only after checking contract compatibility. Research never requires a wallet or funding.
+
+My Theses is the full library, distinct from Dashboard: search/filter drafts, active, traded, and archived work; open/continue, rename, duplicate, archive, and permit deletion only where safe. Archive does not sell a position. Deleting a draft never deletes immutable financial records.
+
+Portfolio consolidates positions, orders, and activity into tabs/panels. Preserve separate Paper, Gemini, and Arc environments and balances. Position detail, transaction detail, and quote review can remain contextual panels with deep links. Keep only supported exit/claim actions visible.
+
+## One contextual assistant
+
+One assistant system appears as Ask Thesis outside a thesis workspace and as the same saved thesis conversation in the workspace's built-in rail. The global thread list retains thesis-linked threads for later reopening. Never show a duplicate floating assistant inside the workspace. On mobile, use a bottom sheet/full-height surface with a clear return action.
+
+The assistant can explain the current page, find markets, start a thesis, retrieve authorized saved work, open known destinations, focus supported evidence/chart filters, propose a view edit, and explain a basket/scenario. Use bounded structured actions, not arbitrary generated URLs or DOM clicks. Direct navigation requests can execute and report what opened; inferred thesis/view changes appear as proposals and require user confirmation. Unsaved work is autosaved where possible or receives explicit save/discard/cancel choices.
+
+Conversations are server-side and linked either to a general conversation or a thesis. Guest research and drafts remain usable without sign-in under a guest cookie; successful development email-code verification moves guest-owned records to the account without changing record IDs. Google and signed-wallet authentication are not configured. Starting a thesis carries only relevant context into its thread. Keep user statements, assistant suggestions, confirmed revisions, current provider data, and executed terms distinct. Do not use generated summaries as financial terms. Voice and text share actions; voice cannot approve or submit a financial action.
+
+## Identity and context
+
+Use Google or verified-wallet sign-in only after a real identity provider is configured; neither is currently available. Wallet connection is distinct from signed authentication. Use one internal user ID and link identities only after proof of control of both. The current email-code flow is development-only and never presented as production account sync. Connecting a Gemini account or execution wallet is a separate contextual step when needed.
+
+## Keep the detailed user journey
+
+Preserve the established flow: Explore a question → inspect Gemini rules/data/evidence → clarify and confirm a view using voice or text → Build and inspect scenario outcomes → optionally Compare supported constructions → review exact terms → explicitly authorize a supported Paper/sandbox/testnet action → follow the result in Portfolio → revisit revisions and execution-linked history. Users may stop after Research or Compare, and may skip Compare. Contract meaning, permissions, validation, exact result states, and cancel/back/refresh/failure/retry behavior remain complete when pages are consolidated.
+
+Gemini is the integration priority. Arc remains a distinct complementary construction only when useful and available. Keep ElevenLabs credentials server-side and provide complete text alternatives. Keep QuickNode only for a real onchain ingestion job.
+
+## Remove from visible product navigation
+
+Merge the duplicate Home page into Dashboard; Gemini catalog, Search, Calendar, and simple watch management into Explore; standalone Journal into History; Orders and Activity into Portfolio; and redundant account/settings pages into the profile-menu Settings surface. Remove standalone profile/social, publishing unless polished, report export, support-ticket, multi-step onboarding, and instruction-only deposit/withdraw pages from the active navigation/product. Keep concise contextual help, wallet connection/funding guidance, required callbacks, security checks, immutable financial records, and private operations. Preserve working backend capabilities until dependency review permits a separate retirement.
+
+See [plan-progress.md](plan-progress.md), [interaction-checklist.md](interaction-checklist.md), and [product-restructure-map.md](product-restructure-map.md) for work and migration state.
 
 ## Product journey
 
 Thesis is one continuous journey: **Explore a question → develop and confirm a view → inspect a basket → compare before choosing**. Trading is optional. The workspace shell stays familiar while the active Research, Build, or Compare canvas changes. The confirmed view stays visible, and evidence stays attached to its research area.
 
-Primary navigation is **Explore, My Theses, Portfolio**. A thesis workspace has **Research, Build, Compare, History** tabs. Supporting pages remain reachable through More or through the relevant action; they do not compete with the main journey. Consolidating routes this way changes where interactions happen, not whether their detailed behavior is implemented.
+Primary navigation is **Dashboard, Explore, My Theses, Portfolio**. A thesis workspace has **Research, Build, Compare, History** tabs. Supporting pages remain reachable through Profile or through the relevant action; they do not compete with the main journey. Consolidating routes this way changes where interactions happen, not whether their detailed behavior is implemented.
 
 ### 1. Explore the question
 

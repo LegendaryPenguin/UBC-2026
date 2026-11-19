@@ -13,6 +13,7 @@ import { MarketPriceHistory } from "@/components/MarketPriceHistory";
 import { useModeChange } from "@/lib/use-mode-change";
 import { useGeminiMarketStream } from "@/lib/gemini/use-market-stream";
 import { GeminiLiveMarketFeed } from "@/components/GeminiLiveMarketFeed";
+import { formatTime } from "@/lib/format";
 
 export default function ThesisEditor() {
   const { id } = useParams<{ id: string }>();
@@ -26,6 +27,11 @@ export default function ThesisEditor() {
   const [saving, setSaving] = useState<"save" | "confirm" | "duplicate" | null>(null);
   const [dirty, setDirty] = useState(false);
   const [reviewingConfirmation, setReviewingConfirmation] = useState(false);
+  const [editingView, setEditingView] = useState(false);
+  const [pendingDestination, setPendingDestination] = useState("");
+  const [evidenceFilter, setEvidenceFilter] = useState<"all" | "supports" | "challenges" | "saved">("all");
+  const [savedEvidence, setSavedEvidence] = useState<EvidenceItem[]>([]);
+  const [assistantPrompt, setAssistantPrompt] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -48,6 +54,10 @@ export default function ThesisEditor() {
       .catch((err) => { if (active) setError(err instanceof Error ? err.message : "Thesis could not be loaded."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
+  }, [id]);
+
+  useEffect(() => {
+    try { setSavedEvidence(JSON.parse(localStorage.getItem(`thesis:saved-evidence:${id}`) || "[]") as EvidenceItem[]); } catch { setSavedEvidence([]); }
   }, [id]);
 
   const refreshMarketData = useCallback(async () => {
@@ -109,8 +119,8 @@ export default function ThesisEditor() {
     setNotice("");
   }
 
-  async function save(action: "save" | "confirm" | "duplicate" = "save") {
-    if (!thesis) return;
+  async function save(action: "save" | "confirm" | "duplicate" = "save"): Promise<boolean> {
+    if (!thesis) return false;
     setSaving(action);
     setError("");
     setNotice("");
@@ -121,50 +131,70 @@ export default function ThesisEditor() {
       });
       if (action === "duplicate") {
         router.push(`/theses/${res.thesis.id}`);
-        return;
+        return true;
       }
       setThesis(res.thesis);
       setDirty(false);
       if (action === "confirm") {
         router.push(`/theses/${id}/build`);
-        return;
+        return true;
       }
       setNotice(`Saved as revision ${res.thesis.revision}. Your existing view remains a draft until you confirm it.`);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "View could not be saved. Your edits remain here so you can retry.");
+      return false;
     } finally {
       setSaving(null);
     }
   }
 
-  function backToWorkspace() {
-    if (dirty && !window.confirm("Discard these unsaved view edits and return to the workspace?")) return;
-    router.push("/workspace");
+  function navigateSafely(destination: string) {
+    if (dirty) {
+      setPendingDestination(destination);
+      return false;
+    }
+    return true;
   }
 
-  function openHistory() {
-    if (dirty && !window.confirm("Discard these unsaved view edits and open revision history?")) return;
-    router.push(`/theses/${id}/history`);
+  async function resolvePendingNavigation(choice: "save" | "discard") {
+    if (!pendingDestination) return;
+    if (choice === "save" && !(await save("save"))) return;
+    if (choice === "discard") setDirty(false);
+    const destination = pendingDestination;
+    setPendingDestination("");
+    router.push(destination);
+  }
+
+  function toggleSavedEvidence(item: EvidenceItem) {
+    setSavedEvidence((current) => {
+      const next = current.some((saved) => saved.id === item.id) ? current.filter((saved) => saved.id !== item.id) : [...current, item];
+      try { localStorage.setItem(`thesis:saved-evidence:${id}`, JSON.stringify(next)); } catch { setNotice("Browser storage is full. This evidence pin could not be saved on this device."); }
+      return next;
+    });
   }
 
   if (loading) return <p role="status">Loading thesis…</p>;
   if (error && !thesis) return <Empty title="Thesis unavailable">{error}</Empty>;
   if (!thesis) return <Empty title="Thesis unavailable">This view could not be found.</Empty>;
+  const workspaceTitle = thesis.title?.trim() || family?.title || thesis.topicSlug.replaceAll("-", " ");
+  const viewValid = thesis.template === "binary"
+    ? Boolean(family?.contracts[0] && (thesis.direction === "yes" || thesis.direction === "no"))
+    : thesis.lowerThreshold != null && (thesis.template === "directional" || thesis.upperThreshold != null && thesis.upperThreshold > thesis.lowerThreshold);
+  const shownEvidence = evidenceFilter === "saved" ? savedEvidence : evidenceFilter === "all" ? evidence : evidence.filter((item) => item.stance === evidenceFilter);
   return (
-    <div className="space-y-4">
-      <p className="text-xs uppercase tracking-wide text-muted">{thesis.topicSlug.replaceAll("-", " ")}</p>
-      <h1 className="font-serif text-3xl">Research your view</h1>
-      <p className="text-sm text-muted">Revision {thesis.revision} · {thesis.status}. Research and saved views do not require a wallet. Confirming opens payoff design without requesting a quote or submitting a trade.</p>
-      <ThesisWorkspaceTabs
-        thesisId={id}
-        current="Research"
-        lockedTabs={thesis.status === "draft" ? ["Build", "Compare"] : []}
-        onNavigate={() => !dirty || window.confirm("Discard these unsaved view edits and leave Research?")}
-      />
+    <div className="screen-workspace space-y-4">
+      <header className="workspace-header">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div><h1 className="workspace-title screen-heading">{workspaceTitle}</h1><p className="mt-2 text-sm text-muted">{family?.question || "Market question unavailable"}{family?.closeTime ? ` · Closes ${formatTime(family.closeTime)}` : ""} · {family?.mode === "live" ? "Gemini live market data" : "Illustrative replay"}</p></div>
+          <div className="flex flex-wrap items-center gap-2"><span role="status" className={`status-pill ${dirty ? "status-pill--warning" : "status-pill--good"}`}>{saving ? "Saving…" : dirty ? "Unsaved changes" : `Revision ${thesis.revision} · ${thesis.status}`}</span><button type="button" onClick={() => void refreshMarketData()} className="min-h-10 rounded-lg border border-line bg-white px-3 text-sm font-semibold">Refresh data</button></div>
+        </div>
+      </header>
+      <ThesisWorkspaceTabs thesisId={id} current="Research" lockedTabs={thesis.status === "draft" ? ["Build", "Compare"] : []} onNavigate={navigateSafely} />
       {error ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{error}</p> : null}
       {notice ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">{notice}</p> : null}
       {family ? (
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,0.85fr)]">
+        <div className="workspace-layout">
           <div className="space-y-4">
             <MarketPriceHistory
               illustrative={family.mode === "replay"}
@@ -190,13 +220,10 @@ export default function ThesisEditor() {
               connectedAt={marketFeed.connectedAt}
             /> : null}
             <Card>
-              <h2 className="font-serif text-xl">{family.title} · market expectations</h2>
-              <p className="mt-1 text-sm text-muted">{family.question}</p>
-              <p className="mt-2 text-xs text-muted">
-                {family.mode === "replay" ? "Illustrative recorded snapshot" : "Gemini reference data"} · {family.freshness} · observed {family.observationTime ? new Date(family.observationTime).toLocaleString() : "time not provided"}
-              </p>
+              <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-serif text-2xl font-bold">What does the market expect?</h2><p className="mt-1 text-sm text-muted">Gemini contract-price reference · cents</p></div><span className="source-pill">{family.mode === "replay" ? "Illustrative replay" : "Gemini live data"}</span></div>
+              <p className="mt-2 text-xs text-muted">{family.freshness} · observed {family.observationTime ? formatTime(family.observationTime) : "time not provided"}</p>
               {family.mode === "replay" ? <p className="mt-2 rounded-lg bg-[#FFF8E7] p-3 text-xs text-muted">Replay prices and evidence are walkthrough fixtures. They are not current prices, news, or executable quotes.</p> : null}
-              <div className="mt-3 overflow-x-auto">
+              <div className="table-scroll mt-3">
                 <table className="w-full text-left text-sm">
                   <thead><tr><th className="border-b border-line py-2 pr-3">Contract</th><th className="border-b border-line py-2 pr-3">Bid · YES</th><th className="border-b border-line py-2 pr-3">Ask · YES</th><th className="border-b border-line py-2">Last trade</th></tr></thead>
                   <tbody>{family.contracts.map((contract) => (
@@ -232,50 +259,56 @@ export default function ThesisEditor() {
               </div>
               {family.sourceEvent.sourceUrl && !selectedRuleContracts.some((contract) => contract?.termsUrl === family.sourceEvent.sourceUrl) ? <a className="mt-3 inline-block text-sm text-action underline" href={family.sourceEvent.sourceUrl} target="_blank" rel="noreferrer">Open event-level Gemini terms</a> : null}
             </Card>
-            {evidence.length ? (
-              <Card>
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h2 className="font-serif text-xl">Evidence board</h2>
-                  {family.mode === "replay" ? <span className="text-xs text-muted">Illustrative replay evidence</span> : null}
-                </div>
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  {evidence.map((item) => (
-                    <article key={item.id} className="rounded-lg border border-line p-3">
-                      <span className={`inline-flex rounded-full px-2 py-1 text-xs capitalize ${item.stance === "supports" ? "bg-[#E3F5EC] text-good" : item.stance === "challenges" ? "bg-[#FCE8E8] text-bad" : "bg-[#E9EEFF] text-action"}`}>{item.stance || "context"}</span>
-                      <Link href={`/topics/${thesis.topicSlug}/evidence/${item.id}`} className="mt-2 block font-medium">{item.title}</Link>
-                      <p className="mt-1 text-xs text-muted">{item.publisher} · {new Date(item.retrievedAt).toLocaleString()}</p>
-                      <p className="mt-2 text-sm">{item.excerpt}</p>
-                    </article>
-                  ))}
-                </div>
-                <p className="mt-3 text-xs text-muted">Evidence cards stay tied to this thesis. Review the original source before relying on a claim.</p>
-              </Card>
-            ) : <Card><h2 className="font-serif text-xl">Evidence</h2><p className="mt-2 text-sm text-muted">No current evidence cards are available for this market. Research and manual view controls remain available.</p></Card>}
+            <Card>
+              <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="font-serif text-2xl font-bold">Evidence board</h2><p className="mt-1 text-sm text-muted">Source material stays separate from the assistant’s interpretation.</p></div>{family.mode === "replay" ? <span className="source-pill">Illustrative replay</span> : null}</div>
+              <nav className="mt-4 flex flex-wrap gap-2" aria-label="Filter evidence">
+                {([ ["all", `All (${evidence.length})`], ["supports", `Supports (${evidence.filter((item) => item.stance === "supports").length})`], ["challenges", `Challenges (${evidence.filter((item) => item.stance === "challenges").length})`], ["saved", `Saved (${savedEvidence.length})`] ] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={evidenceFilter === value} onClick={() => setEvidenceFilter(value)} className={`min-h-9 rounded-full border px-3 text-xs ${evidenceFilter === value ? "border-action bg-[#E9EEFF] font-semibold text-action" : "border-line bg-white text-muted"}`}>{label}</button>)}
+              </nav>
+              {shownEvidence.length ? <div className="evidence-grid mt-3">
+                {shownEvidence.map((item) => {
+                  const pinned = savedEvidence.some((saved) => saved.id === item.id);
+                  return <article key={item.id} className="evidence-card">
+                    <span className={`status-pill ${item.stance === "supports" ? "status-pill--good" : item.stance === "challenges" ? "status-pill--error" : ""}`}>{item.stance || "context"}</span>
+                    <Link href={`/topics/${thesis.topicSlug}/evidence/${item.id}`} className="mt-2 block font-semibold leading-tight hover:text-action">{item.title}</Link>
+                    <p className="mt-1 text-[11px] text-muted">{item.publisher} · retrieved {formatTime(item.retrievedAt)}</p>
+                    <p className="mt-2 line-clamp-3 text-sm">{item.excerpt}</p>
+                    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-2 text-xs">
+                      <button type="button" className="font-semibold text-action" onClick={() => toggleSavedEvidence(item)}>{pinned ? "Unsave" : "Save"}</button>
+                      <button type="button" className="font-semibold text-action" onClick={() => setAssistantPrompt(`Explain this source claim in the context of my view: “${item.excerpt}” Source: ${item.title} (${item.publisher}).`)}>Ask about this</button>
+                      <a className="ml-auto text-muted underline" href={item.url} target="_blank" rel="noreferrer">Original ↗</a>
+                    </div>
+                  </article>;
+                })}
+              </div> : <div className="mt-4 rounded-lg border border-dashed border-line bg-[#FAF9F6] p-5 text-sm text-muted">{evidenceFilter === "saved" ? "No evidence is saved on this device yet." : evidence.length ? "No evidence matches this filter." : "No current evidence cards are available for this market. You can refresh the source or edit your view manually."}<div className="mt-3 flex flex-wrap gap-2">{evidenceFilter === "saved" ? null : <button type="button" className="font-semibold text-action underline" onClick={() => void refreshMarketData()}>Refresh evidence and market data</button>}{evidenceFilter !== "all" ? <button type="button" className="font-semibold text-action underline" onClick={() => setEvidenceFilter("all")}>Show all</button> : null}</div></div>}
+              <p className="mt-3 text-xs text-muted">Evidence pins are stored on this device in this MVP. Original source text and retrieval time are kept with each pin.</p>
+            </Card>
           </div>
-          <aside className="space-y-4">
+          <aside className="view-rail">
+            <ThesisViewPanel
+              thesis={thesis}
+              family={family}
+              action={thesis.status === "draft"
+                ? { label: "Confirm view & build", onClick: () => setReviewingConfirmation(true), disabled: !viewValid }
+                : { label: "Build a basket", href: `/theses/${id}/build` }}
+              editAction={{ label: "Edit view", onClick: () => setEditingView(true) }}
+            />
             <VoicePanel
               slug={family.slug}
               family={family}
               evidence={evidence}
               thesis={thesis}
-              onThesisChange={(updated) => { setThesis(updated); setDirty(false); setNotice(`Voice-assisted edit saved as draft revision ${updated.revision}.`); }}
+              onThesisChange={(updated) => { setThesis(updated); setDirty(false); setEditingView(false); setNotice(`Voice-assisted edit saved as draft revision ${updated.revision}.`); }}
               context="view"
               title="Talk through your view"
-            />
-            <ThesisViewPanel
-              thesis={thesis}
-              family={family}
-              action={thesis.status === "draft"
-                ? { label: "Review and confirm view", onClick: () => setReviewingConfirmation(true) }
-                : { label: "Build a basket", href: `/theses/${id}/build` }}
+              prefillQuestion={assistantPrompt}
+              onPrefillConsumed={() => setAssistantPrompt("")}
             />
           </aside>
         </div>
       ) : null}
-      <Card className="space-y-3">
+      {editingView ? <Card className="space-y-3">
         <div>
-          <h2 className="font-serif text-xl">Your view</h2>
-          <p className="mt-1 text-sm text-muted">Edit the conditions that would support your idea. Save creates a draft version; confirm only after reviewing the wording.</p>
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-serif text-2xl font-bold">Edit your view</h2><p className="mt-1 text-sm text-muted">Choose only conditions supported by the listed contract rules. This changes the draft, not an existing position.</p></div><button type="button" className="min-h-10 rounded-lg px-3 text-2xl leading-none text-muted hover:bg-[#F4F2ED]" aria-label="Close view editor" onClick={() => { setEditingView(false); if (!dirty) setNotice(""); }}>×</button></div>
         </div>
         <Field label="Template">
           <select className={inputCls()} value={thesis.template} onChange={(event) => changeTemplate(event.target.value as ThesisRevision["template"])}>
@@ -310,25 +343,20 @@ export default function ThesisEditor() {
         <Field label="I would reconsider if">
           <textarea className={`${inputCls()} min-h-20 py-2`} maxLength={2_000} value={thesis.invalidation} onChange={(event) => change("invalidation", event.target.value)} />
         </Field>
-      </Card>
+        <div className="flex flex-wrap gap-2 border-t border-line pt-3"><Button onClick={async () => { if (await save("save")) setEditingView(false); }} disabled={saving !== null}>{saving === "save" ? "Saving…" : "Save draft"}</Button><Button onClick={() => setReviewingConfirmation(true)} disabled={saving !== null || !viewValid}>Review confirmation</Button><Button kind="ghost" onClick={() => setEditingView(false)} disabled={saving !== null}>Cancel</Button></div>
+      </Card> : null}
       {reviewingConfirmation ? (
-        <Card className="space-y-3">
-          <h2 className="font-serif text-xl">Review this view</h2>
-          <p className="text-sm">{thesis.template === "binary" ? `${thesis.direction?.toUpperCase() || "YES"} · ${family?.contracts[0]?.label || "selected contract"}` : thesis.template === "directional" ? `${thesis.direction?.toUpperCase() || "YES"} at ${thesis.lowerThreshold ?? "an unset threshold"}` : `${thesis.template} from ${thesis.lowerThreshold ?? "an unset lower bound"} to ${thesis.upperThreshold ?? "an unset upper bound"}`}</p>
-          <p className="text-xs text-muted">Confirming versions this view and opens payoff design. It does not request a quote, approve USDC, or submit a transaction.</p>
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => void save("confirm")} disabled={saving !== null}>{saving === "confirm" ? "Confirming…" : "Confirm view and open payoff design"}</Button>
-            <Button onClick={() => setReviewingConfirmation(false)} kind="ghost" disabled={saving !== null}>Cancel</Button>
-          </div>
-        </Card>
+        <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setReviewingConfirmation(false); }}>
+          <section className="dialog-panel space-y-4" role="dialog" aria-modal="true" aria-labelledby="confirm-view-title">
+            <div className="flex items-start justify-between gap-3"><div><p className="source-pill">Review your view</p><h2 id="confirm-view-title" className="mt-3 font-serif text-2xl font-bold">Confirm this thesis view?</h2></div><button type="button" aria-label="Back to editing" className="min-h-10 px-3 text-2xl text-muted" onClick={() => setReviewingConfirmation(false)} disabled={saving !== null}>×</button></div>
+            <div className="rounded-xl border border-[#CCD6F5] bg-[#F7F8FF] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">{family?.question}</p><p className="mt-2 text-lg font-semibold">{thesis.template === "binary" ? `${thesis.direction?.toUpperCase() || "YES"} · ${family?.contracts[0]?.label || "selected contract"}` : thesis.template === "directional" ? `${thesis.direction === "no" ? "Below" : "At or above"} ${thesis.lowerThreshold ?? "an unset threshold"}` : `${thesis.template === "outside" ? "Outside" : "Between"} ${thesis.lowerThreshold ?? "an unset lower bound"} and ${thesis.upperThreshold ?? "an unset upper bound"}`}</p><p className="mt-1 text-xs text-muted">Settlement {family?.closeTime ? formatTime(family.closeTime) : "deadline not supplied"} · {family?.mode === "live" ? "Gemini live data" : "Illustrative replay"}</p></div>
+            {thesis.rationale ? <div><p className="text-sm font-semibold">Your rationale</p><p className="mt-1 whitespace-pre-wrap text-sm text-muted">{thesis.rationale}</p></div> : null}
+            {!viewValid ? <p role="alert" className="rounded-lg border border-bad/30 bg-[#FFF5F4] p-3 text-sm text-bad">Choose valid boundaries from the listed contracts before confirming.</p> : <p className="text-sm text-muted">Confirming saves this version and opens Build. It does not request a quote, connect a wallet, or submit a trade.</p>}
+            <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-3"><Button onClick={() => setReviewingConfirmation(false)} kind="ghost" disabled={saving !== null}>Back to editing</Button><Button onClick={() => void save("confirm")} disabled={saving !== null || !viewValid}>{saving === "confirm" ? "Saving confirmed view…" : "Confirm view & build"}</Button></div>
+          </section>
+        </div>
       ) : null}
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={() => void save("save")} disabled={saving !== null}>{saving === "save" ? "Saving…" : "Save view"}</Button>
-        <Button onClick={() => setReviewingConfirmation(true)} disabled={saving !== null || !dirty && thesis.status === "confirmed"}>Review confirmation</Button>
-        <Button onClick={() => void save("duplicate")} kind="secondary" disabled={saving !== null}>{saving === "duplicate" ? "Creating copy…" : "Duplicate as draft"}</Button>
-        <Button onClick={openHistory} kind="ghost">History</Button>
-        <Button onClick={backToWorkspace} kind="ghost">Back to workspace</Button>
-      </div>
+      {pendingDestination ? <div className="dialog-backdrop" role="presentation"><section className="dialog-panel space-y-4" role="dialog" aria-modal="true" aria-labelledby="unsaved-title"><div className="flex items-start justify-between gap-3"><div><p className="source-pill status-pill--warning">Unsaved changes</p><h2 id="unsaved-title" className="mt-3 font-serif text-2xl font-bold">Leave this research board?</h2></div><button type="button" aria-label="Stay on this thesis" className="min-h-10 px-3 text-2xl text-muted" onClick={() => setPendingDestination("")}>×</button></div><p className="text-sm text-muted">Your view edits have not been saved. Choose whether to keep them before leaving.</p><div className="flex flex-wrap justify-end gap-2 border-t border-line pt-3"><Button kind="ghost" onClick={() => setPendingDestination("")}>Stay</Button><Button kind="danger" onClick={() => void resolvePendingNavigation("discard")}>Discard unsaved</Button><Button onClick={() => void resolvePendingNavigation("save")} disabled={saving !== null}>{saving === "save" ? "Saving…" : "Save and leave"}</Button></div></section></div> : null}
     </div>
   );
 }

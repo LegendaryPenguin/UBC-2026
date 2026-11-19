@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <section className={`rounded-card border border-line bg-surface p-5 shadow-sm ${className}`}>{children}</section>;
+  return <section className={`app-card rounded-card border border-line bg-surface p-5 shadow-sm ${className}`}>{children}</section>;
 }
 
 export function Button({
@@ -11,6 +11,7 @@ export function Button({
   disabled,
   kind = "primary",
   type = "button",
+  className = "",
 }: {
   children: React.ReactNode;
   href?: string;
@@ -18,6 +19,7 @@ export function Button({
   disabled?: boolean;
   kind?: "primary" | "secondary" | "danger" | "ghost";
   type?: "button" | "submit";
+  className?: string;
 }) {
   const cls = {
     primary: "bg-action text-white",
@@ -25,7 +27,7 @@ export function Button({
     danger: "bg-bad text-white",
     ghost: "bg-transparent text-ink border border-line",
   }[kind];
-  const shared = `inline-flex min-h-11 items-center justify-center rounded-lg px-4 text-sm font-medium disabled:opacity-50 ${cls}`;
+  const shared = `app-button inline-flex min-h-11 items-center justify-center rounded-lg px-4 text-sm font-medium transition-colors disabled:opacity-50 ${cls} ${className}`;
   if (href && !disabled) return <Link className={shared} href={href}>{children}</Link>;
   return (
     <button type={type} className={shared} onClick={onClick} disabled={disabled}>
@@ -36,7 +38,7 @@ export function Button({
 
 export function Banner({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-line bg-[#EEF1F4] px-4 py-3 text-sm">
+    <div className="app-banner rounded-lg border border-line bg-[#EEF1F4] px-4 py-3 text-sm">
       <p className="font-medium">{title}</p>
       <div className="mt-1 text-muted">{children}</div>
     </div>
@@ -45,7 +47,7 @@ export function Banner({ title, children }: { title: string; children: React.Rea
 
 export function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
-    <label className="block">
+    <label className="app-field block">
       <span className="mb-1 block text-sm font-medium">{label}</span>
       {children}
       {hint ? <span className="mt-1 block text-xs text-muted">{hint}</span> : null}
@@ -54,7 +56,7 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 }
 
 export function inputCls(extra = "") {
-  return `min-h-11 w-full rounded-lg border border-line bg-white px-3 text-sm ${extra}`;
+  return `app-input min-h-11 w-full rounded-lg border border-line bg-white px-3 text-sm ${extra}`;
 }
 
 export function Empty({ title, children }: { title: string; children: React.ReactNode }) {

@@ -18,6 +18,7 @@ import { useModeChange } from "@/lib/use-mode-change";
 type BasketLeg = { contractId: string; side: "yes" | "no"; payoutAmount: string; enabled: boolean };
 type ConstructionChoice = "gemini-basket" | "gemini-single" | "arc-custom";
 type Mode = "replay" | "paper" | "live";
+type ComparisonBasis = "per-construction" | "equal-budget" | "equal-max-payout";
 
 function defaultBasket(thesis: ThesisRevision, family: MarketFamily, max: string): BasketLeg[] {
   let half = "50";
@@ -46,6 +47,11 @@ function belowCostLabels(values: bigint[], labels: string[], cost: bigint | null
   return below.length ? below.join("; ") : "None before fees";
 }
 
+function normalizePayouts(values: bigint[], target: bigint, base: bigint | null): bigint[] | null {
+  if (base == null || base <= 0n) return null;
+  return values.map((value) => value * target / base);
+}
+
 export default function ComparePage() {
   const { id } = useParams<{ id: string }>();
   const [thesis, setThesis] = useState<ThesisRevision | null>(null);
@@ -57,6 +63,8 @@ export default function ComparePage() {
   const [basket, setBasket] = useState<BasketLeg[]>([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState("");
   const [selected, setSelected] = useState<ConstructionChoice>("gemini-basket");
+  const [basis, setBasis] = useState<ComparisonBasis>("equal-max-payout");
+  const [comparisonSpend, setComparisonSpend] = useState("100");
   const [quoteCapability, setQuoteCapability] = useState(false);
   const [geminiTradeState, setGeminiTradeState] = useState("unqualified");
   const [error, setError] = useState("");
@@ -96,6 +104,10 @@ export default function ComparePage() {
         setFamily(topic.family);
         setEvidence(topic.evidence);
         const requestedScenario = new URLSearchParams(window.location.search).get("scenario");
+        const params = new URLSearchParams(window.location.search);
+        const requestedBasis = params.get("basis");
+        if (requestedBasis === "per-construction" || requestedBasis === "equal-budget" || requestedBasis === "equal-max-payout") setBasis(requestedBasis);
+        setComparisonSpend(params.get("spend") || "100");
         setSelectedScenarioId(topic.family.scenarios.some((scenario) => scenario.id === requestedScenario)
           ? requestedScenario!
           : topic.family.scenarios[0]?.id || "");
@@ -155,6 +167,28 @@ export default function ComparePage() {
     try { sessionStorage.setItem(`thesis-construction:${id}`, value); } catch { /* selection is still active */ }
   }
 
+  function updateBasis(value: ComparisonBasis) {
+    setBasis(value);
+    const url = new URL(window.location.href);
+    url.searchParams.set("basis", value);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function updateComparisonSpend(value: string) {
+    setComparisonSpend(value);
+    const url = new URL(window.location.href);
+    url.searchParams.set("spend", value);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function selectScenario(value: string) {
+    if (!family?.scenarios.some((scenario) => scenario.id === value)) return;
+    setSelectedScenarioId(value);
+    const url = new URL(window.location.href);
+    url.searchParams.set("scenario", value);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
   function changeBudget(value: string) {
     setBudget(value);
     try {
@@ -172,13 +206,16 @@ export default function ComparePage() {
   const budgetValid = (() => {
     try { return budget.trim().length > 0 && parseUsdc(budget) > 0n; } catch { return false; }
   })();
+  const comparisonSpendValid = (() => {
+    try { return comparisonSpend.trim().length > 0 && parseUsdc(comparisonSpend) > 0n; } catch { return false; }
+  })();
 
   if (loading) return <p role="status">Loading construction comparison…</p>;
   if (error && !thesis) return <Card><p role="alert" className="text-sm text-bad">{error}</p><div className="mt-3"><Button href="/workspace" kind="ghost">My Theses</Button></div></Card>;
   if (!thesis || !family) return <Card><p role="alert" className="text-sm text-bad">{error || "Thesis could not be loaded."}</p></Card>;
   if (thesis.status === "draft") return (
-    <div className="space-y-4">
-      <h1 className="font-serif text-3xl">Compare constructions</h1>
+    <div className="screen-workspace space-y-4">
+      <header className="workspace-header"><h1 className="workspace-title screen-heading">Compare constructions</h1></header>
       <ThesisWorkspaceTabs thesisId={id} current="Compare" lockedTabs={["Build"]} />
       <Card><h2 className="font-serif text-xl">Confirm your view first</h2><p className="mt-2 text-sm text-muted">Comparison is based on a saved, confirmed view. Return to Research and review the proposed boundaries first.</p><div className="mt-3"><Button href={`/theses/${id}`}>Return to Research</Button></div></Card>
     </div>
@@ -191,25 +228,39 @@ export default function ComparePage() {
   const ticket = calculations?.alternatives?.ticket;
   const ticketContract = ticket ? family.contracts.find((contract) => contract.id === ticket.sourceContractIds[0]) : null;
   const activeConstruction: ConstructionChoice = selected === "arc-custom" && !showArc || selected === "gemini-single" && !ticketContract ? "gemini-basket" : selected;
-  const selectedPayout = activeConstruction === "gemini-basket"
-    ? calculations?.basketRows[selectedIndex]?.payout
-    : activeConstruction === "gemini-single"
-      ? ticket?.rows[selectedIndex]?.payout
-      : calculations?.desired?.rows[selectedIndex]?.payout;
-  const desiredPayout = calculations?.desired?.rows[selectedIndex]?.payout ?? 0n;
-  const outcome = selectedScenario
-    ? activeConstruction === "arc-custom"
-      ? `${formatUsdcFixed(selectedPayout || 0n)} USDC · matches the confirmed view`
-      : `${formatUsdcFixed(selectedPayout || 0n)} USDC vs ${formatUsdcFixed(desiredPayout)} USDC desired · ${selectedPayout === desiredPayout ? "matches" : "differs"}`
-    : undefined;
-  const series = calculations?.desired ? [
-    { name: "Gemini basket", values: calculations.basketRows.map((row) => row.payout), color: "#C57A36" },
-    ...(ticket ? [{ name: "Single Gemini ticket", values: ticket.rows.map((row) => row.payout), color: "#718394" }] : []),
-    ...(showArc ? [{ name: "Arc custom", values: calculations.desired.rows.map((row) => row.payout), color: "#3559E0" }] : []),
-  ] : [];
   const labels = family.scenarios.map((scenario) => scenario.label);
   const basketValues = calculations?.basketRows.map((row) => row.payout) || [];
   const basketMaximum = basketValues.reduce((maximum, value) => value > maximum ? value : maximum, 0n);
+  const canEqualBudget = Boolean(ticketContract && calculations?.basketCost && calculations.singleCost);
+  const targetPayout = (() => {
+    try { return basis === "equal-budget" ? parseUsdc(comparisonSpend) : parseUsdc(budget); } catch { return 0n; }
+  })();
+  const basisRows = (values: bigint[], maximum: bigint | null, cost: bigint | null) => basis === "per-construction"
+    ? values
+    : normalizePayouts(values, targetPayout, basis === "equal-budget" ? cost : maximum);
+  const basketBasisRows = calculations ? basisRows(basketValues, basketMaximum, calculations.basketCost?.total ?? null) : null;
+  const ticketBasisRows = ticket ? basisRows(ticket.rows.map((row) => row.payout), ticket.maxPayout, calculations?.singleCost?.total ?? null) : null;
+  const desiredValues = calculations?.desired?.rows.map((row) => row.payout) || [];
+  const desiredBasisRows = calculations?.desired ? basisRows(desiredValues, calculations.desired.maxPayout, null) : null;
+  const arcBasisRows = basis === "equal-budget" ? null : desiredBasisRows;
+  const selectedPayout = activeConstruction === "gemini-basket"
+    ? basketBasisRows?.[selectedIndex]
+    : activeConstruction === "gemini-single"
+      ? ticketBasisRows?.[selectedIndex]
+      : arcBasisRows?.[selectedIndex];
+  const desiredPayout = desiredBasisRows?.[selectedIndex];
+  const outcome = selectedScenario
+    ? basis === "equal-budget"
+      ? selectedPayout == null ? "Cost reference unavailable; this construction cannot be normalized to the same spend." : `${formatUsdcFixed(selectedPayout)} USDC payout · ${formatUsdc(targetPayout)} USDC reference spend`
+      : activeConstruction === "arc-custom"
+        ? `${formatUsdcFixed(selectedPayout || 0n)} USDC · matches the confirmed view`
+        : `${formatUsdcFixed(selectedPayout || 0n)} USDC vs ${formatUsdcFixed(desiredPayout || 0n)} USDC desired · ${selectedPayout === desiredPayout ? "matches" : "differs"}`
+    : undefined;
+  const series = calculations?.desired ? [
+    ...(basketBasisRows ? [{ name: "Gemini basket", values: basketBasisRows, color: "#C57A36" }] : []),
+    ...(ticketBasisRows && ticket ? [{ name: "Single Gemini ticket", values: ticketBasisRows, color: "#718394" }] : []),
+    ...(showArc && arcBasisRows ? [{ name: "Arc custom", values: arcBasisRows, color: "#3559E0" }] : []),
+  ] : [];
   const basketShortfalls = belowCostLabels(basketValues, labels, calculations?.basketCost?.total ?? null);
   const singleShortfalls = belowCostLabels(ticket?.rows.map((row) => row.payout) || [], labels, calculations?.singleCost?.total ?? null);
   const arcShortfalls = belowCostLabels(calculations?.desired?.rows.map((row) => row.payout) || [], labels, null);
@@ -220,22 +271,33 @@ export default function ComparePage() {
       ? calculations?.singleCost ? `~${formatUsdc(calculations.singleCost.total)} USDC before fees` : "Reference cost unavailable"
       : "Not quoted";
   const reviewHref = `/theses/${id}/review?construction=${activeConstruction}&maxPayout=${encodeURIComponent(budget)}&scenario=${encodeURIComponent(selectedScenarioId)}`;
-  const action = { label: "Review selected construction", href: reviewHref, disabled: !budgetValid };
+  const action = { label: "Review selected construction", href: reviewHref, disabled: !budgetValid || basis === "equal-budget" && (!comparisonSpendValid || !canEqualBudget) };
 
   return (
-    <div className="space-y-4">
-      <p className="text-xs uppercase tracking-wide text-muted">{family.title} · same maximum gross payout · {mode === "replay" ? "illustrative replay" : mode}</p>
-      <h1 className="font-serif text-3xl">Compare constructions</h1>
+    <div className="screen-workspace space-y-4">
+      <header className="workspace-header"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-muted">{family.title} · {mode === "replay" ? "illustrative replay" : mode}</p><h1 className="workspace-title screen-heading">Compare constructions</h1><p className="mt-2 text-sm text-muted">Select an explicit basis, inspect each settlement scenario, then review one construction.</p></div><span className="status-pill status-pill--good">View confirmed · revision {thesis.revision}</span></div></header>
       <ThesisWorkspaceTabs thesisId={id} current="Compare" />
       {family.mode === "replay" ? <p className="rounded-lg bg-[#FFF8E7] p-3 text-xs text-muted">Replay prices are recorded demonstration fixtures, not current Gemini quotes. Paper mode can request a simulated Arc quote; no live Gemini order is supported from this data.</p> : null}
       {error ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{error}</p> : null}
-      <Field label="Desired view maximum payout (USDC)" hint="The custom view and single Gemini ticket use the same gross maximum payout. Edited basket allocations may have a different maximum; it is shown in the table.">
-        <input className={inputCls()} type="number" min="0.01" step="0.01" value={budget} onChange={(event) => changeBudget(event.target.value)} />
-      </Field>
+      <div className="grid gap-3 md:grid-cols-2">
+        <Field label="Desired view maximum payout (USDC)" hint="Used by the confirmed view and equal maximum payout basis. An edited basket can have a different maximum.">
+          <input className={inputCls()} type="number" min="0.01" step="0.01" value={budget} onChange={(event) => changeBudget(event.target.value)} />
+        </Field>
+        <Field label="Comparison basis" hint="Choose how scenario payouts are displayed. Cost based comparison requires current comparable reference costs.">
+          <select className={inputCls()} value={basis} onChange={(event) => updateBasis(event.target.value as ComparisonBasis)}>
+            <option value="per-construction">Per construction</option>
+            <option value="equal-max-payout">Equal maximum payout</option>
+            <option value="equal-budget" disabled={!canEqualBudget}>Equal spending budget{canEqualBudget ? "" : " · cost unavailable"}</option>
+          </select>
+        </Field>
+        {basis === "equal-budget" ? <Field label="Shared reference spend (USDC)" hint="Normalized payouts use this same reference spend; they are not executable quotes."><input className={inputCls()} type="number" min="0.01" step="0.01" value={comparisonSpend} onChange={(event) => updateComparisonSpend(event.target.value)} /></Field> : null}
+      </div>
+      {basis === "equal-budget" && !canEqualBudget ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">Equal-spend normalization is unavailable until both Gemini constructions have comparable reference costs. An unquoted Arc position cannot be normalized to the same budget.</p> : null}
       {!budgetValid ? <p role="alert" className="text-sm text-bad">Enter a positive amount to update the comparison and review this construction.</p> : null}
+      {basis === "equal-budget" && !comparisonSpendValid ? <p role="alert" className="text-sm text-bad">Enter a positive shared spend to update this comparison.</p> : null}
       {calculations?.error ? <p role="alert" className="text-sm text-bad">{calculations.error}</p> : null}
       {calculations?.desired ? (
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,0.85fr)]">
+        <div className="workspace-layout">
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
               <button type="button" onClick={() => choose("gemini-basket")} aria-pressed={activeConstruction === "gemini-basket"} className={`rounded-card border p-4 text-left ${activeConstruction === "gemini-basket" ? "border-action bg-[#F2F5FF]" : "border-line bg-white"}`}>
@@ -250,8 +312,14 @@ export default function ComparePage() {
             </div>
             <Card>
               <h2 className="font-serif text-xl">Payout by settlement scenario</h2>
-              <p className="mt-1 text-sm text-muted">Gross payout only. Cost references are shown separately and exclude venue fees.</p>
-              <div className="mt-3"><PayoffChart labels={family.scenarios.map((scenario) => scenario.label)} series={series} selectedIndex={selectedIndex} /></div>
+              <p className="mt-1 text-sm text-muted">{basis === "per-construction" ? "Each construction keeps its own payout size." : basis === "equal-max-payout" ? `Normalized to ${budget} USDC maximum gross payout.` : `Normalized to ${comparisonSpend} USDC reference spend when comparable costs are available.`} Payout is gross; reference costs exclude fees and are not executable quotes.</p>
+              <div className="mt-3">{series.length ? <PayoffChart labels={family.scenarios.map((scenario) => scenario.label)} series={series} selectedIndex={selectedIndex} /> : <p role="status" className="rounded-lg bg-[#F4F2ED] p-4 text-sm text-muted">No comparable cost basis is available for the selected constructions. Switch to Per construction or Equal maximum payout.</p>}</div>
+            </Card>
+            <Card>
+              <h2 className="font-serif text-xl">Scenario comparison</h2>
+              <p className="mt-1 text-sm text-muted">Choose a settlement state to keep it selected in the view rail. A missing cost is shown as not comparable.</p>
+              <div className="table-scroll mt-3"><table className="min-w-[620px] text-left text-sm"><thead><tr><th>Settlement scenario</th>{basketBasisRows ? <th>Gemini basket</th> : <th>Gemini basket · unavailable</th>}{ticket ? <th>One Gemini position</th> : null}{showArc ? <th>Arc custom</th> : null}{basis !== "equal-budget" ? <th>Confirmed view</th> : null}</tr></thead><tbody>{family.scenarios.map((scenario, index) => <tr key={scenario.id} className={scenario.id === selectedScenarioId ? "bg-[#E9EEFF]" : ""}><td><button type="button" className="font-medium underline decoration-dotted" aria-pressed={scenario.id === selectedScenarioId} onClick={() => selectScenario(scenario.id)}>{scenario.label}</button></td><td className="tabular-nums">{basketBasisRows ? `${formatUsdcFixed(basketBasisRows[index] ?? 0n)} USDC` : "Not comparable"}</td>{ticket ? <td className="tabular-nums">{ticketBasisRows ? `${formatUsdcFixed(ticketBasisRows[index] ?? 0n)} USDC` : "Not comparable · cost unavailable"}</td> : null}{showArc ? <td className="tabular-nums">{arcBasisRows ? `${formatUsdcFixed(arcBasisRows[index] ?? 0n)} USDC` : "Not comparable · quote unavailable"}</td> : null}{basis !== "equal-budget" ? <td className="tabular-nums">{formatUsdcFixed(desiredBasisRows?.[index] ?? 0n)} USDC</td> : null}</tr>)}</tbody></table></div>
+              {basis === "equal-budget" && showArc ? <p className="mt-2 text-xs text-muted">Arc is omitted from equal-spend values until an actual quote provides a comparable cost.</p> : null}
             </Card>
             <Card>
               <h2 className="font-serif text-xl">What each construction means</h2>
@@ -270,8 +338,8 @@ export default function ComparePage() {
             {activeConstruction !== "arc-custom" ? <Card><h2 className="font-serif text-lg">No Gemini order submitted</h2><p className="mt-2 text-sm text-muted">{geminiTradeState === "available" ? "This comparison does not submit the basket, because its legs are independent and can partially fill. Review individual orders at the Gemini event." : "Native Gemini trading remains gated until a sandbox order, status lookup, and position/fill retrieval are verified. You can continue with market research and payoff comparisons."}</p></Card> : null}
             <VoicePanel slug={family.slug} family={family} evidence={evidence.length ? evidence : evidenceForSlug(family.slug, family.mode)} thesis={thesis} context="compare" maxPayout={budget} title="Talk through the comparison" />
           </div>
-          <aside className="space-y-4">
-            <ThesisViewPanel thesis={thesis} family={family} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} scenarioOutcome={outcome} scenarioOutcomeLabel="Selected construction · scenario result" action={action} />
+          <aside className="view-rail">
+            <ThesisViewPanel thesis={thesis} family={family} selectedScenarioId={selectedScenarioId} onScenarioChange={selectScenario} scenarioOutcome={outcome} scenarioOutcomeLabel="Selected construction · scenario result" action={action} />
             <Card>
               <h2 className="font-serif text-lg">Selected option</h2>
               <p className="mt-2 font-medium">{selectedName}</p>

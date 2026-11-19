@@ -6,7 +6,7 @@ import type { GeminiEvent } from "@/lib/gemini/types";
 
 vi.mock("next/link", () => ({ default: ({ children, href, ...props }: React.PropsWithChildren<{ href: string }>) => <a href={href} {...props}>{children}</a> }));
 
-import GeminiMarketsPage from "@/app/gemini/page";
+import { GeminiMarketCatalog as GeminiMarketsPage } from "@/components/GeminiMarketCatalog";
 
 const bitcoinEvent: GeminiEvent = {
   id: "event-btc",

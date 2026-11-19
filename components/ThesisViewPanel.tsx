@@ -28,6 +28,7 @@ export function ThesisViewPanel({
   scenarioOutcomeLabel = "Gross payout in this scenario",
   onScenarioChange,
   action,
+  editAction,
 }: {
   thesis: ThesisRevision;
   family?: MarketFamily | null;
@@ -36,17 +37,16 @@ export function ThesisViewPanel({
   scenarioOutcomeLabel?: string;
   onScenarioChange?: (scenarioId: string) => void;
   action?: { label: string; href?: string; onClick?: () => void; disabled?: boolean };
+  editAction?: { label: string; href?: string; onClick?: () => void; disabled?: boolean };
 }) {
   const selectedScenario = family?.scenarios.find((scenario) => scenario.id === selectedScenarioId);
   const confirmed = thesis.status === "confirmed" || thesis.status === "quoted";
   return (
-    <Card className="space-y-4 lg:sticky lg:top-24">
+    <Card className="view-summary space-y-4 lg:sticky lg:top-24">
       <div>
-        <p className="text-xs uppercase tracking-wide text-muted">Your view</p>
-        <h2 className="mt-2 font-serif text-xl">{viewLabel(thesis, family)}</h2>
-        <p className={`mt-2 text-sm ${confirmed ? "text-good" : "text-muted"}`}>
-          {confirmed ? "Confirmed" : "Draft · not confirmed"} · revision {thesis.revision}
-        </p>
+        <div className="flex items-center justify-between gap-2"><p className="section-label">Your view</p><span className={`status-pill ${confirmed ? "status-pill--good" : ""}`}>{confirmed ? "Confirmed" : "Draft · not confirmed"}</span></div>
+        <h2 className="mt-3 font-serif text-2xl font-bold tracking-tight">{viewLabel(thesis, family)}</h2>
+        <p className="mt-2 text-xs text-muted">Revision {thesis.revision}</p>
       </div>
       {thesis.rationale ? <p className="border-t border-line pt-3 text-sm text-muted">{thesis.rationale}</p> : null}
       {family && onScenarioChange ? (
@@ -60,7 +60,7 @@ export function ThesisViewPanel({
                 type="button"
                 aria-pressed={scenario.id === selectedScenarioId}
                 onClick={() => onScenarioChange(scenario.id)}
-                className={`min-h-10 rounded-lg border px-3 py-2 text-left text-xs ${scenario.id === selectedScenarioId ? "border-action bg-[#E9EEFF] font-medium text-action" : "border-line text-muted hover:text-ink"}`}
+                className={`scenario-button text-xs ${scenario.id === selectedScenarioId ? "font-semibold text-action" : "text-muted hover:text-ink"}`}
               >
                 {scenario.label}
               </button>
@@ -78,6 +78,7 @@ export function ThesisViewPanel({
         {action ? (
           action.href ? <Button href={action.href} disabled={action.disabled}>{action.label}</Button> : <Button onClick={action.onClick} disabled={action.disabled}>{action.label}</Button>
         ) : <Button href={`/theses/${thesis.id}`} kind="ghost">Edit view</Button>}
+        {editAction ? <div className="mt-2">{editAction.href ? <Button href={editAction.href} kind="ghost" disabled={editAction.disabled}>{editAction.label}</Button> : <Button onClick={editAction.onClick} kind="ghost" disabled={editAction.disabled}>{editAction.label}</Button>}</div> : null}
         <p className="mt-2 text-xs text-muted">Changing your view never changes a position you already hold.</p>
       </div>
     </Card>

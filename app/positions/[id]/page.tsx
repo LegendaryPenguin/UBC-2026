@@ -50,6 +50,19 @@ export default function PositionPage() {
     });
   }, [id]);
 
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    if (TABS.some((item) => item === requested)) setTab(requested as (typeof TABS)[number]);
+  }, []);
+
+  function selectTab(value: (typeof TABS)[number]) {
+    setTab(value);
+    const url = new URL(window.location.href);
+    if (value === "overview") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", value);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
   async function syncClaim(txHash: `0x${string}`) {
     setSyncing(true);
     setSyncFailed(false);
@@ -144,10 +157,10 @@ export default function PositionPage() {
   const explorer = arcTestnet.blockExplorers.default.url;
 
   return (
-    <div className="space-y-4">
-      <div>
+    <div className="screen-position space-y-4">
+      <div className="workspace-header">
         <p className="text-xs uppercase tracking-wide text-muted">{position.topicSlug} · {position.mode}</p>
-        <h1 className="font-serif text-3xl">Position</h1>
+        <h1 className="workspace-title screen-heading">Position</h1>
         <p className="text-sm text-muted">{position.status.replaceAll("_", " ")} · escrow #{position.chainPositionId || "paper"}</p>
       </div>
       {syncWarning ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">{syncWarning} Stored status is shown until Arc is reachable.</p> : null}
@@ -156,9 +169,9 @@ export default function PositionPage() {
       {claimWaiting ? <p role="status" className="text-sm text-muted">Waiting for Arc to confirm the claim…</p> : null}
       {syncFailed && claimHash && claimReceipt?.status === "success" ? <Button onClick={() => void syncClaim(claimHash)} disabled={syncing}>{syncing ? "Verifying…" : "Retry claim synchronization"}</Button> : null}
 
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Position details">
+      <div className="position-tabs" role="tablist" aria-label="Position details">
         {TABS.map((item) => (
-          <button key={item} role="tab" aria-selected={tab === item} className={`min-h-11 rounded-lg border px-3 capitalize ${tab === item ? "bg-ink text-white" : "border-line"}`} onClick={() => setTab(item)}>{item}</button>
+          <button key={item} role="tab" aria-selected={tab === item} className="position-tab" onClick={() => selectTab(item)}>{item}</button>
         ))}
       </div>
 
@@ -224,7 +237,7 @@ export default function PositionPage() {
           }}>Switch to Arc testnet</Button>
         ) : null}
         <Button href={`/positions/${id}/exit`} kind="ghost">Exit options</Button>
-        <Button href={`/alerts?positionId=${encodeURIComponent(position.id)}`} kind="ghost">Set settlement alert</Button>
+        <Button href={`/portfolio?view=alerts&positionId=${encodeURIComponent(position.id)}`} kind="ghost">Set settlement alert</Button>
       </div>
     </div>
   );

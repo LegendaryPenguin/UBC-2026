@@ -1,16 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, modeFromStorage, requestModeChange } from "@/lib/client";
 import type { MarketFamily } from "@/lib/domain/types";
 import { Button, Card, Empty, inputCls } from "@/components/ui";
 import { formatTime } from "@/lib/format";
 import { useModeChange } from "@/lib/use-mode-change";
+import { OPEN_ASSISTANT_EVENT } from "@/lib/client";
+import { GeminiMarketCatalog } from "@/components/GeminiMarketCatalog";
+import { MarketTimeline } from "@/components/MarketTimeline";
 
 type Watchlist = { id: string; name: string; slugs: string[] };
+type ExploreView = "topics" | "gemini" | "watched" | "timeline";
 
 export default function Explore() {
+  const [view, setView] = useState<ExploreView>("gemini");
   const [q, setQ] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [data, setData] = useState<{ families: MarketFamily[]; freshnessLabel: string; liveError: string | null } | null>(null);
@@ -20,6 +25,7 @@ export default function Explore() {
   const [notice, setNotice] = useState("");
   const [watchingSlug, setWatchingSlug] = useState("");
   const [loading, setLoading] = useState(true);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async (query = submittedQuery) => {
     const mode = modeFromStorage() === "live" ? "live" : "replay";
@@ -38,11 +44,29 @@ export default function Explore() {
   useModeChange(() => { void load(); });
 
   useEffect(() => {
-    void load("");
+    const params = new URLSearchParams(window.location.search);
+    const requestedView = params.get("view");
+    if (requestedView === "topics" || requestedView === "gemini" || requestedView === "watched" || requestedView === "timeline") setView(requestedView);
+    const initialQuery = params.get("q") || params.get("idea") || "";
+    setQ(initialQuery);
+    setSubmittedQuery(initialQuery);
+    void load(initialQuery);
+    if (params.get("focus") === "search") window.setTimeout(() => searchRef.current?.focus(), 0);
+    if (params.get("assistant") === "1") {
+      const question = params.get("idea") || "";
+      window.dispatchEvent(new CustomEvent(OPEN_ASSISTANT_EVENT, { detail: { question } }));
+    }
     api<{ watchlists: Watchlist[] }>("/api/watchlists").then((result) => setWatchlists(result.watchlists || [])).catch(() => setWatchlists([]));
-    // The first query is the empty explore feed. Search is submitted explicitly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function chooseView(next: ExploreView) {
+    setView(next);
+    const url = new URL(window.location.href);
+    if (next === "gemini") url.searchParams.delete("view"); else url.searchParams.set("view", next);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    if (next === "topics") void load(submittedQuery);
+  }
 
   async function toggleWatch(family: MarketFamily) {
     setWatchingSlug(family.slug);
@@ -84,16 +108,53 @@ export default function Explore() {
     return [{ family, contract, change: latest.price - first.price, firstAt: first.time, latestAt: latest.time }];
   })).sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).slice(0, 3), [data]);
 
+  async function removeWatched(slug: string, list: Watchlist) {
+    setWatchingSlug(slug);
+    setWatchError("");
+    setNotice("");
+    try {
+      const result = await api<{ watchlist: Watchlist }>(`/api/watchlists/${list.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ slugs: list.slugs.filter((item) => item !== slug) }),
+      });
+      setWatchlists((current) => current.map((item) => item.id === list.id ? result.watchlist : item));
+      setNotice(`Removed ${slug.replaceAll("-", " ")} from ${list.name}.`);
+    } catch (err) {
+      setWatchError(err instanceof Error ? err.message : "Watched market could not be removed.");
+    } finally {
+      setWatchingSlug("");
+    }
+  }
+
   return (
-    <div className="space-y-5">
+    <div className="screen-explore space-y-5">
       <div>
-        <h1 className="font-serif text-3xl">Explore</h1>
-        <p className="mt-1 text-sm text-muted">Start with a question. Research stays open without a wallet or funding.</p>
+        <h1 className="explore-title screen-heading">Find a question worth exploring</h1>
+        <p className="mt-2 text-base text-muted">Browse Gemini markets, check the setup, and research the ideas that interest you.</p>
       </div>
-      <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); setSubmittedQuery(q.trim()); void load(q.trim()); }}>
-        <input className={`${inputCls()} min-w-56 flex-1`} value={q} onChange={(event) => setQ(event.target.value)} placeholder="Search markets or topics" aria-label="Search markets or topics" />
+      <nav className="workspace-tabs flex gap-1 overflow-x-auto border-b border-line" aria-label="Explore views">
+        {([ ["gemini", "Markets"], ["topics", "Research topics"], ["watched", "Watching"], ["timeline", "Timeline"] ] as [ExploreView, string][]).map(([value, label]) => (
+          <button key={value} type="button" aria-current={view === value ? "page" : undefined} onClick={() => chooseView(value)} className={`min-h-11 shrink-0 border-b-2 px-4 py-2 text-sm ${view === value ? "border-action font-semibold text-action" : "border-transparent text-muted hover:text-ink"}`}>{label}</button>
+        ))}
+      </nav>
+
+      {view === "gemini" ? <GeminiMarketCatalog embedded /> : null}
+      {view === "timeline" ? <MarketTimeline embedded /> : null}
+      {view === "watched" ? (
+        <section className="space-y-3">
+          <div><h2 className="font-serif text-2xl">Watched markets</h2><p className="text-sm text-muted">Saved topics are research shortcuts; they do not imply a position or background monitoring.</p></div>
+            {!watchlists.some((list) => list.slugs.length) ? <Empty title="No watched markets yet"><p>Watch a topic from Explore to keep it here.</p><div className="mt-3"><Button onClick={() => chooseView("topics")}>Browse topics</Button></div></Empty> : null}
+          <div className="grid gap-3 md:grid-cols-2">{watchlists.flatMap((list) => list.slugs.map((slug) => ({ list, slug }))).map(({ list, slug }) => (
+            <Card key={`${list.id}-${slug}`} className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs text-muted">{list.name}</p><h3 className="font-serif text-lg">{data?.families.find((family) => family.slug === slug)?.title || titleForSlug(slug)}</h3><p className="text-xs text-muted">Data refreshes when you open Research.</p></div><div className="flex gap-2"><Button href={`/topics/${slug}`}>Research</Button><Button kind="ghost" disabled={watchingSlug === slug} onClick={() => void removeWatched(slug, list)}>{watchingSlug === slug ? "Removing…" : "Remove"}</Button></div></Card>
+          ))}</div>
+        </section>
+      ) : null}
+
+      {view === "topics" ? <>
+      <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); setSubmittedQuery(q.trim()); const url = new URL(window.location.href); url.searchParams.set("view", "topics"); if (q.trim()) url.searchParams.set("q", q.trim()); else url.searchParams.delete("q"); window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`); void load(q.trim()); }}>
+        <input ref={searchRef} className={`${inputCls()} explore-search min-w-56 flex-1`} value={q} onChange={(event) => setQ(event.target.value)} placeholder="Search markets or ask a question (e.g. Bitcoin above $95k by Friday?)" aria-label="Search markets or topics" />
         <Button type="submit" disabled={loading}>{loading ? "Searching…" : "Search"}</Button>
-        <Button href="/gemini" kind="ghost">All Gemini markets</Button>
+        <Button kind="ghost" onClick={() => chooseView("gemini")}>Search all Gemini markets</Button>
       </form>
       {data ? <p className="text-xs text-muted">{data.freshnessLabel}</p> : null}
       {data?.liveError ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-bad/30 bg-white p-3">
@@ -119,7 +180,7 @@ export default function Explore() {
         <Card>
           <h2 className="font-serif text-xl">Meaningful market movements</h2>
           <p className="mt-1 text-xs text-muted">Change in Gemini YES reference price over the returned history window. This is not a probability forecast.{data?.families.some((family) => family.mode === "replay") ? " Replay movement points are demonstration data, not Gemini history." : ""}</p>
-          <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <div className="market-movements-grid mt-3 grid gap-3">
             {movements.map(({ family, contract, change, firstAt, latestAt }) => (
               <Link key={contract.id} href={`/topics/${family.slug}`} className="rounded-lg border border-line p-3 hover:border-action">
                 <p className="text-xs text-muted">{family.title}</p><p className="mt-1 font-medium">{contract.label}</p>
@@ -154,6 +215,11 @@ export default function Explore() {
           );
         })}
       </div>
+      </> : null}
     </div>
   );
+}
+
+function titleForSlug(slug: string) {
+  return slug.replaceAll("-", " ").replace(/\b\w/g, (character) => character.toUpperCase());
 }

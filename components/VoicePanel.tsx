@@ -20,6 +20,7 @@ type ViewProposal = {
   invalidation: string;
 };
 type ResearchTurn = { role: "user" | "assistant"; content: string };
+type StoredConversation = { id: string; messages: { id: string; role: "user" | "assistant"; content: string; createdAt: string }[] };
 
 const STATUS_LABEL: Record<VoiceStatus, string> = {
   ready: "Ready",
@@ -56,6 +57,8 @@ export function VoicePanel({
   context = "research",
   maxPayout,
   title,
+  prefillQuestion,
+  onPrefillConsumed,
 }: {
   slug: string;
   family: MarketFamily;
@@ -65,6 +68,8 @@ export function VoicePanel({
   context?: ResearchContext;
   maxPayout?: string;
   title?: string;
+  prefillQuestion?: string;
+  onPrefillConsumed?: () => void;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<VoiceStatus>("ready");
@@ -72,6 +77,8 @@ export function VoicePanel({
   const [muted, setMuted] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [conversation, setConversation] = useState<ResearchTurn[]>([]);
+  const [conversationId, setConversationId] = useState("");
+  const [savedTurns, setSavedTurns] = useState<ResearchTurn[]>([]);
   const [clarificationPrompt, setClarificationPrompt] = useState("");
   const [answer, setAnswer] = useState("");
   const [languageCode, setLanguageCode] = useState("");
@@ -96,6 +103,29 @@ export function VoicePanel({
   const speechControllerRef = useRef<AbortController | null>(null);
   const connectionRequestRef = useRef(0);
   const mountedRef = useRef(true);
+
+  useEffect(() => {
+    if (!thesis?.id) return;
+    let active = true;
+    api<{ conversations: StoredConversation[] }>(`/api/conversations?kind=thesis&thesisId=${encodeURIComponent(thesis.id)}`)
+      .then(({ conversations: stored }) => {
+        if (!active || !stored?.length) return;
+        const latest = stored[0];
+        setConversationId(latest.id);
+        setSavedTurns(latest.messages.map(({ role, content }) => ({ role, content })));
+      }).catch(() => { /* History remains local to this visit if server storage is unavailable. */ });
+    return () => { active = false; };
+  }, [thesis?.id]);
+
+  useEffect(() => {
+    if (!prefillQuestion) return;
+    setInputMode("text");
+    setTranscript(prefillQuestion);
+    setAnswer("");
+    setCitations([]);
+    setNotice("Source context added. Review the wording, then send when you’re ready.");
+    onPrefillConsumed?.();
+  }, [prefillQuestion, onPrefillConsumed]);
 
   function stopTracks() {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -354,7 +384,9 @@ export function VoicePanel({
     setStatus("thinking");
     setError("");
     setNotice("No thesis or financial state changes until you apply an editable view preview.");
-    const nextConversation = [...conversation, { role: "user" as const, content: transcript.trim() }];
+    const askedText = transcript.trim();
+    const priorTurns = conversation.length ? conversation : savedTurns.slice(-7);
+    const nextConversation = [...priorTurns, { role: "user" as const, content: askedText }].slice(-8);
     try {
       const result = await api<{
         answer: string;
@@ -384,6 +416,29 @@ export function VoicePanel({
       } else {
         setConversation([]);
         setClarificationPrompt("");
+      }
+      const storedAssistant = [result.answer, result.clarificationPrompt].filter(Boolean).join("\n\n");
+      try {
+        let storedId = conversationId;
+        if (!storedId && thesis?.id) {
+          const existing = await api<{ conversations: StoredConversation[] }>(`/api/conversations?kind=thesis&thesisId=${encodeURIComponent(thesis.id)}`);
+          storedId = existing.conversations?.[0]?.id || "";
+        }
+        if (!storedId) {
+          const created = await api<{ conversation: StoredConversation }>("/api/conversations", {
+            method: "POST",
+            body: JSON.stringify({ action: "create", kind: thesis?.id ? "thesis" : "general", ...(thesis?.id ? { thesisId: thesis.id } : {}), title: family.title }),
+          });
+          storedId = created.conversation.id;
+        }
+        setConversationId(storedId);
+        await api<{ conversation: StoredConversation }>("/api/conversations", {
+          method: "POST",
+          body: JSON.stringify({ action: "save-turn", id: storedId, user: askedText, assistant: storedAssistant }),
+        });
+        setSavedTurns((current) => [...current, { role: "user", content: askedText }, { role: "assistant", content: storedAssistant }]);
+      } catch {
+        setNotice("Research reply is ready, but this turn could not be saved to conversation history. Retry after reconnecting.");
       }
       setProposal(result.proposed ? {
         template: result.proposed.template || thesis?.template || (family.predicates.length === 1 && family.contracts.length === 1 ? "binary" : family.predicates.length >= 2 ? "range" : "directional"),
@@ -462,6 +517,13 @@ export function VoicePanel({
             evidenceIds: evidence.map((item) => item.id),
           }),
         });
+        if (conversationId) {
+          try {
+            await api("/api/conversations", { method: "POST", body: JSON.stringify({ action: "link", id: conversationId, thesisId: result.thesis.id }) });
+          } catch {
+            setNotice("The thesis draft was created. The earlier conversation remains saved separately and could not be linked.");
+          }
+        }
         router.push(`/theses/${result.thesis.id}`);
       }
     } catch (err) {
@@ -556,7 +618,7 @@ export function VoicePanel({
   const thresholds = family.predicates.map((predicate) => predicate.threshold);
 
   return (
-    <Card>
+    <Card className="voice-panel">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-serif text-xl">{title || (context === "view" ? "Clarify your view" : context === "compare" ? "Explain this comparison" : context === "payoff" ? "Talk through the payoff" : "Talk through your research")}</h2>
         <span className="text-xs text-muted" role="status" aria-live="polite">{STATUS_LABEL[status]}</span>
@@ -564,6 +626,7 @@ export function VoicePanel({
       <p className="mt-2 text-sm text-muted">
         Voice and text use the same research request. Audio is sent only after you stop recording; this app does not save recordings. Provider logging follows your ElevenLabs account settings. Research can suggest a view but never confirms it, accepts a quote, or moves funds.
       </p>
+      {status === "listening" || status === "transcribing" || status === "speaking" ? <div className="my-3 flex h-14 items-center justify-center gap-1 rounded-lg border border-[#E5E9F8] bg-[#F7F8FF]" role="status" aria-label={STATUS_LABEL[status]}>{Array.from({ length: 29 }, (_, index) => <span key={index} className="voice-wave-bar" style={{ animationDelay: `${(index % 9) * 80}ms` }} />)}</div> : null}
       <div className="mt-3 flex flex-wrap gap-2">
         {inputMode === "voice" ? (
           status === "listening" ? <>
@@ -599,6 +662,10 @@ export function VoicePanel({
         <p className="mt-1 text-sm">{clarificationPrompt}</p>
         <p className="mt-2 text-xs text-muted">Your earlier wording is retained for this follow-up. Answer by voice or text, or use Clear to start over.</p>
       </div> : null}
+      {savedTurns.length ? <details className="mt-3 rounded-lg border border-line bg-white p-3">
+        <summary className="cursor-pointer text-sm font-medium">Conversation history ({Math.ceil(savedTurns.length / 2)} turns)</summary>
+        <div className="mt-3 space-y-2">{savedTurns.map((turn, index) => <div key={`${index}-${turn.role}`} className={turn.role === "user" ? "rounded-lg bg-[#E9EEFF] p-2" : "rounded-lg bg-surface p-2"}><p className="text-xs font-semibold text-muted">{turn.role === "user" ? "You" : "Thesis"}</p><p className="mt-1 whitespace-pre-wrap text-sm">{turn.content}</p></div>)}</div>
+      </details> : null}
       <Field label={clarificationPrompt ? (inputMode === "voice" ? "Spoken clarification or answer" : "Your clarification") : inputMode === "voice" ? "Editable transcript or question" : "Your question"}>
         <textarea
           id={`voice-question-${slug}`}

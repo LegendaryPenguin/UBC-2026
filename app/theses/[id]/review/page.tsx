@@ -227,13 +227,12 @@ export default function ReviewPage() {
   const evidenceItems = evidence.length ? evidence : evidenceForSlug(family.slug, family.mode);
 
   return (
-    <div className="space-y-4">
-      <p className="text-xs uppercase tracking-wide text-muted">{family.title} · {mode === "replay" ? "illustrative replay" : mode === "paper" ? "paper simulation" : "live data"}</p>
-      <h1 className="font-serif text-3xl">Review {labelFor(choice)}</h1>
+    <div className="screen-workspace space-y-4">
+      <header className="workspace-header"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-muted">{family.title} · {mode === "replay" ? "illustrative replay" : mode === "paper" ? "paper simulation" : "live data"}</p><h1 className="workspace-title screen-heading">Review {labelFor(choice)}</h1><p className="mt-2 text-sm text-muted">Review exact contracts, costs, execution details, and settlement rules before deciding.</p></div><span className="status-pill status-pill--good">View confirmed · revision {thesis.revision}</span></div></header>
       <ThesisWorkspaceTabs thesisId={id} current="Compare" />
       <p className="rounded-lg border border-line bg-white p-3 text-sm text-muted">Review is read-only. Opening it does not create a quote, order, or position. Cancel returns to the same comparison.</p>
       {calculations?.error ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{calculations.error}</p> : null}
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,0.85fr)]">
+      <div className="workspace-layout">
         <div className="space-y-4">
           <Card>
             <h2 className="font-serif text-xl">What you selected</h2>
@@ -324,7 +323,7 @@ export default function ReviewPage() {
             title="Talk through this construction"
           />
         </div>
-        <aside className="space-y-4">
+        <aside className="view-rail">
           <ThesisViewPanel
             thesis={thesis}
             family={family}

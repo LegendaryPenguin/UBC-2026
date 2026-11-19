@@ -6,7 +6,7 @@ import { api, modeFromStorage } from "@/lib/client";
 import type { MarketFamily, ThesisRevision } from "@/lib/domain/types";
 import { compileView } from "@/lib/payoffs/compile";
 import { estimateBasketCost } from "@/lib/payoffs/compare";
-import { parseUsdc, formatUsdc, formatUsdcFixed } from "@/lib/format";
+import { parseUsdc, formatUsdc, formatUsdcFixed, formatTime } from "@/lib/format";
 import { PayoffChart } from "@/components/PayoffChart";
 import { Button, Card, Field, inputCls } from "@/components/ui";
 import { VoicePanel } from "@/components/VoicePanel";
@@ -21,6 +21,7 @@ type BasketLegDraft = {
   payoutAmount: string;
   enabled: boolean;
 };
+type SavedConstruction = { basket: BasketLegDraft[]; max: string; thesisRevision: number; familyVersion: string; savedAt: string };
 
 function initialLegs(thesis: ThesisRevision, family: MarketFamily, maximum: string): BasketLegDraft[] {
   const half = (() => {
@@ -54,6 +55,8 @@ export default function BuildPage() {
   const [selectedScenarioId, setSelectedScenarioId] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [savedConstruction, setSavedConstruction] = useState<SavedConstruction | null>(null);
+  const [constructionNotice, setConstructionNotice] = useState("");
 
   useModeChange(() => window.location.reload());
 
@@ -67,6 +70,17 @@ export default function BuildPage() {
         if (!active) return;
         setThesis(result.thesis);
         setFamily(topic.family);
+        try {
+          const saved = JSON.parse(localStorage.getItem(`thesis:saved-construction:${id}`) || "null") as Partial<SavedConstruction> | null;
+          const allowed = new Set(topic.family.predicates.map((predicate) => predicate.contractId));
+          const validBasket = Array.isArray(saved?.basket) && saved.basket.length <= 4 && saved.basket.every((leg) => {
+            if (!leg || typeof leg !== "object" || !allowed.has(leg.contractId) || (leg.side !== "yes" && leg.side !== "no") || typeof leg.payoutAmount !== "string" || typeof leg.enabled !== "boolean") return false;
+            try { return parseUsdc(leg.payoutAmount) > 0n; } catch { return false; }
+          });
+          const validMaximum = typeof saved?.max === "string" && (() => { try { return parseUsdc(saved.max) > 0n; } catch { return false; } })();
+          const validSavedAt = typeof saved?.savedAt === "string" && Number.isFinite(Date.parse(saved.savedAt));
+          if (saved && saved.thesisRevision === result.thesis.revision && saved.familyVersion === topic.family.version && validBasket && validMaximum && validSavedAt) setSavedConstruction(saved as SavedConstruction);
+        } catch { setSavedConstruction(null); }
         const storedMax = (() => {
           try { return sessionStorage.getItem(`thesis-build-max:${id}`) || "100"; } catch { return "100"; }
         })();
@@ -143,14 +157,34 @@ export default function BuildPage() {
     router.push(`/theses/${id}/compare?maxPayout=${encodeURIComponent(max)}`);
   }
 
+  function saveConstruction() {
+    if (!thesis || !family || !construction?.desired || construction.error) return;
+    const saved = { basket, max, thesisRevision: thesis.revision, familyVersion: family.version, savedAt: new Date().toISOString() };
+    try {
+      localStorage.setItem(`thesis:saved-construction:${id}`, JSON.stringify(saved));
+      setSavedConstruction(saved);
+      setConstructionNotice("Construction saved on this device with its source revision and market version.");
+    } catch { setConstructionNotice("This device could not save the construction. Your current editor values remain available in this tab."); }
+  }
+
+  function restoreConstruction() {
+    if (!savedConstruction || !thesis || !family) return;
+    if (savedConstruction.thesisRevision !== thesis.revision || savedConstruction.familyVersion !== family.version) {
+      setConstructionNotice("The saved construction belongs to a different thesis revision or market version. Review it in History before restoring.");
+      return;
+    }
+    saveBasket(savedConstruction.basket);
+    updateMaximum(savedConstruction.max);
+    setConstructionNotice("Saved construction restored. Review the scenario payouts again before comparing or reviewing.");
+  }
+
   if (loading) return <p role="status">Loading basket builder…</p>;
   if (error || !thesis || !family) return <Card><p role="alert" className="text-sm text-bad">{error || "This thesis could not be loaded."}</p><div className="mt-3"><Button href="/workspace" kind="ghost">My Theses</Button></div></Card>;
 
   if (thesis.status === "draft") {
     return (
-      <div className="space-y-4">
-        <p className="text-xs uppercase tracking-wide text-muted">{family.title}</p>
-        <h1 className="font-serif text-3xl">Build a basket</h1>
+      <div className="screen-workspace space-y-4">
+        <header className="workspace-header"><div><p className="text-xs uppercase tracking-wide text-muted">{family.title}</p><h1 className="workspace-title screen-heading">Build a basket</h1><p className="mt-2 text-sm text-muted">{family.question}</p></div></header>
         <ThesisWorkspaceTabs thesisId={id} current="Build" lockedTabs={["Compare"]} />
         <Card>
           <h2 className="font-serif text-xl">Confirm your view first</h2>
@@ -176,12 +210,13 @@ export default function BuildPage() {
   const legContractOptions = family.predicates.map((predicate) => family.contracts.find((contract) => contract.id === predicate.contractId)).filter((contract) => contract != null);
 
   return (
-    <div className="space-y-4">
-      <p className="text-xs uppercase tracking-wide text-muted">{family.title} · Gemini references · {family.mode === "replay" ? "illustrative replay" : family.freshness}</p>
-      <h1 className="font-serif text-3xl">Does this basket match your view?</h1>
+    <div className="screen-workspace space-y-4">
+      <header className="workspace-header"><div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="workspace-title screen-heading">{thesis.title?.trim() || family.title}</h1><p className="mt-2 text-sm text-muted">{family.question}{family.closeTime ? ` · Closes ${new Date(family.closeTime).toLocaleString()}` : ""} · {family.mode === "replay" ? "Illustrative replay" : family.freshness}</p></div><span className="status-pill status-pill--good">Confirmed view · revision {thesis.revision}</span></div></header>
       <ThesisWorkspaceTabs thesisId={id} current="Build" />
+      <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-serif text-2xl font-bold">Does this construction match your view?</h2><span className="text-xs text-muted">Compare is optional · no order is submitted here</span></div>
       {family.mode === "replay" ? <p className="rounded-lg bg-[#FFF8E7] p-3 text-xs text-muted">This board uses recorded walkthrough data. Prices and cost estimates are illustrative. Build does not create an order; a paper Arc quote can be requested from Compare in Paper mode.</p> : null}
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,0.85fr)]">
+      {constructionNotice ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">{constructionNotice}</p> : null}
+      <div className="workspace-layout">
         <div className="space-y-4">
           <Card className="space-y-3">
             <div>
@@ -232,6 +267,7 @@ export default function BuildPage() {
               <div className="mt-3">
                 <PayoffChart labels={family.scenarios.map((scenario) => scenario.label)} series={chartSeries} selectedIndex={selectedIndex} />
               </div>
+              <div className="table-scroll mt-4"><table className="text-left text-sm"><thead><tr><th>Settlement scenario</th><th>Your basket · gross payout</th><th>Confirmed view</th><th>Fit</th></tr></thead><tbody>{family.scenarios.map((scenario, index) => { const basketPayout = construction.basketRows[index]?.payout ?? 0n; const desiredPayout = construction.desired?.rows[index]?.payout ?? 0n; return <tr key={scenario.id} className={scenario.id === selectedScenarioId ? "bg-[#E9EEFF]" : ""}><td><button type="button" className="text-left font-medium underline decoration-dotted" aria-pressed={scenario.id === selectedScenarioId} onClick={() => setSelectedScenarioId(scenario.id)}>{scenario.label}</button></td><td className="tabular-nums">{formatUsdcFixed(basketPayout)} USDC</td><td className="tabular-nums">{formatUsdcFixed(desiredPayout)} USDC</td><td>{basketPayout === desiredPayout ? "Matches" : "Differs"}</td></tr>; })}</tbody></table></div>
             </Card>
           ) : null}
           <Card>
@@ -245,10 +281,10 @@ export default function BuildPage() {
             <p className="mt-2 text-xs text-muted">Reference prices do not promise available size or execution. Fees, slippage, order-size increments, and partial fills are not included. Gemini order submission remains gated pending sandbox qualification.</p>
           </Card>
           {construction?.desired ? <VoicePanel slug={family.slug} family={family} evidence={evidenceForSlug(family.slug, family.mode)} thesis={thesis} context="payoff" maxPayout={max} title="Ask about these scenario payouts" /> : null}
-          <div className="flex flex-wrap gap-2"><Button onClick={compareConstructions} disabled={!construction?.desired || Boolean(construction.error)}>Compare constructions</Button><Button href={`/theses/${id}`} kind="ghost">Edit confirmed view</Button></div>
         </div>
-        <aside className="space-y-4">
-          <ThesisViewPanel thesis={thesis} family={family} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} scenarioOutcome={scenarioOutcome} scenarioOutcomeLabel="Basket · desired view payout" action={{ label: "Compare constructions", href: `/theses/${id}/compare?maxPayout=${encodeURIComponent(max)}`, disabled: !construction?.desired || Boolean(construction.error) }} />
+        <aside className="view-rail">
+          <ThesisViewPanel thesis={thesis} family={family} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} scenarioOutcome={scenarioOutcome} scenarioOutcomeLabel="Basket · desired view payout" />
+          <Card className="space-y-2"><h2 className="font-serif text-xl font-bold">Next step</h2><p className="text-sm text-muted">Save a named construction, compare another payoff, or review this basket directly.</p><Button kind="ghost" onClick={saveConstruction} disabled={!construction?.desired || Boolean(construction.error)}>Save construction</Button>{savedConstruction ? <button type="button" className="min-h-10 text-sm font-semibold text-action underline" onClick={restoreConstruction}>Restore saved version · {formatTime(savedConstruction.savedAt)}</button> : null}<Button onClick={compareConstructions} disabled={!construction?.desired || Boolean(construction.error)}>Compare options</Button><Button href={`/theses/${id}/review?construction=gemini-basket&maxPayout=${encodeURIComponent(max)}&scenario=${encodeURIComponent(selectedScenarioId)}`} kind="secondary" disabled={!construction?.desired || Boolean(construction.error)}>Review construction</Button><p className="text-xs text-muted">Review shows the venue, environment, terms, and quote path. No financial action happens until explicit review and authorization.</p></Card>
           <Card>
             <h2 className="font-serif text-lg">Execution status</h2>
             <p className="mt-2 text-sm text-muted">No Gemini execution happens in Build. The two basket legs would be separate orders and could fill differently. Review is required before any supported order.</p>

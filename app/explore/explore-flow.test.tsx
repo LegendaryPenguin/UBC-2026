@@ -5,8 +5,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import type { MarketFamily } from "@/lib/domain/types";
 
 vi.mock("next/link", () => ({ default: ({ children, href, ...props }: React.PropsWithChildren<{ href: string }>) => <a href={href} {...props}>{children}</a> }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/explore", useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 
 import Explore from "@/app/explore/page";
+import { Shell } from "@/components/Shell";
 
 const market: MarketFamily = {
   id: "btc-friday",
@@ -81,7 +83,8 @@ afterEach(() => {
 
 describe("Explore to research flow", () => {
   it("searches Gemini markets, recovers from sign-in-required watch, then adds, removes, and opens research", async () => {
-    render(<Explore />);
+    render(<Shell><Explore /></Shell>);
+    fireEvent.click(screen.getByRole("button", { name: "Research topics" }));
     expect(await screen.findByRole("link", { name: "Where will Bitcoin finish Friday?" })).toBeTruthy();
     expect(screen.getByText(/1 selected Gemini contract · observes/)).toBeTruthy();
 
@@ -108,9 +111,8 @@ describe("Explore to research flow", () => {
 
   it("keeps a confirmed Replay recovery when live Gemini discovery is unavailable", async () => {
     liveCatalogError = true;
-    const confirm = vi.fn().mockReturnValue(false);
-    vi.stubGlobal("confirm", confirm);
-    render(<Explore />);
+    render(<Shell><Explore /></Shell>);
+    fireEvent.click(screen.getByRole("button", { name: "Research topics" }));
 
     await screen.findByRole("button", { name: "Switch to Replay" });
     const liveError = screen.getByRole("status");
@@ -118,16 +120,13 @@ describe("Explore to research flow", () => {
     expect(liveError.textContent).toContain("Replay uses labeled walkthrough data.");
     const switchButton = screen.getByRole("button", { name: "Switch to Replay" });
     fireEvent.click(switchButton);
-    expect(confirm).toHaveBeenCalledOnce();
+    expect(await screen.findByRole("dialog", { name: /Switch to Replay data/ })).toBeTruthy();
     expect(localStorage.getItem("thesis_mode")).toBe("live");
-    expect(screen.getByRole("button", { name: "Switch to Replay" })).toBeTruthy();
-
-    confirm.mockReturnValue(true);
-    fireEvent.click(screen.getByRole("button", { name: "Switch to Replay" }));
+    fireEvent.click(screen.getByRole("button", { name: "Switch context" }));
     expect(localStorage.getItem("thesis_mode")).toBe("replay");
     expect(await screen.findByText("Labeled walkthrough snapshots")).toBeTruthy();
     expect(await screen.findByRole("link", { name: "Open research" })).toBeTruthy();
-    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input) === "/api/topics?mode=replay&q=")).toBe(true);
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).startsWith("/api/topics?mode=replay"))).toBe(true);
     expect(screen.queryByRole("button", { name: "Switch to Replay" })).toBeNull();
   });
 });

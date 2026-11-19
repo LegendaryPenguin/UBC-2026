@@ -1,10 +1,10 @@
 # Route coverage
 
-The active scope is the [corrected four-board workspace plus the user's narrated follow-through](hackathon-scope.md). Routes supporting Explore/Research/Build/Compare, explicit optional execution, Portfolio, settlement Alerts, and History are active acceptance paths. This inventory also preserves unrelated original VFINAL routes as reference, not as a work queue. See [plan-progress.md](plan-progress.md) and [interaction-checklist.md](interaction-checklist.md).
+The active product structure is Dashboard, Explore, My Theses, and Portfolio, with the established Explore→Research→Build→optional Compare→Review→optional action→Portfolio/History flow retained. See [hackathon-scope.md](hackathon-scope.md) and the [route migration map](product-restructure-map.md).
 
-This inventory maps routes to the active narrated journey and identifies supporting routes. Partial items used by that journey still require implementation or backend/integration acceptance; unrelated VFINAL modules are not completion blockers.
+The table below is the pre-restructure route inventory and implementation reference. It is not the target navigation. The target disposition of each current route is maintained in [product-restructure-map.md](product-restructure-map.md); preserve API/back-end and immutable financial records while consolidating user-facing pages.
 
-For the user-facing route-by-route and popup inventory, see [app-inventory.md](app-inventory.md).
+For the prior route-by-route and popup inventory, see [app-inventory.md](app-inventory.md). Its route list is the migration baseline, not the desired final page count.
 
 | Routes | Controls and backing code | Current coverage and remaining work |
 | --- | --- | --- |
