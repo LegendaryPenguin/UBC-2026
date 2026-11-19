@@ -140,6 +140,13 @@ export interface ThesisRevision {
   revision: number;
   createdAt: string;
   updatedAt: string;
+  savedConstruction?: {
+    basket: { contractId: string; side: Direction; payoutAmount: string; enabled: boolean }[];
+    max: string;
+    thesisRevision: number;
+    familyVersion: string;
+    savedAt: string;
+  } | null;
 }
 
 export type ThesisSnapshot = Pick<
@@ -165,6 +172,8 @@ export interface ThesisHistoryRecord {
   recordedAt: string;
   reason: string;
   snapshot: ThesisSnapshot;
+  reflection?: string;
+  reflectionUpdatedAt?: string;
 }
 
 export interface PayoffRow {

@@ -203,7 +203,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 <Link href="/settings" onClick={() => setProfileOpen(false)} className="block min-h-10 rounded-lg px-3 py-2 text-sm hover:bg-[#F4F2ED]">Settings</Link>
                 <Link href="/settings?tab=connections" onClick={() => setProfileOpen(false)} className="block min-h-10 rounded-lg px-3 py-2 text-sm hover:bg-[#F4F2ED]">Connections</Link>
                 <Link href="/help" onClick={() => setProfileOpen(false)} className="block min-h-10 rounded-lg px-3 py-2 text-sm hover:bg-[#F4F2ED]">Help</Link>
-                {account ? <button type="button" className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-bad hover:bg-[#FDF0F0] disabled:opacity-50" onClick={() => void signOut()} disabled={signingOut}>{signingOut ? "Signing out…" : "Sign out"}</button> : <Link href="/auth" onClick={() => setProfileOpen(false)} className="block min-h-10 rounded-lg px-3 py-2 text-sm text-action hover:bg-[#F4F2ED]">Save across devices · Sign in</Link>}
+                {account ? <button type="button" className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-bad hover:bg-[#FDF0F0] disabled:opacity-50" onClick={() => void signOut()} disabled={signingOut}>{signingOut ? "Signing out…" : "Sign out"}</button> : <Link href={`/auth?returnTo=${encodeURIComponent(path)}`} onClick={() => setProfileOpen(false)} className="block min-h-10 rounded-lg px-3 py-2 text-sm text-action hover:bg-[#F4F2ED]">Save across devices · Sign in</Link>}
                 {signOutError ? <p role="alert" className="px-3 py-2 text-xs text-bad">{signOutError}</p> : null}
               </div> : null}
             </div>

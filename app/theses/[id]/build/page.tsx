@@ -57,6 +57,8 @@ export default function BuildPage() {
   const [loading, setLoading] = useState(true);
   const [savedConstruction, setSavedConstruction] = useState<SavedConstruction | null>(null);
   const [constructionNotice, setConstructionNotice] = useState("");
+  const [payoutBasis, setPayoutBasis] = useState<"gross" | "net">("gross");
+  const [savingConstruction, setSavingConstruction] = useState(false);
 
   useModeChange(() => window.location.reload());
 
@@ -71,7 +73,7 @@ export default function BuildPage() {
         setThesis(result.thesis);
         setFamily(topic.family);
         try {
-          const saved = JSON.parse(localStorage.getItem(`thesis:saved-construction:${id}`) || "null") as Partial<SavedConstruction> | null;
+          const saved = result.thesis.savedConstruction as Partial<SavedConstruction> | null | undefined;
           const allowed = new Set(topic.family.predicates.map((predicate) => predicate.contractId));
           const validBasket = Array.isArray(saved?.basket) && saved.basket.length <= 4 && saved.basket.every((leg) => {
             if (!leg || typeof leg !== "object" || !allowed.has(leg.contractId) || (leg.side !== "yes" && leg.side !== "no") || typeof leg.payoutAmount !== "string" || typeof leg.enabled !== "boolean") return false;
@@ -157,14 +159,23 @@ export default function BuildPage() {
     router.push(`/theses/${id}/compare?maxPayout=${encodeURIComponent(max)}`);
   }
 
-  function saveConstruction() {
+  async function saveConstruction() {
     if (!thesis || !family || !construction?.desired || construction.error) return;
-    const saved = { basket, max, thesisRevision: thesis.revision, familyVersion: family.version, savedAt: new Date().toISOString() };
+    const saved: SavedConstruction = { basket, max, thesisRevision: thesis.revision, familyVersion: family.version, savedAt: new Date().toISOString() };
+    setSavingConstruction(true);
     try {
-      localStorage.setItem(`thesis:saved-construction:${id}`, JSON.stringify(saved));
+      const result = await api<{ thesis: ThesisRevision }>(`/api/theses/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ savedConstruction: saved }),
+      });
+      setThesis(result.thesis);
       setSavedConstruction(saved);
-      setConstructionNotice("Construction saved on this device with its source revision and market version.");
-    } catch { setConstructionNotice("This device could not save the construction. Your current editor values remain available in this tab."); }
+      setConstructionNotice("Construction saved with this thesis, source revision, and market version.");
+    } catch (cause) {
+      setConstructionNotice(cause instanceof Error ? cause.message : "The construction could not be saved. Your current editor values remain available in this tab.");
+    } finally {
+      setSavingConstruction(false);
+    }
   }
 
   function restoreConstruction() {
@@ -199,15 +210,26 @@ export default function BuildPage() {
   const selectedScenario = family.scenarios[selectedIndex];
   const selectedBasketPayout = construction?.basketRows[selectedIndex]?.payout ?? 0n;
   const selectedDesiredPayout = construction?.desired?.rows[selectedIndex]?.payout ?? 0n;
+  const referenceCost = construction?.cost?.total ?? null;
+  const displayedPayout = (value: bigint) => payoutBasis === "net" && referenceCost !== null ? value - referenceCost : value;
   const scenarioOutcome = selectedScenario
-    ? `Basket ${formatUsdcFixed(selectedBasketPayout)} · view ${formatUsdcFixed(selectedDesiredPayout)} USDC${selectedBasketPayout === selectedDesiredPayout ? " · matches" : " · differs"}`
+    ? `Basket ${formatUsdcFixed(displayedPayout(selectedBasketPayout))} ${payoutBasis} · view ${formatUsdcFixed(selectedDesiredPayout)} gross USDC${payoutBasis === "gross" ? selectedBasketPayout === selectedDesiredPayout ? " · matches" : " · differs" : ""}`
     : undefined;
-  const chartSeries = construction?.desired ? [
-    { name: "Confirmed view", values: construction.desired.rows.map((row) => row.payout), color: "#3559E0" },
-    { name: "Gemini basket", values: construction.basketRows.map((row) => row.payout), color: "#C57A36" },
-  ] : [];
+  const chartSeries = construction?.desired ? payoutBasis === "net" && referenceCost !== null
+    ? [{ name: "Gemini basket · net estimate", values: construction.basketRows.map((row) => row.payout - referenceCost), color: "#3559E0" }]
+    : [
+      { name: "Confirmed view", values: construction.desired.rows.map((row) => row.payout), color: "#3559E0" },
+      { name: "Gemini basket", values: construction.basketRows.map((row) => row.payout), color: "#C57A36" },
+    ] : [];
   const basketMatchesView = construction?.desired?.rows.every((row, index) => row.payout === construction.basketRows[index]?.payout) || false;
   const legContractOptions = family.predicates.map((predicate) => family.contracts.find((contract) => contract.id === predicate.contractId)).filter((contract) => contract != null);
+  const availableLegContracts = legContractOptions.filter((contract) => !basket.some((leg) => leg.contractId === contract!.id && leg.enabled));
+
+  function addSupportedLeg() {
+    const contract = availableLegContracts[0];
+    if (!contract || basket.length >= 4) return;
+    saveBasket([...basket, { contractId: contract.id, side: "yes", payoutAmount: max, enabled: true }]);
+  }
 
   return (
     <div className="screen-workspace space-y-4">
@@ -219,9 +241,15 @@ export default function BuildPage() {
       <div className="workspace-layout">
         <div className="space-y-4">
           <Card className="space-y-3">
-            <div>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
               <h2 className="font-serif text-xl">Your Gemini basket</h2>
               <p className="mt-1 text-sm text-muted">Each leg is a separate Gemini contract. Edit its side and payout allocation, or remove it to see how the scenario payouts change.</p>
+              </div>
+              <div className="inline-flex rounded-lg border border-line bg-white p-1" aria-label="Payout basis">
+                <button type="button" aria-pressed={payoutBasis === "gross"} onClick={() => setPayoutBasis("gross")} className={`min-h-9 rounded-md px-3 text-sm ${payoutBasis === "gross" ? "bg-[#E9EEFF] font-semibold text-action" : "text-muted"}`}>Gross payout</button>
+                <button type="button" aria-pressed={payoutBasis === "net"} disabled={referenceCost === null} onClick={() => setPayoutBasis("net")} className={`min-h-9 rounded-md px-3 text-sm disabled:opacity-40 ${payoutBasis === "net" ? "bg-[#E9EEFF] font-semibold text-action" : "text-muted"}`}>Net result</button>
+              </div>
             </div>
             {basket.length === 0 ? <p className="rounded-lg border border-line p-3 text-sm text-muted">Gemini contracts for this view do not create a direct basket. Compare the compiled view and available alternatives instead.</p> : null}
             {basket.map((leg, index) => (
@@ -250,6 +278,7 @@ export default function BuildPage() {
                 {leg.enabled ? <p className="mt-2 text-xs text-muted">This leg pays its allocation when {leg.side.toUpperCase()} resolves for {legContractOptions.find((contract) => contract!.id === leg.contractId)?.label}.</p> : null}
               </div>
             ))}
+            <Button kind="ghost" onClick={addSupportedLeg} disabled={!availableLegContracts.length || basket.length >= 4}>Add supported leg</Button>
             <div className="grid gap-3 sm:grid-cols-[220px_1fr]">
               <Field label="Desired view maximum payout (USDC)" hint="Used to compare the basket against your confirmed view.">
                 <input className={inputCls()} type="number" min="0.01" step="0.01" value={max} onChange={(event) => updateMaximum(event.target.value)} />
@@ -261,13 +290,13 @@ export default function BuildPage() {
           {construction?.desired ? (
             <Card>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <div><h2 className="font-serif text-xl">Gross payout by settlement scenario</h2><p className="mt-1 text-sm text-muted">Payout only; profit or loss requires subtracting the estimated cost.</p></div>
+                <div><h2 className="font-serif text-xl">{payoutBasis === "gross" ? "Gross payout" : "Estimated net result"} by settlement scenario</h2><p className="mt-1 text-sm text-muted">{payoutBasis === "gross" ? "Payout only; profit or loss requires subtracting the estimated cost." : `Reference cost of ${referenceCost === null ? "—" : `${formatUsdc(referenceCost)} USDC`} is subtracted from each payout. This is not an executable quote.`}</p></div>
                 <p className={`text-xs ${basketMatchesView ? "text-good" : "text-muted"}`}>{basketMatchesView ? "Matches the confirmed view in every listed scenario" : "This basket differs from your view in at least one scenario"}</p>
               </div>
               <div className="mt-3">
                 <PayoffChart labels={family.scenarios.map((scenario) => scenario.label)} series={chartSeries} selectedIndex={selectedIndex} />
               </div>
-              <div className="table-scroll mt-4"><table className="text-left text-sm"><thead><tr><th>Settlement scenario</th><th>Your basket · gross payout</th><th>Confirmed view</th><th>Fit</th></tr></thead><tbody>{family.scenarios.map((scenario, index) => { const basketPayout = construction.basketRows[index]?.payout ?? 0n; const desiredPayout = construction.desired?.rows[index]?.payout ?? 0n; return <tr key={scenario.id} className={scenario.id === selectedScenarioId ? "bg-[#E9EEFF]" : ""}><td><button type="button" className="text-left font-medium underline decoration-dotted" aria-pressed={scenario.id === selectedScenarioId} onClick={() => setSelectedScenarioId(scenario.id)}>{scenario.label}</button></td><td className="tabular-nums">{formatUsdcFixed(basketPayout)} USDC</td><td className="tabular-nums">{formatUsdcFixed(desiredPayout)} USDC</td><td>{basketPayout === desiredPayout ? "Matches" : "Differs"}</td></tr>; })}</tbody></table></div>
+              <div className="table-scroll mt-4"><table className="text-left text-sm"><thead><tr><th>Settlement scenario</th><th>Your basket · {payoutBasis}</th><th>Confirmed view · gross</th><th>Fit</th></tr></thead><tbody>{family.scenarios.map((scenario, index) => { const basketPayout = construction.basketRows[index]?.payout ?? 0n; const desiredPayout = construction.desired?.rows[index]?.payout ?? 0n; return <tr key={scenario.id} className={scenario.id === selectedScenarioId ? "bg-[#E9EEFF]" : ""}><td><button type="button" className="text-left font-medium underline decoration-dotted" aria-pressed={scenario.id === selectedScenarioId} onClick={() => setSelectedScenarioId(scenario.id)}>{scenario.label}</button></td><td className="tabular-nums">{formatUsdcFixed(displayedPayout(basketPayout))} USDC</td><td className="tabular-nums">{formatUsdcFixed(desiredPayout)} USDC</td><td>{payoutBasis === "gross" ? basketPayout === desiredPayout ? "Matches" : "Differs" : "Net estimate"}</td></tr>; })}</tbody></table></div>
             </Card>
           ) : null}
           <Card>
@@ -284,7 +313,7 @@ export default function BuildPage() {
         </div>
         <aside className="view-rail">
           <ThesisViewPanel thesis={thesis} family={family} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} scenarioOutcome={scenarioOutcome} scenarioOutcomeLabel="Basket · desired view payout" />
-          <Card className="space-y-2"><h2 className="font-serif text-xl font-bold">Next step</h2><p className="text-sm text-muted">Save a named construction, compare another payoff, or review this basket directly.</p><Button kind="ghost" onClick={saveConstruction} disabled={!construction?.desired || Boolean(construction.error)}>Save construction</Button>{savedConstruction ? <button type="button" className="min-h-10 text-sm font-semibold text-action underline" onClick={restoreConstruction}>Restore saved version · {formatTime(savedConstruction.savedAt)}</button> : null}<Button onClick={compareConstructions} disabled={!construction?.desired || Boolean(construction.error)}>Compare options</Button><Button href={`/theses/${id}/review?construction=gemini-basket&maxPayout=${encodeURIComponent(max)}&scenario=${encodeURIComponent(selectedScenarioId)}`} kind="secondary" disabled={!construction?.desired || Boolean(construction.error)}>Review construction</Button><p className="text-xs text-muted">Review shows the venue, environment, terms, and quote path. No financial action happens until explicit review and authorization.</p></Card>
+          <Card className="space-y-2"><h2 className="font-serif text-xl font-bold">Next step</h2><p className="text-sm text-muted">Save a named construction, compare another payoff, or review this basket directly.</p><Button kind="ghost" onClick={() => void saveConstruction()} disabled={savingConstruction || !construction?.desired || Boolean(construction.error)}>{savingConstruction ? "Saving…" : "Save construction"}</Button>{savedConstruction ? <button type="button" className="min-h-10 text-sm font-semibold text-action underline" onClick={restoreConstruction}>Restore saved version · {formatTime(savedConstruction.savedAt)}</button> : null}<Button onClick={compareConstructions} disabled={!construction?.desired || Boolean(construction.error)}>Compare options</Button><Button href={`/theses/${id}/review?construction=gemini-basket&maxPayout=${encodeURIComponent(max)}&scenario=${encodeURIComponent(selectedScenarioId)}`} kind="secondary" disabled={!construction?.desired || Boolean(construction.error)}>Review construction</Button><p className="text-xs text-muted">Review shows the venue, environment, terms, and quote path. No financial action happens until explicit review and authorization.</p></Card>
           <Card>
             <h2 className="font-serif text-lg">Execution status</h2>
             <p className="mt-2 text-sm text-muted">No Gemini execution happens in Build. The two basket legs would be separate orders and could fill differently. Review is required before any supported order.</p>

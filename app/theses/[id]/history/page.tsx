@@ -75,24 +75,22 @@ export default function History() {
 
   useEffect(() => {
     if (!selected) { setReflection(""); setReflectionSavedAt(""); return; }
-    try {
-      const raw = localStorage.getItem(`thesis:reflection:${id}:${selected.revision}`);
-      if (!raw) { setReflection(""); setReflectionSavedAt(""); return; }
-      const saved = JSON.parse(raw) as { text?: string; savedAt?: string };
-      setReflection(saved.text || "");
-      setReflectionSavedAt(saved.savedAt || "");
-    } catch { setReflection(""); setReflectionSavedAt(""); }
+    setReflection(selected.reflection || "");
+    setReflectionSavedAt(selected.reflectionUpdatedAt || "");
   }, [id, selected?.revision]);
 
-  function saveReflection() {
+  async function saveReflection() {
     if (!selected) return;
-    const savedAt = new Date().toISOString();
     try {
-      localStorage.setItem(`thesis:reflection:${id}:${selected.revision}`, JSON.stringify({ text: reflection, savedAt }));
-      setReflectionSavedAt(savedAt);
-      setNotice("Reflection saved on this device.");
-    } catch {
-      setError("Browser storage is full. This reflection could not be saved; your text remains here so you can copy or retry.");
+      const result = await api<{ version: ThesisHistoryRecord }>(`/api/theses/${id}/history`, {
+        method: "PATCH",
+        body: JSON.stringify({ revision: selected.revision, reflection }),
+      });
+      setVersions((items) => items.map((item) => item.id === result.version.id ? result.version : item));
+      setReflectionSavedAt(result.version.reflectionUpdatedAt || "");
+      setNotice("Reflection saved with this thesis revision.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "This reflection could not be saved; your text remains here so you can copy or retry.");
     }
   }
 
@@ -148,7 +146,7 @@ export default function History() {
             <p className="rounded-lg bg-[#F7F8FF] p-3 text-xs text-muted">Existing positions use their original confirmed revision and stay unchanged.</p>
             <Button onClick={() => setRestoreOpen(true)} disabled={pending !== ""}>Restore as new draft</Button><Button kind="ghost" onClick={() => void duplicate()} disabled={pending !== ""}>{pending === "duplicate" ? "Creating draft…" : "Duplicate thesis"}</Button>
           </Card>
-          <Card className="space-y-3"><div><h2 className="font-serif text-xl font-bold">Reflection</h2><p className="mt-1 text-sm text-muted">Add a note about what changed or what you’ll watch next. This note stays on this device.</p></div><textarea className="app-input min-h-28 w-full resize-y p-3 text-sm" maxLength={2000} value={reflection} onChange={(event) => setReflection(event.target.value)} placeholder="Why I changed the view, what I learned, or what I’ll monitor next…"/><Button onClick={saveReflection} disabled={!reflection.trim()}>Save reflection</Button>{reflectionSavedAt ? <p role="status" className="text-xs text-muted">Saved {formatTime(reflectionSavedAt)}</p> : null}</Card></aside>
+          <Card className="space-y-3"><div><h2 className="font-serif text-xl font-bold">Reflection</h2><p className="mt-1 text-sm text-muted">Add a note about what changed or what you’ll watch next. It stays attached to this guest or signed-in revision.</p></div><textarea className="app-input min-h-28 w-full resize-y p-3 text-sm" maxLength={2000} value={reflection} onChange={(event) => setReflection(event.target.value)} placeholder="Why I changed the view, what I learned, or what I’ll monitor next…"/><Button onClick={() => void saveReflection()} disabled={!reflection.trim()}>Save reflection</Button>{reflectionSavedAt ? <p role="status" className="text-xs text-muted">Saved {formatTime(reflectionSavedAt)}</p> : null}</Card></aside>
       </div> : null}
       {restoreOpen && selected ? <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !pending) setRestoreOpen(false); }}><section className="dialog-panel space-y-4" role="dialog" aria-modal="true" aria-labelledby="restore-history-title"><div><p className="source-pill">Restore snapshot</p><h2 id="restore-history-title" className="mt-3 font-serif text-2xl font-bold">Restore revision {selected.revision} as a new draft?</h2></div><p className="text-sm text-muted">A new draft will be created from this saved view and open in Research. This does not rewrite history or change any existing quote, order, or position.</p><div className="flex flex-wrap justify-end gap-2 border-t border-line pt-3"><Button kind="ghost" onClick={() => setRestoreOpen(false)} disabled={pending === "restore"}>Cancel</Button><Button onClick={() => void restore()} disabled={pending !== ""}>{pending === "restore" ? "Creating draft…" : "Restore as new draft"}</Button></div></section></div> : null}
     </div>

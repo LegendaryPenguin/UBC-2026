@@ -11,6 +11,7 @@ import { PortfolioActivity } from "@/components/PortfolioActivity";
 import { PortfolioAlerts } from "@/components/PortfolioAlerts";
 
 type PortfolioTab = "positions" | "settled" | "orders" | "activity" | "alerts";
+type PortfolioVenue = "paper" | "gemini" | "arc";
 type GeminiPosition = {
   symbol?: string;
   outcome?: string;
@@ -52,6 +53,7 @@ export default function Portfolio() {
   const [geminiActive, setGeminiActive] = useState<GeminiPosition[]>([]);
   const [geminiSettled, setGeminiSettled] = useState<GeminiPosition[]>([]);
   const [tab, setTab] = useState<PortfolioTab>("positions");
+  const [venue, setVenue] = useState<PortfolioVenue>("paper");
   const [loading, setLoading] = useState(true);
   const [geminiLoading, setGeminiLoading] = useState(true);
   const [settledLoading, setSettledLoading] = useState(false);
@@ -102,6 +104,8 @@ export default function Portfolio() {
   useEffect(() => { if (tab === "settled" && geminiSettled.length === 0 && !settledError) void loadGeminiSettled(); }, [tab, geminiSettled.length, settledError, loadGeminiSettled]);
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("view");
+    const requestedVenue = new URLSearchParams(window.location.search).get("venue");
+    if (requestedVenue === "gemini" || requestedVenue === "arc" || requestedVenue === "paper") setVenue(requestedVenue);
     if (requested === "orders" || requested === "activity" || requested === "alerts") setTab(requested);
     else if (requested === "settled") setTab("settled");
   }, []);
@@ -114,18 +118,31 @@ export default function Portfolio() {
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   }
 
-  const cost = positions.reduce((sum, position) => sum + BigInt(position.premium || "0") + BigInt(position.fee || "0"), 0n);
+  function selectVenue(value: PortfolioVenue) {
+    setVenue(value);
+    const url = new URL(window.location.href);
+    url.searchParams.set("venue", value);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  const venuePositions = positions.filter((position) => venue === "paper" ? position.mode === "paper" : venue === "arc" ? position.mode !== "paper" : false);
+  const cost = venuePositions.reduce((sum, position) => sum + BigInt(position.premium || "0") + BigInt(position.fee || "0"), 0n);
   const settledLocal = positions.filter((position) => ["resolved", "claimed", "voided", "exited"].includes(position.status));
   const openLocal = positions.filter((position) => !["resolved", "claimed", "voided", "exited"].includes(position.status));
+  const shownOpenLocal = openLocal.filter((position) => venue === "paper" ? position.mode === "paper" : venue === "arc" ? position.mode !== "paper" : false);
+  const shownSettledLocal = settledLocal.filter((position) => venue === "paper" ? position.mode === "paper" : venue === "arc" ? position.mode !== "paper" : false);
 
   return (
     <div className="screen-portfolio space-y-4">
       <div>
-        <h1 className="portfolio-title screen-heading">Portfolio</h1>
+        <h1 className="portfolio-title screen-heading">Positions with their reasoning attached</h1>
         <p className="mt-1 text-sm text-muted">Positions stay linked to the thesis and venue that created them. Gemini values come from Gemini account data; no value is inferred from stale prices.</p>
       </div>
+      <div className="grid overflow-hidden rounded-xl border border-line bg-white sm:grid-cols-3" role="tablist" aria-label="Execution environment">
+        {([["paper", "Paper"], ["gemini", "Gemini sandbox"], ["arc", "Arc testnet"]] as [PortfolioVenue, string][]).map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={venue === value} onClick={() => selectVenue(value)} className={`min-h-12 border-line px-4 text-sm font-semibold sm:border-r ${venue === value ? "bg-[#E9EEFF] text-action ring-1 ring-inset ring-action" : "text-muted hover:bg-[#F7F6F2]"}`}>{label}</button>)}
+      </div>
       <Card>
-        <p className="text-sm text-muted">Arc and paper cost basis: <span className="font-medium text-ink">{usdc(cost)}</span></p>
+        <p className="text-sm text-muted">{venue === "paper" ? "Paper" : venue === "arc" ? "Arc testnet" : "Gemini sandbox"} cost basis: <span className="font-medium text-ink">{venue === "gemini" ? "Reported per position below" : usdc(cost)}</span></p>
         <p className="mt-1 text-xs text-muted">Unrealized value for Arc positions is shown only when a supported exit quote exists. Gemini mark values are supplied by Gemini.</p>
       </Card>
       <div className="portfolio-tabs-row">
@@ -147,7 +164,7 @@ export default function Portfolio() {
       {tab === "alerts" ? <PortfolioAlerts embedded /> : null}
       {tab === "positions" ? (
         <div className="space-y-4">
-          <section className="space-y-3">
+          {venue === "gemini" ? <section className="space-y-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="font-serif text-2xl">Gemini positions</h2><button className="text-sm text-action" onClick={() => setTab("orders")}>View orders</button></div>
             {geminiError ? <Card><p role="alert" className="text-sm text-bad">{geminiError}</p><div className="mt-3 flex flex-wrap gap-2"><Button onClick={() => void loadGeminiActive()} kind="ghost">Retry</Button><Button href={geminiError.toLowerCase().includes("sign in") ? "/auth" : "/settings/connections"} kind="secondary">{geminiError.toLowerCase().includes("sign in") ? "Sign in" : "Connect Gemini"}</Button></div></Card> : null}
             {geminiLoading ? <p role="status" className="text-sm text-muted">Loading positions from Gemini…</p> : null}
@@ -173,17 +190,17 @@ export default function Portfolio() {
                 {position.thesisId ? <><Link href={`/theses/${position.thesisId}`} className="mt-2 inline-block text-sm text-action">Revisit related thesis</Link><p className="mt-1 text-xs text-muted">Gemini aggregates holdings by contract; this position may include other orders.</p></> : position.thesisLinkAmbiguous ? <p className="mt-2 text-xs text-muted">More than one thesis links to orders for this contract, so this aggregated holding is not assigned to a single thesis.</p> : null}
               </Card>
             ))}
-          </section>
+          </section> : null}
 
-          <section className="space-y-3">
-            <h2 className="font-serif text-2xl">Arc and paper positions</h2>
+          {venue !== "gemini" ? <section className="space-y-3">
+            <h2 className="font-serif text-2xl">{venue === "paper" ? "Paper positions" : "Arc testnet positions"}</h2>
             {error ? <Card><p role="alert" className="text-sm text-bad">{error}</p><Button onClick={() => void loadLocal()} kind="ghost">Retry</Button></Card> : null}
             {loading ? <p role="status" className="text-sm text-muted">Loading Arc and paper positions…</p> : null}
-            {!loading && !error && !openLocal.length ? <Empty title="No open Arc or paper positions">
+            {!loading && !error && !shownOpenLocal.length ? <Empty title={`No open ${venue === "paper" ? "paper" : "Arc testnet"} positions`}>
               <p>Research first. A connected wallet is not a position.</p>
               <div className="mt-3"><Button href="/explore" kind="secondary">Explore markets</Button></div>
             </Empty> : null}
-            {openLocal.map((position) => (
+            {shownOpenLocal.map((position) => (
               <Card key={position.id}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -195,11 +212,11 @@ export default function Portfolio() {
                 </div>
               </Card>
             ))}
-          </section>
+          </section> : null}
         </div>
       ) : tab === "settled" ? (
         <div className="space-y-4">
-          <section className="space-y-3">
+          {venue === "gemini" ? <section className="space-y-3">
             <h2 className="font-serif text-2xl">Gemini settlement history</h2>
             {settledError ? <Card><p role="alert" className="text-sm text-bad">{settledError}</p><div className="mt-3"><Button onClick={() => void loadGeminiSettled()} kind="ghost">Retry</Button></div></Card> : null}
             {settledLoading ? <p role="status" className="text-sm text-muted">Loading settled Gemini positions…</p> : null}
@@ -214,10 +231,10 @@ export default function Portfolio() {
                 {position.contractMetadata?.eventTicker ? <div className="mt-3"><Button href={`/gemini/${position.contractMetadata.eventTicker}`} kind="ghost">Review market rules</Button></div> : null}
               </Card>
             ))}
-          </section>
-          <section className="space-y-3">
-            <h2 className="font-serif text-2xl">Arc and paper outcomes</h2>
-            {settledLocal.length ? settledLocal.map((position) => (
+          </section> : null}
+          {venue !== "gemini" ? <section className="space-y-3">
+            <h2 className="font-serif text-2xl">{venue === "paper" ? "Paper outcomes" : "Arc testnet outcomes"}</h2>
+            {shownSettledLocal.length ? shownSettledLocal.map((position) => (
               <Card key={position.id}>
                 <p className="font-medium">{position.topicSlug} · {position.status} · {position.mode}</p>
                 <p className="mt-1 text-sm text-muted">Maximum payout {usdc(position.maxPayout)} · cost {usdc(BigInt(position.premium) + BigInt(position.fee))}</p>
@@ -226,7 +243,7 @@ export default function Portfolio() {
             )) : <Empty title="No settled Arc or paper positions">
               <p>Resolved positions and claims will appear here with their original thesis.</p>
             </Empty>}
-          </section>
+          </section> : null}
         </div>
       ) : null}
     </div>

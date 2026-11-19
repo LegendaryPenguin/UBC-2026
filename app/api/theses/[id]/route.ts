@@ -81,6 +81,17 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (body.evidenceIds !== undefined && (!Array.isArray(body.evidenceIds) || body.evidenceIds.some((id) => typeof id !== "string"))) {
     return fail("INVALID", "Evidence references are invalid.");
   }
+  if (body.savedConstruction !== undefined && body.savedConstruction !== null) {
+    const construction = body.savedConstruction;
+    if (!Array.isArray(construction.basket) || construction.basket.length > 4 ||
+        construction.basket.some((leg) => !leg || typeof leg.contractId !== "string" ||
+          (leg.side !== "yes" && leg.side !== "no") || typeof leg.payoutAmount !== "string" ||
+          typeof leg.enabled !== "boolean") ||
+        typeof construction.max !== "string" || typeof construction.savedAt !== "string" ||
+        !Number.isInteger(construction.thesisRevision) || typeof construction.familyVersion !== "string") {
+      return fail("INVALID", "Saved construction is invalid.");
+    }
+  }
 
   if (body.mode !== undefined && !["live", "replay", "paper", "research"].includes(body.mode)) {
     return fail("INVALID", "Choose Live or Replay market data.");
@@ -197,6 +208,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (body.rationale !== undefined) thesis.rationale = body.rationale;
     if (body.invalidation !== undefined) thesis.invalidation = body.invalidation;
     if (body.evidenceIds !== undefined) thesis.evidenceIds = [...body.evidenceIds];
+    if (body.savedConstruction !== undefined) {
+      thesis.savedConstruction = body.savedConstruction ? {
+        ...body.savedConstruction,
+        basket: body.savedConstruction.basket.map((leg) => ({ ...leg })),
+      } : null;
+      thesis.updatedAt = new Date().toISOString();
+    }
 
     const candidate = thesisSnapshot(thesis);
     const contentChanged = JSON.stringify({ ...before, status: undefined }) !== JSON.stringify({ ...candidate, status: undefined });

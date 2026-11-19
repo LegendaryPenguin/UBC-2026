@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/server/http";
+import { fail, ok, readJson } from "@/lib/server/http";
 import { mutate, readStore, uid } from "@/lib/server/store";
 import { thesisOwner } from "@/lib/server/session";
 import { thesisSnapshot } from "@/lib/server/thesis-history";
@@ -61,4 +61,26 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     }));
   const timeline = [...quotes, ...positions].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   return ok({ thesisId: thesis.id, currentRevision: thesis.revision, versions, timeline });
+}
+
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  const accountId = thesisOwner();
+  if (!accountId) return fail("AUTH", "Thesis owner required", 401);
+  const body = await readJson<{ revision?: number; reflection?: string }>(req);
+  if (!Number.isInteger(body.revision) || body.revision! < 1 ||
+      typeof body.reflection !== "string" || body.reflection.length > 2_000) {
+    return fail("INVALID", "Choose a revision and enter a reflection of 2,000 characters or fewer.");
+  }
+  let updated = null;
+  mutate((store) => {
+    const record = (store.thesisHistory || []).find((item) =>
+      item.thesisId === params.id && item.accountId === accountId && item.revision === body.revision
+    );
+    if (!record) return;
+    record.reflection = body.reflection!.trim();
+    record.reflectionUpdatedAt = new Date().toISOString();
+    updated = record;
+  });
+  if (!updated) return fail("NOT_FOUND", "Revision not found", 404);
+  return ok({ version: updated });
 }

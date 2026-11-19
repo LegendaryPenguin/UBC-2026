@@ -11,6 +11,10 @@ export default function AuthPage() {
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const returnTo = typeof window === "undefined" ? "/" : (() => {
+    const value = new URLSearchParams(window.location.search).get("returnTo") || "/";
+    return value.startsWith("/") && !value.startsWith("//") ? value : "/";
+  })();
 
   async function submit(action: "request" | "verify") {
     setPending(true);
@@ -23,7 +27,7 @@ export default function AuthPage() {
         body: JSON.stringify({ action, email, code }),
       });
       if (action === "verify") {
-        window.location.href = "/settings?tab=account";
+        window.location.href = returnTo;
       } else {
         setDemo(res.demoCode ?? "");
         setMsg("Your local demo code is ready.");
@@ -36,8 +40,12 @@ export default function AuthPage() {
   }
   return (
     <div className="mx-auto max-w-md space-y-4">
-      <h1 className="font-serif text-3xl">Sign in</h1>
+      <div><p className="source-pill">Thesis</p><h1 className="mt-3 font-serif text-3xl">Save your thinking</h1><p className="mt-2 text-sm text-muted">Sign in to keep theses, drafts, and research aligned across devices.</p></div>
       <Card className="space-y-3">
+        <Button className="w-full" kind="secondary" disabled>Continue with Google · provider setup required</Button>
+        <Button className="w-full" kind="secondary" disabled>Sign in with wallet · verification setup required</Button>
+        <Button className="w-full" kind="ghost" onClick={() => { window.location.href = returnTo; }}>Continue as guest</Button>
+        <div className="flex items-center gap-3 py-1 text-xs text-muted"><span className="h-px flex-1 bg-line"/><span>development sign-in</span><span className="h-px flex-1 bg-line"/></div>
         <p className="text-sm text-muted">This email-code flow is a local development demo, not production Google or wallet authentication. After verification, your guest drafts, watchlists, and assistant conversations move to this account; financial record IDs remain unchanged.</p>
         <Field label="Email" hint="Codes are issued locally for this demo. Responses do not reveal whether the email already exists.">
           <input className={inputCls()} value={email} onChange={(e) => setEmail(e.target.value)} />
