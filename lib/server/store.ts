@@ -151,6 +151,26 @@ export interface ExportJob {
   href: string;
 }
 
+export interface ConversationMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+  action?: { type: string; label: string; href?: string };
+}
+
+export interface ConversationRecord {
+  id: string;
+  accountId: string;
+  kind: "general" | "thesis";
+  thesisId: string | null;
+  title: string;
+  messages: ConversationMessage[];
+  createdAt: string;
+  updatedAt: string;
+  summary?: string;
+}
+
 export interface ResolutionReport {
   id: string;
   positionId: string;
@@ -193,6 +213,7 @@ export interface StoreShape {
   orders: VenueOrder[];
   geminiConnections: GeminiConnection[];
   geminiOrderIntents: GeminiOrderIntent[];
+  conversations: ConversationRecord[];
   exports: ExportJob[];
   resolutionReports: ResolutionReport[];
   streamNonces: { nonce: string; receivedAt: string }[];
@@ -227,6 +248,7 @@ function empty(): StoreShape {
     orders: [],
     geminiConnections: [],
     geminiOrderIntents: [],
+    conversations: [],
     exports: [],
     resolutionReports: [],
     streamNonces: [],
@@ -252,6 +274,7 @@ function load(): StoreShape {
       thesisHistory: stored.thesisHistory || [],
       geminiConnections: stored.geminiConnections || [],
       geminiOrderIntents: stored.geminiOrderIntents || [],
+      conversations: stored.conversations || [],
       resolutionReports: stored.resolutionReports || [],
       streamNonces: stored.streamNonces || [],
       streamEvents: stored.streamEvents || [],
@@ -277,6 +300,41 @@ export function mutate<T>(fn: (s: StoreShape) => T): T {
 
 export function readStore(): StoreShape {
   return load();
+}
+
+export function migrateGuestData(guestId: string, accountId: string): number {
+  if (!/^guest_[a-f0-9-]{36}$/.test(guestId) || !accountId) return 0;
+  return mutate((store) => {
+    const collections: { accountId?: string }[][] = [
+      store.theses as (ThesisRevision & { accountId?: string })[],
+      store.thesisHistory,
+      store.watchlists,
+      store.alerts,
+      store.notifications,
+      store.quotes,
+      store.positions,
+      store.transactions,
+      store.journals,
+      store.tickets,
+      store.publications,
+      store.comments,
+      store.funding,
+      store.orders,
+      store.geminiOrderIntents,
+      store.conversations,
+      store.exports,
+    ];
+    let moved = 0;
+    for (const records of collections) {
+      for (const record of records) {
+        if (record.accountId === guestId) {
+          record.accountId = accountId;
+          moved += 1;
+        }
+      }
+    }
+    return moved;
+  });
 }
 
 export function uid(prefix: string): string {

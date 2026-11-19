@@ -36,9 +36,11 @@ describe("narrated MVP API flow", () => {
   let topicsGet: typeof import("@/app/api/topics/route").GET;
   let topicGet: typeof import("@/app/api/topics/[slug]/route").GET;
   let researchPost: typeof import("@/app/api/research/route").POST;
+  let thesesGet: typeof import("@/app/api/theses/route").GET;
   let thesesPost: typeof import("@/app/api/theses/route").POST;
   let thesisGet: typeof import("@/app/api/theses/[id]/route").GET;
   let thesisPatch: typeof import("@/app/api/theses/[id]/route").PATCH;
+  let thesisDelete: typeof import("@/app/api/theses/[id]/route").DELETE;
   let historyGet: typeof import("@/app/api/theses/[id]/history/route").GET;
   let quotesPost: typeof import("@/app/api/quotes/route").POST;
   let quoteGet: typeof import("@/app/api/quotes/[id]/route").GET;
@@ -49,6 +51,8 @@ describe("narrated MVP API flow", () => {
   let alertsGet: typeof import("@/app/api/alerts/route").GET;
   let alertsPost: typeof import("@/app/api/alerts/route").POST;
   let alertsPatch: typeof import("@/app/api/alerts/route").PATCH;
+  let conversationsGet: typeof import("@/app/api/conversations/route").GET;
+  let conversationsPost: typeof import("@/app/api/conversations/route").POST;
   let store: typeof import("@/lib/server/store");
   let createSession: typeof import("@/lib/server/session").createSession;
 
@@ -61,7 +65,7 @@ describe("narrated MVP API flow", () => {
     cookieJar.values.clear();
     vi.resetModules();
 
-    const [topics, topic, research, theses, thesis, history, quotes, quote, positions, position, alerts, storeModule, sessionModule] = await Promise.all([
+    const [topics, topic, research, theses, thesis, history, quotes, quote, positions, position, alerts, conversations, storeModule, sessionModule] = await Promise.all([
       import("@/app/api/topics/route"),
       import("@/app/api/topics/[slug]/route"),
       import("@/app/api/research/route"),
@@ -73,15 +77,18 @@ describe("narrated MVP API flow", () => {
       import("@/app/api/positions/route"),
       import("@/app/api/positions/[id]/route"),
       import("@/app/api/alerts/route"),
+      import("@/app/api/conversations/route"),
       import("@/lib/server/store"),
       import("@/lib/server/session"),
     ]);
     topicsGet = topics.GET;
     topicGet = topic.GET;
     researchPost = research.POST;
+    thesesGet = theses.GET;
     thesesPost = theses.POST;
     thesisGet = thesis.GET;
     thesisPatch = thesis.PATCH;
+    thesisDelete = thesis.DELETE;
     historyGet = history.GET;
     quotesPost = quotes.POST;
     quoteGet = quote.GET;
@@ -92,6 +99,8 @@ describe("narrated MVP API flow", () => {
     alertsGet = alerts.GET;
     alertsPost = alerts.POST;
     alertsPatch = alerts.PATCH;
+    conversationsGet = conversations.GET;
+    conversationsPost = conversations.POST;
     store = storeModule;
     createSession = sessionModule.createSession;
 
@@ -395,5 +404,62 @@ describe("narrated MVP API flow", () => {
     expect(final.body.clarificationPrompt).toBeUndefined();
     expect(final.body.proposed).toMatchObject({ template: "range" });
     expect(final.body.proposed!.lowerThreshold).toBeLessThan(final.body.proposed!.upperThreshold);
+  });
+
+  it("persists assistant turns, restricts navigation to in-app routes, and transfers guest ownership", async () => {
+    cookieJar.values.set("thesis_guest", "guest_12345678-1234-4234-8234-123456789abc");
+    const created = await json<{ conversation: { id: string; title: string } }>(await conversationsPost(request("/api/conversations", "POST", { action: "create", kind: "general" })));
+    expect(created.response.status).toBe(200);
+    const saved = await json<{ conversation: { messages: { role: string; action?: { href: string } }[] } }>(await conversationsPost(request("/api/conversations", "POST", {
+      action: "save-turn", id: created.body.conversation.id, user: "Compare this later", assistant: "I can open Compare.",
+      structuredAction: { type: "navigate", label: "Open Compare", href: "/theses/th_demo/compare" },
+    })));
+    expect(saved.response.status).toBe(200);
+    expect(saved.body.conversation.messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(saved.body.conversation.messages[1].action?.href).toBe("/theses/th_demo/compare");
+
+    const unsafe = await conversationsPost(request("/api/conversations", "POST", {
+      action: "save-turn", id: created.body.conversation.id, user: "go outside", assistant: "No.",
+      structuredAction: { type: "navigate", label: "External", href: "https://example.com" },
+    }));
+    expect(unsafe.status).toBe(400);
+    const list = await json<{ conversations: { id: string }[] }>(await conversationsGet(request("/api/conversations?kind=general")));
+    expect(list.body.conversations.some((conversation) => conversation.id === created.body.conversation.id)).toBe(true);
+
+    store.mutate((state) => state.watchlists.push({ id: "guest-watch", accountId: "guest_12345678-1234-4234-8234-123456789abc", name: "Research", slugs: [], notes: "", createdAt: new Date().toISOString() }));
+    const moved = store.migrateGuestData("guest_12345678-1234-4234-8234-123456789abc", "acct_mvp_flow");
+    expect(moved).toBeGreaterThanOrEqual(2);
+    expect(store.readStore().conversations.find((conversation) => conversation.id === created.body.conversation.id)?.accountId).toBe("acct_mvp_flow");
+    expect(store.readStore().watchlists.find((watchlist) => watchlist.id === "guest-watch")?.accountId).toBe("acct_mvp_flow");
+  });
+
+  it("keeps My Theses rename, archive, duplicate, delete, and linked conversation behavior owner-scoped", async () => {
+    cookieJar.values.set("thesis_guest", "guest_22345678-1234-4234-8234-123456789abc");
+    const list = await json<{ families: { slug: string; id: string; version: string; predicates: { threshold: number }[]; sourceEvent: { ticker: string } }[] }>(await topicsGet(request("/api/topics?mode=replay")));
+    const family = list.body.families.find((item) => item.sourceEvent.ticker === "BTC2611202200")!;
+    const thresholds = family.predicates.map((item) => item.threshold).sort((a, b) => a - b);
+    const draft = await json<{ thesis: { id: string; title: string } }>(await thesesPost(request("/api/theses", "POST", {
+      topicSlug: family.slug, familyId: family.id, familyVersion: family.version, mode: "replay", template: "range", lowerThreshold: thresholds[0], upperThreshold: thresholds[1],
+    })));
+    const thesisId = draft.body.thesis.id;
+    const renamed = await json<{ thesis: { title: string } }>(await thesisPatch(request(`/api/theses/${thesisId}`, "PATCH", { action: "rename", title: "Friday range" }), { params: { id: thesisId } }));
+    expect(renamed.body.thesis.title).toBe("Friday range");
+
+    const linked = await json<{ conversation: { id: string } }>(await conversationsPost(request("/api/conversations", "POST", { action: "create", kind: "thesis", thesisId })));
+    await conversationsPost(request("/api/conversations", "POST", { action: "save-turn", id: linked.body.conversation.id, user: "Why this range?", assistant: "Because it reflects the confirmed boundaries." }));
+    await thesisPatch(request(`/api/theses/${thesisId}`, "PATCH", { action: "archive" }), { params: { id: thesisId } });
+    const archived = await json<{ theses: { id: string; libraryState: string }[] }>(await thesesGet());
+    expect(archived.body.theses.find((item) => item.id === thesisId)?.libraryState).toBe("archived");
+    await thesisPatch(request(`/api/theses/${thesisId}`, "PATCH", { action: "unarchive" }), { params: { id: thesisId } });
+
+    const duplicate = await json<{ thesis: { id: string; status: string; title?: string } }>(await thesisPatch(request(`/api/theses/${thesisId}`, "PATCH", { action: "duplicate" }), { params: { id: thesisId } }));
+    expect(duplicate.body.thesis.id).not.toBe(thesisId);
+    expect(duplicate.body.thesis.status).toBe("draft");
+    expect(duplicate.body.thesis.title).toBe("Friday range copy");
+
+    const deleted = await thesisDelete(request(`/api/theses/${thesisId}`, "DELETE"), { params: { id: thesisId } });
+    expect(deleted.status).toBe(200);
+    const preservedThread = await json<{ conversations: { id: string; kind: string; thesisId: string | null; messages: { content: string }[] }[] }>(await conversationsGet(request("/api/conversations?kind=general")));
+    expect(preservedThread.body.conversations.find((item) => item.id === linked.body.conversation.id)).toMatchObject({ kind: "general", thesisId: null, messages: [{ content: "Why this range?" }, { content: "Because it reflects the confirmed boundaries." }] });
   });
 });

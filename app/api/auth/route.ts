@@ -1,7 +1,8 @@
 import { randomInt } from "node:crypto";
+import { cookies } from "next/headers";
 import { fail, ok, readJson } from "@/lib/server/http";
 import { clearSession, createSession, currentSession } from "@/lib/server/session";
-import { mutate, uid } from "@/lib/server/store";
+import { migrateGuestData, mutate, uid } from "@/lib/server/store";
 
 export async function GET() {
   const ctx = currentSession();
@@ -49,6 +50,11 @@ export async function POST(req: Request) {
       s.codes = s.codes.filter((c) => c.email !== email);
       return acc;
     });
+    const guestId = cookies().get("thesis_guest")?.value;
+    if (guestId && /^guest_[a-f0-9-]{36}$/.test(guestId)) {
+      migrateGuestData(guestId, account.id);
+      cookies().set("thesis_guest", "", { path: "/", maxAge: 0 });
+    }
     createSession(account.id);
     return ok({ account });
   }
