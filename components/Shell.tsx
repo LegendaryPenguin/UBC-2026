@@ -19,7 +19,6 @@ const MORE = [
   ["Activity", "/activity"],
   ["Reports", "/reports"],
   ["Help", "/help"],
-  ["App guide", "/guide"],
   ["Settings", "/settings"],
 ];
 

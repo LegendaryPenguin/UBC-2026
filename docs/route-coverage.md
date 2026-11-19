@@ -4,6 +4,8 @@ The active scope is the [corrected four-board workspace plus the user's narrated
 
 This inventory maps routes to the active narrated journey and identifies supporting routes. Partial items used by that journey still require implementation or backend/integration acceptance; unrelated VFINAL modules are not completion blockers.
 
+For the user-facing route-by-route and popup inventory, see [app-inventory.md](app-inventory.md).
+
 | Routes | Controls and backing code | Current coverage and remaining work |
 | --- | --- | --- |
 | `/`, `/home`, `/workspace` | Landing and workspace links, account drafts through `GET /api/theses` | Partial. Personal dashboard, action ordering, and editable home layout still need validation. |
