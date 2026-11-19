@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { api, modeFromStorage } from "@/lib/client";
+import { api, dataContextFromStorage, executionEnvironmentFromStorage } from "@/lib/client";
 import type { SignedQuote } from "@/lib/domain/types";
 import { formatUsdc } from "@/lib/format";
 import { Button, Card, Field, inputCls } from "@/components/ui";
@@ -200,7 +200,10 @@ export default function QuotePage() {
 
   if (error && !quote) return <p className="text-bad">{error}</p>;
   if (!quote) return <p>Loading quote…</p>;
-  const mode = modeFromStorage();
+  const execution = executionEnvironmentFromStorage();
+  const dataContext = dataContextFromStorage();
+  const canAcceptPaper = execution === "paper" && quote.signature === "0x" && quote.status === "available";
+  const canAcceptLive = execution === "arc" && dataContext === "live" && quote.signature !== "0x" && quote.status === "available";
   return (
     <div className="space-y-4">
       <h1 className="font-serif text-3xl">Quote {quote.id}</h1>
@@ -229,7 +232,7 @@ export default function QuotePage() {
       {syncFailed && acceptanceReceipt?.status === "success" && acceptHash ? (
         <Button onClick={() => void syncAcceptedPosition(acceptHash)} disabled={syncing}>{syncing ? "Verifying…" : "Retry position synchronization"}</Button>
       ) : null}
-      {mode === "live" && quote.signature !== "0x" ? (
+      {canAcceptLive ? (
         <Card className="space-y-3">
           <h2 className="font-serif text-xl">Already submitted an Arc transaction?</h2>
           <p className="text-sm text-muted">Paste its hash to verify and record the position. This never submits or retries a transaction.</p>
@@ -240,9 +243,9 @@ export default function QuotePage() {
         </Card>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        {mode === "paper" && quote.signature === "0x" && quote.status === "available" ? <Button onClick={paperAccept} disabled={paperAccepting}>{paperAccepting ? "Creating paper position…" : "Accept paper quote"}</Button> : null}
-        {mode === "live" && quote.signature !== "0x" && quote.status === "available" && !acceptHash ? <Button onClick={liveAccept} disabled={isPending || syncing}>{isPending || syncing ? "Preparing…" : "Accept exact offer"}</Button> : null}
-        {mode === "live" && address && chainId !== arcTestnet.id && !acceptHash ? (
+        {canAcceptPaper ? <Button onClick={paperAccept} disabled={paperAccepting}>{paperAccepting ? "Creating paper position…" : "Accept paper quote"}</Button> : null}
+        {canAcceptLive && !acceptHash ? <Button onClick={liveAccept} disabled={isPending || syncing}>{isPending || syncing ? "Preparing…" : "Accept exact offer"}</Button> : null}
+        {canAcceptLive && address && chainId !== arcTestnet.id && !acceptHash ? (
           <Button kind="secondary" onClick={async () => {
             try { await switchChainAsync({ chainId: arcTestnet.id }); setError(""); }
             catch { setError("Arc testnet was not selected. No transaction was sent."); }

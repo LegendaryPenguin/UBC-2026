@@ -45,11 +45,15 @@ export default function Explore() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setView("gemini");
+    const requested = params.get("view");
+    const initialView: ExploreView = requested === "topics" || requested === "watched" || requested === "timeline" || requested === "gemini"
+      ? requested
+      : "gemini";
+    setView(initialView);
     const initialQuery = params.get("q") || params.get("idea") || "";
     setQ(initialQuery);
     setSubmittedQuery(initialQuery);
-    void load(initialQuery);
+    if (initialView === "topics" || initialView === "watched") void load(initialQuery);
     if (params.get("focus") === "search") window.setTimeout(() => searchRef.current?.focus(), 0);
     if (params.get("assistant") === "1") {
       const question = params.get("idea") || "";
@@ -131,11 +135,11 @@ export default function Explore() {
         <h1 className="explore-title screen-heading">Find a question worth exploring</h1>
         <p className="mt-2 text-base text-muted">Browse Gemini markets, check the setup, and research the ideas that interest you.</p>
       </div>
-      <nav className="hidden" aria-label="Legacy Explore views" aria-hidden="true">
-        {([ ["gemini", "Markets"], ["topics", "Research topics"], ["watched", "Watching"], ["timeline", "Timeline"] ] as [ExploreView, string][]).map(([value, label]) => (
-          <button key={value} type="button" aria-current={view === value ? "page" : undefined} onClick={() => chooseView(value)} className={`min-h-11 shrink-0 border-b-2 px-4 py-2 text-sm ${view === value ? "border-action font-semibold text-action" : "border-transparent text-muted hover:text-ink"}`}>{label}</button>
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Explore filters">
+        {([ ["gemini", "All"], ["topics", "Research topics"], ["watched", "Watching"], ["timeline", "Timeline"] ] as [ExploreView, string][]).map(([value, label]) => (
+          <button key={value} type="button" role="tab" aria-selected={view === value} onClick={() => chooseView(value)} className={`min-h-10 rounded-full border px-4 text-sm ${view === value ? "border-action bg-[#E9EEFF] font-semibold text-action" : "border-line bg-white text-muted hover:border-action"}`}>{label}</button>
         ))}
-      </nav>
+      </div>
 
       {view === "gemini" ? <GeminiMarketCatalog embedded /> : null}
       {view === "timeline" ? <MarketTimeline embedded /> : null}

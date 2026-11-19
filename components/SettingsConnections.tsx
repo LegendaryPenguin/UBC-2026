@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/client";
 import { Banner, Button, Card, Empty } from "@/components/ui";
+import { AppDialog } from "@/components/AppDialog";
 
 type GeminiConnectionStatus = {
   configured: boolean;
@@ -126,15 +127,13 @@ export function SettingsConnections({ embedded = false }: { embedded?: boolean }
         <p className="mt-2 text-sm text-muted">Wallet unlink cannot erase chain history or revoke allowances. Review wallet approvals separately from Gemini access.</p>
         <Button href="/wallet" kind="ghost">Open wallet settings</Button>
       </Card>
-      {confirmDisconnect ? <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setConfirmDisconnect(false); }}>
-        <section className="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="disconnect-gemini-title">
-          <p className="source-pill">Gemini account</p>
-          <h2 id="disconnect-gemini-title" className="mt-3 font-serif text-2xl font-bold">Disconnect Gemini?</h2>
-          <p className="mt-3 text-sm">This revokes the app’s stored authorization where Gemini is reachable. It does not cancel open orders or close positions. You can connect again from Settings.</p>
-          {error ? <p role="alert" className="mt-3 text-sm text-bad">{error}</p> : null}
-          <div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" className="app-button min-h-11 rounded-lg border border-line px-4 text-sm font-semibold" onClick={() => setConfirmDisconnect(false)} disabled={busy}>Keep connected</button><button type="button" className="app-button min-h-11 rounded-lg bg-bad px-5 text-sm font-semibold text-white disabled:opacity-50" onClick={() => void disconnect()} disabled={busy}>{busy ? "Disconnecting…" : "Disconnect Gemini"}</button></div>
-        </section>
-      </div> : null}
+      <AppDialog open={confirmDisconnect} titleId="disconnect-gemini-title" onClose={() => { if (!busy) setConfirmDisconnect(false); }} closeOnBackdrop={!busy}>
+        <p className="source-pill">Gemini account</p>
+        <h2 id="disconnect-gemini-title" className="mt-3 font-serif text-2xl font-bold">Disconnect Gemini?</h2>
+        <p className="mt-3 text-sm">This revokes the app’s stored authorization where Gemini is reachable. It does not cancel open orders or close positions. You can connect again from Settings.</p>
+        {error ? <p role="alert" className="mt-3 text-sm text-bad">{error}</p> : null}
+        <div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" className="app-button min-h-11 rounded-lg border border-line px-4 text-sm font-semibold" onClick={() => setConfirmDisconnect(false)} disabled={busy}>Keep connected</button><button type="button" className="app-button min-h-11 rounded-lg bg-bad px-5 text-sm font-semibold text-white disabled:opacity-50" onClick={() => void disconnect()} disabled={busy}>{busy ? "Disconnecting…" : "Disconnect Gemini"}</button></div>
+      </AppDialog>
     </div>
   );
 }

@@ -41,12 +41,15 @@ describe("workspace shell mode control", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Switch context" }));
     expect(localStorage.getItem("thesis_mode")).toBe("live");
+    expect(localStorage.getItem("thesis_data_context")).toBe("live");
     expect(modeChanges).toHaveLength(1);
     expect(modeChanges[0].detail.mode).toBe("live");
+    expect(modeChanges[0].detail.dataContext).toBe("live");
   });
 
   it("routes page mode-change requests through the same confirmation dialog", async () => {
     localStorage.setItem("thesis_mode", "live");
+    localStorage.setItem("thesis_data_context", "live");
     render(<Shell><p>Research workspace</p></Shell>);
     await screen.findByRole("button", { name: /Live market data/ });
 
@@ -56,5 +59,7 @@ describe("workspace shell mode control", () => {
     fireEvent.click(screen.getByRole("button", { name: "Switch context" }));
     act(() => { expect(requestModeChange("paper")).toBe(true); });
     expect(localStorage.getItem("thesis_mode")).toBe("paper");
+    expect(localStorage.getItem("thesis_execution_environment")).toBe("paper");
+    expect(localStorage.getItem("thesis_data_context")).toBe("live");
   });
 });

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, dataContextFromStorage, modeFromStorage } from "@/lib/client";
+import { api, dataContextFromStorage } from "@/lib/client";
 import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
 import { Button, Card, Empty } from "@/components/ui";
 import { VoicePanel } from "@/components/VoicePanel";
@@ -50,7 +50,7 @@ export default function TopicPage() {
           topicSlug: family.slug,
           familyId: family.id,
           familyVersion: family.version,
-          mode: modeFromStorage(),
+          mode: dataContextFromStorage(),
           template: family.predicates.length === 1 && family.contracts.length === 1 ? "binary" : family.predicates.length >= 2 ? "range" : "directional",
           lowerThreshold: family.predicates.length === 1 && family.contracts.length === 1 ? null : lower,
           upperThreshold: family.predicates.length === 1 && family.contracts.length === 1 ? null : upper,

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, dataContextFromStorage, modeFromStorage } from "@/lib/client";
+import { api, dataContextFromStorage } from "@/lib/client";
 import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
 import { VoicePanel } from "@/components/VoicePanel";
 import { Button, Card, Empty, Field, inputCls } from "@/components/ui";
@@ -15,6 +15,7 @@ import { useGeminiMarketStream } from "@/lib/gemini/use-market-stream";
 import { GeminiLiveMarketFeed } from "@/components/GeminiLiveMarketFeed";
 import { formatTime } from "@/lib/format";
 import { AppDrawer } from "@/components/AppDrawer";
+import { AppDialog } from "@/components/AppDialog";
 
 export default function ThesisEditor() {
   const { id } = useParams<{ id: string }>();
@@ -163,7 +164,7 @@ export default function ThesisEditor() {
     try {
       const res = await api<{ thesis: ThesisRevision }>(`/api/theses/${id}`, {
         method: "PATCH",
-        body: JSON.stringify({ ...thesis, action: action === "save" ? undefined : action, mode: modeFromStorage() }),
+        body: JSON.stringify({ ...thesis, action: action === "save" ? undefined : action, mode: dataContextFromStorage() }),
       });
       if (action === "duplicate") {
         router.push(`/theses/${res.thesis.id}`);
@@ -404,18 +405,22 @@ export default function ThesisEditor() {
         </Field>
         <div className="flex flex-wrap gap-2 border-t border-line pt-3"><Button onClick={async () => { if (await save("save")) setEditingView(false); }} disabled={saving !== null}>{saving === "save" ? "Saving…" : "Save draft"}</Button><Button onClick={() => setReviewingConfirmation(true)} disabled={saving !== null || !viewValid}>Review confirmation</Button><Button kind="ghost" onClick={() => setEditingView(false)} disabled={saving !== null}>Cancel</Button></div>
       </Card> : null}
-      {reviewingConfirmation ? (
-        <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setReviewingConfirmation(false); }}>
-          <section className="dialog-panel space-y-4" role="dialog" aria-modal="true" aria-labelledby="confirm-view-title">
-            <div className="flex items-start justify-between gap-3"><div><p className="source-pill">Review your view</p><h2 id="confirm-view-title" className="mt-3 font-serif text-2xl font-bold">Confirm this thesis view?</h2></div><button type="button" aria-label="Back to editing" className="min-h-10 px-3 text-2xl text-muted" onClick={() => setReviewingConfirmation(false)} disabled={saving !== null}>×</button></div>
-            <div className="rounded-xl border border-[#CCD6F5] bg-[#F7F8FF] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">{family?.question}</p><p className="mt-2 text-lg font-semibold">{thesis.template === "binary" ? `${thesis.direction?.toUpperCase() || "YES"} · ${family?.contracts[0]?.label || "selected contract"}` : thesis.template === "directional" ? `${thesis.direction === "no" ? "Below" : "At or above"} ${thesis.lowerThreshold ?? "an unset threshold"}` : `${thesis.template === "outside" ? "Outside" : "Between"} ${thesis.lowerThreshold ?? "an unset lower bound"} and ${thesis.upperThreshold ?? "an unset upper bound"}`}</p><p className="mt-1 text-xs text-muted">Settlement {family?.closeTime ? formatTime(family.closeTime) : "deadline not supplied"} · {family?.mode === "live" ? "Gemini live data" : "Illustrative replay"}</p></div>
-            {thesis.rationale ? <div><p className="text-sm font-semibold">Your rationale</p><p className="mt-1 whitespace-pre-wrap text-sm text-muted">{thesis.rationale}</p></div> : null}
-            {!viewValid ? <p role="alert" className="rounded-lg border border-bad/30 bg-[#FFF5F4] p-3 text-sm text-bad">Choose valid boundaries from the listed contracts before confirming.</p> : <p className="text-sm text-muted">Confirming saves this version and opens Build. It does not request a quote, connect a wallet, or submit a trade.</p>}
-            <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-3"><Button onClick={() => setReviewingConfirmation(false)} kind="ghost" disabled={saving !== null}>Back to editing</Button><Button onClick={() => void save("confirm")} disabled={saving !== null || !viewValid}>{saving === "confirm" ? "Saving confirmed view…" : "Confirm view & build"}</Button></div>
-          </section>
+      <AppDialog open={reviewingConfirmation} titleId="confirm-view-title" onClose={() => { if (!saving) setReviewingConfirmation(false); }} closeOnBackdrop={!saving}>
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-3"><div><p className="source-pill">Review your view</p><h2 id="confirm-view-title" className="mt-3 font-serif text-2xl font-bold">Confirm this thesis view?</h2></div><button type="button" aria-label="Back to editing" className="min-h-10 px-3 text-2xl text-muted" onClick={() => setReviewingConfirmation(false)} disabled={saving !== null}>×</button></div>
+          <div className="rounded-xl border border-[#CCD6F5] bg-[#F7F8FF] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">{family?.question}</p><p className="mt-2 text-lg font-semibold">{thesis?.template === "binary" ? `${thesis.direction?.toUpperCase() || "YES"} · ${family?.contracts[0]?.label || "selected contract"}` : thesis?.template === "directional" ? `${thesis.direction === "no" ? "Below" : "At or above"} ${thesis.lowerThreshold ?? "an unset threshold"}` : `${thesis?.template === "outside" ? "Outside" : "Between"} ${thesis?.lowerThreshold ?? "an unset lower bound"} and ${thesis?.upperThreshold ?? "an unset upper bound"}`}</p><p className="mt-1 text-xs text-muted">Settlement {family?.closeTime ? formatTime(family.closeTime) : "deadline not supplied"} · {family?.mode === "live" ? "Gemini live data" : "Illustrative replay"}</p></div>
+          {thesis?.rationale ? <div><p className="text-sm font-semibold">Your rationale</p><p className="mt-1 whitespace-pre-wrap text-sm text-muted">{thesis.rationale}</p></div> : null}
+          {!viewValid ? <p role="alert" className="rounded-lg border border-bad/30 bg-[#FFF5F4] p-3 text-sm text-bad">Choose valid boundaries from the listed contracts before confirming.</p> : <p className="text-sm text-muted">Confirming saves this version and opens Build. It does not request a quote, connect a wallet, or submit a trade.</p>}
+          <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-3"><Button onClick={() => setReviewingConfirmation(false)} kind="ghost" disabled={saving !== null}>Back to editing</Button><Button onClick={() => void save("confirm")} disabled={saving !== null || !viewValid}>{saving === "confirm" ? "Saving confirmed view…" : "Confirm view & build"}</Button></div>
         </div>
-      ) : null}
-      {pendingDestination ? <div className="dialog-backdrop" role="presentation"><section className="dialog-panel space-y-4" role="dialog" aria-modal="true" aria-labelledby="unsaved-title"><div className="flex items-start justify-between gap-3"><div><p className="source-pill status-pill--warning">Unsaved changes</p><h2 id="unsaved-title" className="mt-3 font-serif text-2xl font-bold">Leave this research board?</h2></div><button type="button" aria-label="Stay on this thesis" className="min-h-10 px-3 text-2xl text-muted" onClick={() => setPendingDestination("")}>×</button></div><p className="text-sm text-muted">Your view edits have not been saved. Choose whether to keep them before leaving.</p><div className="flex flex-wrap justify-end gap-2 border-t border-line pt-3"><Button kind="ghost" onClick={() => setPendingDestination("")}>Stay</Button><Button kind="danger" onClick={() => void resolvePendingNavigation("discard")}>Discard unsaved</Button><Button onClick={() => void resolvePendingNavigation("save")} disabled={saving !== null}>{saving === "save" ? "Saving…" : "Save and leave"}</Button></div></section></div> : null}
+      </AppDialog>
+      <AppDialog open={Boolean(pendingDestination)} titleId="unsaved-title" onClose={() => setPendingDestination("")} closeOnBackdrop={false}>
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-3"><div><p className="source-pill status-pill--warning">Unsaved changes</p><h2 id="unsaved-title" className="mt-3 font-serif text-2xl font-bold">Leave this research board?</h2></div><button type="button" aria-label="Stay on this thesis" className="min-h-10 px-3 text-2xl text-muted" onClick={() => setPendingDestination("")}>×</button></div>
+          <p className="text-sm text-muted">Your view edits have not been saved. Choose whether to keep them before leaving.</p>
+          <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-3"><Button kind="ghost" onClick={() => setPendingDestination("")}>Stay</Button><Button kind="danger" onClick={() => void resolvePendingNavigation("discard")}>Discard unsaved</Button><Button onClick={() => void resolvePendingNavigation("save")} disabled={saving !== null}>{saving === "save" ? "Saving…" : "Save and leave"}</Button></div>
+        </div>
+      </AppDialog>
       <AppDrawer open={Boolean(selectedEvidence)} titleId="evidence-detail-title" onClose={() => setSelectedEvidence(null)}>
         {selectedEvidence ? <div className="space-y-4"><div className="flex items-start justify-between gap-3"><div><p className="source-pill">Evidence detail</p><h2 id="evidence-detail-title" className="mt-3 font-serif text-2xl font-bold">{selectedEvidence.title}</h2></div><button type="button" className="min-h-10 px-3 text-2xl text-muted" aria-label="Close evidence detail" onClick={() => setSelectedEvidence(null)}>×</button></div><p className="text-xs text-muted">{selectedEvidence.publisher} · retrieved {formatTime(selectedEvidence.retrievedAt)}</p><div className="rounded-xl border border-line p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">Source claim</p><p className="mt-2 whitespace-pre-wrap text-sm">{selectedEvidence.excerpt}</p></div><div className="rounded-xl bg-[#EEF2FF] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-action">Relationship to view</p><p className="mt-2 text-sm">{selectedEvidence.stance === "supports" ? "Potentially supports the current view." : selectedEvidence.stance === "challenges" ? "Challenges an assumption in the current view." : "Adds context without changing the selected boundaries."}</p></div><div className="flex flex-wrap gap-2"><Button href={selectedEvidence.url}>Open original</Button><Button kind="secondary" onClick={() => toggleSavedEvidence(selectedEvidence)}>{savedEvidence.some((item) => item.id === selectedEvidence.id) ? "Remove from thesis" : "Save to thesis"}</Button><Button kind="ghost" onClick={() => { setAssistantPrompt(`Explain this source in the context of my view: ${selectedEvidence.excerpt}`); setSelectedEvidence(null); }}>Ask about this</Button></div></div> : null}
       </AppDrawer>

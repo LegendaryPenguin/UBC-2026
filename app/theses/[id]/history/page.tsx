@@ -9,6 +9,7 @@ import { Button, Card, Empty } from "@/components/ui";
 import { ThesisWorkspaceTabs } from "@/components/ThesisWorkspaceTabs";
 import { formatUsdc } from "@/lib/format";
 import { formatTime } from "@/lib/format";
+import { AppDialog } from "@/components/AppDialog";
 
 type HistoryEvent = {
   id: string;
@@ -148,7 +149,9 @@ export default function History() {
           </Card>
           <Card className="space-y-3"><div><h2 className="font-serif text-xl font-bold">Reflection</h2><p className="mt-1 text-sm text-muted">Add a note about what changed or what you’ll watch next. It stays attached to this guest or signed-in revision.</p></div><textarea className="app-input min-h-28 w-full resize-y p-3 text-sm" maxLength={2000} value={reflection} onChange={(event) => setReflection(event.target.value)} placeholder="Why I changed the view, what I learned, or what I’ll monitor next…"/><Button onClick={() => void saveReflection()} disabled={!reflection.trim()}>Save reflection</Button>{reflectionSavedAt ? <p role="status" className="text-xs text-muted">Saved {formatTime(reflectionSavedAt)}</p> : null}</Card></aside>
       </div> : null}
-      {restoreOpen && selected ? <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !pending) setRestoreOpen(false); }}><section className="dialog-panel space-y-4" role="dialog" aria-modal="true" aria-labelledby="restore-history-title"><div><p className="source-pill">Restore snapshot</p><h2 id="restore-history-title" className="mt-3 font-serif text-2xl font-bold">Restore revision {selected.revision} as a new draft?</h2></div><p className="text-sm text-muted">A new draft will be created from this saved view and open in Research. This does not rewrite history or change any existing quote, order, or position.</p><div className="flex flex-wrap justify-end gap-2 border-t border-line pt-3"><Button kind="ghost" onClick={() => setRestoreOpen(false)} disabled={pending === "restore"}>Cancel</Button><Button onClick={() => void restore()} disabled={pending !== ""}>{pending === "restore" ? "Creating draft…" : "Restore as new draft"}</Button></div></section></div> : null}
+      <AppDialog open={restoreOpen && Boolean(selected)} titleId="restore-history-title" onClose={() => { if (!pending) setRestoreOpen(false); }} closeOnBackdrop={!pending}>
+        {selected ? <div className="space-y-4"><div><p className="source-pill">Restore snapshot</p><h2 id="restore-history-title" className="mt-3 font-serif text-2xl font-bold">Restore revision {selected.revision} as a new draft?</h2></div><p className="text-sm text-muted">A new draft will be created from this saved view and open in Research. This does not rewrite history or change any existing quote, order, or position.</p><div className="flex flex-wrap justify-end gap-2 border-t border-line pt-3"><Button kind="ghost" onClick={() => setRestoreOpen(false)} disabled={pending === "restore"}>Cancel</Button><Button onClick={() => void restore()} disabled={pending !== ""}>{pending === "restore" ? "Creating draft…" : "Restore as new draft"}</Button></div></div> : null}
+      </AppDialog>
     </div>
   );
 }

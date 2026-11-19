@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/client";
 import { Banner, Button, Card, Empty } from "@/components/ui";
 import { formatTime } from "@/lib/format";
+import { AppDialog } from "@/components/AppDialog";
 
 type Bucket = "active" | "filled" | "cancelled" | "rejected";
 type ConnectionStatus = {
@@ -202,20 +203,21 @@ export function PortfolioOrders({ embedded = false }: { embedded?: boolean }) {
           </div>
         </>
       ) : null}
-      {cancelOrderId ? (() => {
-        const order = orders.find((item) => String(item.orderId) === cancelOrderId);
-        if (!order) return null;
-        return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && cancelling !== cancelOrderId) setCancelOrderId(null); }}>
-          <section className="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="cancel-order-title">
-            <p className="source-pill">Gemini order · {cancelOrderId}</p>
-            <h2 id="cancel-order-title" className="mt-3 font-serif text-2xl font-bold">Request order cancellation?</h2>
-            <p className="mt-3 text-sm">{order.contractMetadata?.contractName || order.symbol} · {order.side} {order.outcome} · {order.remainingQuantity} remaining</p>
-            <p className="mt-3 rounded-lg bg-[#FFF8E7] p-3 text-sm text-muted">This sends Gemini a cancellation request. A fill may happen before Gemini processes it, so the order can become partially filled or complete. Existing filled quantities remain in your Portfolio.</p>
-            {error ? <p role="alert" className="mt-3 text-sm text-bad">{error}</p> : null}
-            <div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" className="app-button min-h-11 rounded-lg border border-line px-4 text-sm font-semibold" onClick={() => setCancelOrderId(null)} disabled={cancelling === cancelOrderId}>Keep order</button><button type="button" className="app-button min-h-11 rounded-lg bg-bad px-5 text-sm font-semibold text-white disabled:opacity-50" onClick={() => void cancelOrder()} disabled={cancelling === cancelOrderId}>{cancelling === cancelOrderId ? "Sending request…" : "Send cancel request"}</button></div>
-          </section>
-        </div>;
-      })() : null}
+      {(() => {
+        const order = cancelOrderId ? orders.find((item) => String(item.orderId) === cancelOrderId) : null;
+        return (
+          <AppDialog open={Boolean(order)} titleId="cancel-order-title" onClose={() => { if (cancelling !== cancelOrderId) setCancelOrderId(null); }} closeOnBackdrop={cancelling !== cancelOrderId}>
+            {order ? <>
+              <p className="source-pill">Gemini order · {cancelOrderId}</p>
+              <h2 id="cancel-order-title" className="mt-3 font-serif text-2xl font-bold">Request order cancellation?</h2>
+              <p className="mt-3 text-sm">{order.contractMetadata?.contractName || order.symbol} · {order.side} {order.outcome} · {order.remainingQuantity} remaining</p>
+              <p className="mt-3 rounded-lg bg-[#FFF8E7] p-3 text-sm text-muted">This sends Gemini a cancellation request. A fill may happen before Gemini processes it, so the order can become partially filled or complete. Existing filled quantities remain in your Portfolio.</p>
+              {error ? <p role="alert" className="mt-3 text-sm text-bad">{error}</p> : null}
+              <div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" className="app-button min-h-11 rounded-lg border border-line px-4 text-sm font-semibold" onClick={() => setCancelOrderId(null)} disabled={cancelling === cancelOrderId}>Keep order</button><button type="button" className="app-button min-h-11 rounded-lg bg-bad px-5 text-sm font-semibold text-white disabled:opacity-50" onClick={() => void cancelOrder()} disabled={cancelling === cancelOrderId}>{cancelling === cancelOrderId ? "Sending request…" : "Send cancel request"}</button></div>
+            </> : null}
+          </AppDialog>
+        );
+      })()}
     </div>
   );
 }
