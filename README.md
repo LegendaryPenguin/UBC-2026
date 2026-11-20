@@ -29,6 +29,16 @@ npm run build
 
 For the Solidity suite, use Foundry from `contracts/` with `forge-std` installed, then run `forge test`.
 
+## Chrome article research demo
+
+1. Start Thesis with `npm run dev -- --port 3002`.
+2. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**. Select the `chrome-extension` folder in this repository.
+3. Open the [Texas–Texas A&M football rivalry article](https://en.wikipedia.org/wiki/Texas%E2%80%93Texas_A%26M_football_rivalry). Click the Thesis extension and choose **Open research in Thesis**.
+
+Thesis opens a new research tab with highlights from the captured article and links to research from Texas Athletics, Texas A&M Athletics, and the SEC. Set `XAI_API_KEY` in `.env.local` and restart Thesis to enable the Grok brief. With Grok enabled, the Thesis server sends the captured title and text to xAI. The demo can show article highlights and its source cards without a key.
+
+The extension captures a text selection or the readable article body, up to 6,500 characters. It shares the capture when you choose **Open research in Thesis**. Use **Thesis app address** in the popup if you run the app on a different port or an HTTPS host. The rivalry demo includes curated references. Other pages can still open in Thesis with their captured text.
+
 ## Economics and risk
 
 A payoff table sets a USDC payout for each mutually exclusive outcome. The escrow design locks the maker's maximum payout alongside the buyer's premium on acceptance. After resolution, the holder receives the recorded payout and the maker receives the residual and premium. Fees can increase the buyer's loss. Each live quote commits to a settlement longstop and a fixed one-hour correction window. The authorized resolver can propose or correct a result only when the full window fits before longstop; anyone can finalize after the delay, while an open position can only be voided after longstop. Gemini evidence hashes are audit references, not proof that Gemini's offchain result is correct. Early exit requires an available buyback offer.

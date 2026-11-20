@@ -1,0 +1,75 @@
+@font-face {
+  font-family: Thesis Sans;
+  src: url('assets/NotoSans-Regular.woff') format('woff');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: Thesis Serif;
+  src: url('assets/NotoSerif-Bold.woff') format('woff');
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  color: #182329;
+  background: #f4f2ed;
+  font: 13px/1.5 'Thesis Sans', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; width: 340px; }
+header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 18px;
+  background: #fff;
+  border-bottom: 1px solid #dedcd5;
+  font: 700 23px/1.2 'Thesis Serif', Georgia, serif;
+}
+main { padding: 18px; }
+h1 {
+  margin: 0 0 12px;
+  font: 700 23px/1.2 'Thesis Serif', Georgia, serif;
+  letter-spacing: -.035em;
+}
+p { margin: 0; }
+.article {
+  padding: 12px;
+  overflow-wrap: anywhere;
+  border: 1px solid #dedcd5;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 8px #18232908;
+}
+#title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  font: 700 16px/1.35 'Thesis Serif', Georgia, serif;
+}
+#source { margin-bottom: 4px; color: #52616b; font-size: 11px; }
+#status { margin: 10px 0 14px; color: #52616b; }
+#status[data-error] { color: #ad3434; }
+button, input { width: 100%; min-height: 44px; border-radius: 8px; font: inherit; }
+button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #3559e0;
+  background: #3559e0;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { background: #2948bd; border-color: #2948bd; }
+button:disabled { opacity: .48; cursor: default; }
+details { margin-top: 12px; color: #52616b; }
+summary { cursor: pointer; }
+label { display: block; margin: 8px 0 4px; }
+input { border: 1px solid #89939a; padding: 8px 10px; color: #182329; }
+:focus-visible { outline: 3px solid #3559e0; outline-offset: 2px; }

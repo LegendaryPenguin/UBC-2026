@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Thesis Article Research",
+  "version": "0.1.0",
+  "description": "Open the article you’re reading in Thesis for research.",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_title": "Research in Thesis",
+    "default_popup": "popup.html",
+    "default_icon": { "32": "assets/thesis-mark-32.png" }
+  },
+  "icons": { "32": "assets/thesis-mark-32.png", "128": "assets/thesis-mark-128.png" }
+}
