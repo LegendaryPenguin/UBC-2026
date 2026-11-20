@@ -56,7 +56,8 @@ function normalizePayouts(values: bigint[], target: bigint, base: bigint | null)
 }
 
 export default function ComparePage() {
-  const { id } = useParams<{ id: string }>();
+  const routeParams = useParams<{ id: string }>();
+  const [id] = useState(routeParams.id);
   const { targetRange } = useResearchNotebook(`thesis:${id}`);
   const [thesis, setThesis] = useState<ThesisRevision | null>(null);
   const [family, setFamily] = useState<MarketFamily | null>(null);
@@ -219,8 +220,8 @@ export default function ComparePage() {
   if (!thesis || !family) return <Card><p role="alert" className="text-sm text-bad">{error || "Thesis could not be loaded."}</p></Card>;
   if (targetRange) return <ResearchRangeNotice thesisId={id} range={targetRange} />;
   if (thesis.status === "draft") return (
-    <div className="screen-workspace space-y-4">
-      <header className="workspace-header"><h1 className="workspace-title screen-heading">Compare constructions</h1></header>
+    <div className="screen-workspace screen-compare demo-polished space-y-4">
+      <header className="workspace-header"><h1 className="workspace-title screen-heading">Choose how your view pays</h1></header>
       <ThesisWorkspaceTabs thesisId={id} current="Compare" lockedTabs={["Build"]} />
       <Card><h2 className="font-serif text-xl">Confirm your view first</h2><p className="mt-2 text-sm text-muted">Comparison is based on a saved, confirmed view. Return to Research and review the proposed boundaries first.</p><div className="mt-3"><Button href={`/theses/${id}`}>Return to Research</Button></div></Card>
     </div>
@@ -263,7 +264,7 @@ export default function ComparePage() {
     : undefined;
   const series = calculations?.desired ? [
     ...(basketBasisRows ? [{ name: "Gemini basket", values: basketBasisRows, color: "#C57A36" }] : []),
-    ...(ticketBasisRows && ticket ? [{ name: "Single Gemini ticket", values: ticketBasisRows, color: "#718394" }] : []),
+
     ...(showArc && arcBasisRows ? [{ name: "Arc custom", values: arcBasisRows, color: "#3559E0" }] : []),
   ] : [];
   const compactGroups = rangeScenarioGroups(family, thesis, [
@@ -288,12 +289,12 @@ export default function ComparePage() {
   const action = { label: "Review selected construction", href: reviewHref, disabled: !budgetValid || basis === "equal-budget" && (!comparisonSpendValid || !canEqualBudget) };
 
   return (
-    <div className="screen-workspace space-y-4">
-      <header className="workspace-header"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-muted">{family.title} · {mode === "replay" ? "illustrative replay" : mode}</p><h1 className="workspace-title screen-heading">Compare constructions</h1><p className="mt-2 text-sm text-muted">Select an explicit basis, inspect each settlement scenario, then review one construction.</p></div><span className="status-pill status-pill--good">View confirmed · revision {thesis.revision}</span></div></header>
+    <div className="screen-workspace screen-compare demo-polished space-y-4">
+      <header className="workspace-header"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-muted">{family.title} · {mode === "replay" ? "illustrative replay" : mode}</p><h1 className="workspace-title screen-heading">Choose how your view pays</h1><p className="mt-2 text-sm text-muted">Select an explicit basis, inspect each settlement scenario, then review one construction.</p></div><span className="status-pill status-pill--good">View confirmed · revision {thesis.revision}</span></div></header>
       <ThesisWorkspaceTabs thesisId={id} current="Compare" />
-      {family.mode === "replay" ? <p className="rounded-lg bg-[#FFF8E7] p-3 text-xs text-muted">Replay prices are recorded demonstration fixtures, not current Gemini quotes. Paper mode can request a simulated Arc quote; no live Gemini order is supported from this data.</p> : null}
+
       {error ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{error}</p> : null}
-      <div className="grid gap-3 md:grid-cols-2">
+      <details className="demo-details demo-comparison-settings"><summary>Comparison settings</summary><div className="grid gap-3 md:grid-cols-2">
         <Field label="Desired view maximum payout (USDC)" hint="Used by the confirmed view and equal maximum payout basis. An edited basket can have a different maximum.">
           <input className={inputCls()} type="number" min="0.01" step="0.01" value={budget} onChange={(event) => changeBudget(event.target.value)} />
         </Field>
@@ -305,7 +306,7 @@ export default function ComparePage() {
           </select>
         </Field>
         {basis === "equal-budget" ? <Field label="Shared reference spend (USDC)" hint="Normalized payouts use this same reference spend; they are not executable quotes."><input className={inputCls()} type="number" min="0.01" step="0.01" value={comparisonSpend} onChange={(event) => updateComparisonSpend(event.target.value)} /></Field> : null}
-      </div>
+      </div></details>
       {basis === "equal-budget" && !canEqualBudget ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">Equal-spend normalization is unavailable until both Gemini constructions have comparable reference costs. An unquoted Arc position cannot be normalized to the same budget.</p> : null}
       {!budgetValid ? <p role="alert" className="text-sm text-bad">Enter a positive amount to update the comparison and review this construction.</p> : null}
       {basis === "equal-budget" && !comparisonSpendValid ? <p role="alert" className="text-sm text-bad">Enter a positive shared spend to update this comparison.</p> : null}
@@ -313,7 +314,13 @@ export default function ComparePage() {
       {calculations?.desired ? (
         <div className="workspace-layout">
           <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
+            <Card>
+              <h2 className="font-serif text-xl">Payout by settlement scenario</h2>
+              <p className="mt-1 text-sm text-muted">{basis === "per-construction" ? "Each construction keeps its own payout size." : basis === "equal-max-payout" ? `Normalized to ${budget} USDC maximum gross payout.` : `Normalized to ${comparisonSpend} USDC reference spend when comparable costs are available.`} Payout is gross; reference costs exclude fees and are not executable quotes.</p>
+              <div className="mt-3">{series.length ? <PayoffChart labels={scenarioRows.map(({ label }) => label)} series={displayedSeries} selectedIndex={chartIndex} /> : <p role="status" className="rounded-lg bg-[#F4F2ED] p-4 text-sm text-muted">No comparable cost basis is available for the selected constructions. Switch to Per construction or Equal maximum payout.</p>}</div>
+              {compactGroups ? <Button kind="ghost" onClick={() => setShowAllScenarios((value) => !value)}>{showAllScenarios ? "Show three ranges" : `Show all ${family.scenarios.length} scenarios`}</Button> : null}
+            </Card>
+            <div className="demo-construction-options grid gap-3 md:grid-cols-2">
               <button type="button" onClick={() => choose("gemini-basket")} aria-pressed={activeConstruction === "gemini-basket"} className={`rounded-card border p-4 text-left ${activeConstruction === "gemini-basket" ? "border-action bg-[#F2F5FF]" : "border-line bg-white"}`}>
                 <span className="block font-semibold">Gemini basket</span><span className="mt-1 block text-sm text-muted">{basket.filter((leg) => leg.enabled).length} separate contract leg(s) · preferred market construction</span>
               </button>
@@ -324,19 +331,13 @@ export default function ComparePage() {
                 <span className="block font-semibold">Arc custom range</span><span className="mt-1 block text-sm text-muted">Distinct payout shape · {mode === "paper" ? "paper quote available" : "firm quote service available"}</span>
               </button> : null}
             </div>
-            <Card>
-              <h2 className="font-serif text-xl">Payout by settlement scenario</h2>
-              <p className="mt-1 text-sm text-muted">{basis === "per-construction" ? "Each construction keeps its own payout size." : basis === "equal-max-payout" ? `Normalized to ${budget} USDC maximum gross payout.` : `Normalized to ${comparisonSpend} USDC reference spend when comparable costs are available.`} Payout is gross; reference costs exclude fees and are not executable quotes.</p>
-              <div className="mt-3">{series.length ? <PayoffChart labels={scenarioRows.map(({ label }) => label)} series={displayedSeries} selectedIndex={chartIndex} /> : <p role="status" className="rounded-lg bg-[#F4F2ED] p-4 text-sm text-muted">No comparable cost basis is available for the selected constructions. Switch to Per construction or Equal maximum payout.</p>}</div>
-              {compactGroups ? <Button kind="ghost" onClick={() => setShowAllScenarios((value) => !value)}>{showAllScenarios ? "Show three ranges" : `Show all ${family.scenarios.length} scenarios`}</Button> : null}
-            </Card>
-            <Card>
+<details className="demo-details"><summary>Scenario comparison</summary>            <Card>
               <h2 className="font-serif text-xl">Scenario comparison</h2>
               <p className="mt-1 text-sm text-muted">Choose a settlement state to keep it selected in the view rail. A missing cost is shown as not comparable.</p>
               <div className="table-scroll mt-3"><table className="min-w-[620px] text-left text-sm"><thead><tr><th>Settlement scenario</th>{basketBasisRows ? <th>Gemini basket</th> : <th>Gemini basket · unavailable</th>}{ticket ? <th>One Gemini position</th> : null}{showArc ? <th>Arc custom</th> : null}{basis !== "equal-budget" ? <th>Confirmed view</th> : null}</tr></thead><tbody>{scenarioRows.map((scenario, rowIndex) => <tr key={scenario.id} className={rowIndex === chartIndex ? "bg-[#E9EEFF]" : ""}><td><button type="button" className="font-medium underline decoration-dotted" aria-pressed={rowIndex === chartIndex} onClick={() => selectScenario(scenario.id)}>{scenario.label}</button></td><td className="tabular-nums">{basketBasisRows ? `${formatUsdcFixed(basketBasisRows[scenario.index] ?? 0n)} USDC` : "Not comparable"}</td>{ticket ? <td className="tabular-nums">{ticketBasisRows ? `${formatUsdcFixed(ticketBasisRows[scenario.index] ?? 0n)} USDC` : "Not comparable · cost unavailable"}</td> : null}{showArc ? <td className="tabular-nums">{arcBasisRows ? `${formatUsdcFixed(arcBasisRows[scenario.index] ?? 0n)} USDC` : "Not comparable · quote unavailable"}</td> : null}{basis !== "equal-budget" ? <td className="tabular-nums">{formatUsdcFixed(desiredBasisRows?.[scenario.index] ?? 0n)} USDC</td> : null}</tr>)}</tbody></table></div>
               {basis === "equal-budget" && showArc ? <p className="mt-2 text-xs text-muted">Arc is omitted from equal-spend values until an actual quote provides a comparable cost.</p> : null}
-            </Card>
-            <Card>
+            </Card></details>
+<details className="demo-details"><summary>What each construction means</summary>            <Card>
               <h2 className="font-serif text-xl">What each construction means</h2>
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full text-left text-sm">
@@ -349,7 +350,7 @@ export default function ComparePage() {
                 </table>
               </div>
               <p className="mt-3 text-xs text-muted">“Payout below cost” lists losing scenarios when costs are known. Gemini cost estimates use displayed ask-side references, exclude fees, size, and slippage, and are not executable quotes. A Gemini basket uses independent orders, not an exchange combo.</p>
-            </Card>
+            </Card></details>
             {activeConstruction !== "arc-custom" ? <Card><h2 className="font-serif text-lg">No Gemini order submitted</h2><p className="mt-2 text-sm text-muted">{geminiTradeState === "available" ? "This comparison does not submit the basket, because its legs are independent and can partially fill. Review individual orders at the Gemini event." : "Native Gemini trading remains gated until a sandbox order, status lookup, and position/fill retrieval are verified. You can continue with market research and payoff comparisons."}</p></Card> : null}
             <WorkspaceAssistant slug={family.slug} family={family} evidence={evidence.length ? evidence : evidenceForSlug(family.slug, family.mode)} thesis={thesis} context="compare" maxPayout={budget} title="Talk through the comparison" />
           </div>

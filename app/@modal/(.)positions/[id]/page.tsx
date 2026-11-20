@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import PositionPage from "../../../positions/[id]/page";
 
 export default function PositionDrawerRoute() {
   const router = useRouter();
+  const { id } = useParams<{ id: string }>();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -17,7 +18,7 @@ export default function PositionDrawerRoute() {
 
   return <div className="position-drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) router.back(); }}>
     <section className="position-drawer" role="dialog" aria-modal="true" aria-label="Position details">
-      <header className="position-drawer__header"><span className="text-sm font-semibold">Position details</span><button type="button" className="min-h-10 rounded-lg border border-line px-3 text-sm" onClick={() => router.back()}>Close</button></header>
+      <header className="position-drawer__header"><span className="text-sm font-semibold">Position details</span><a className="text-sm text-action" href={`/positions/${id}`}>Open full position</a><button type="button" className="min-h-10 rounded-lg border border-line px-3 text-sm" onClick={() => router.back()}>Close</button></header>
       <div className="position-drawer__body"><PositionPage /></div>
     </section>
   </div>;

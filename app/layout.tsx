@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "@/styles/thesis.css";
 import "./globals.css";
+import "@/styles/demo-polish.css";
 import { Providers } from "@/components/Providers";
 import { Shell } from "@/components/Shell";
 

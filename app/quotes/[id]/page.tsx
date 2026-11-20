@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api, dataContextFromStorage, executionEnvironmentFromStorage } from "@/lib/client";
-import type { PositionRecord, SignedQuote } from "@/lib/domain/types";
+import type { PositionRecord, SignedQuote, PositionResearchContext } from "@/lib/domain/types";
 import { formatUsdc } from "@/lib/format";
 import { Button, Card, Field, inputCls } from "@/components/ui";
 import { Icon } from "@/components/thesis";
@@ -11,7 +11,7 @@ import { erc20Abi, escrowAbi } from "@/lib/escrow/abi";
 import { arcTestnet, publicEscrow, publicUsdc } from "@/lib/chain";
 import { useAccount, usePublicClient, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 
-type QuoteDetail = SignedQuote & { thesisId?: string; mode?: string };
+type QuoteDetail = SignedQuote & { thesisId?: string; mode?: string; sourceThesis?: PositionResearchContext };
 type RecordedPosition = Pick<PositionRecord, "id" | "thesisId" | "premium" | "fee">;
 
 function readAttempt(key: string) {
@@ -31,7 +31,8 @@ async function recordedPosition(quoteId: string) {
 }
 
 export default function QuotePage() {
-  const { id } = useParams<{ id: string }>();
+  const routeParams = useParams<{ id: string }>();
+  const id = routeParams.id;
   const router = useRouter();
   const { address, chainId } = useAccount();
   const [quote, setQuote] = useState<QuoteDetail | null>(null);
@@ -383,7 +384,20 @@ export default function QuotePage() {
     const value = quote.payouts[index];
     return { label, payout: typeof value === "string" && /^\d+$/.test(value) ? BigInt(value) : null };
   });
+  const compactAmounts = scenarioAmounts.reduce<{ label: string; payout: bigint | null; first: string; last: string }[]>((groups, row) => {
+    const previous = groups[groups.length - 1];
+    if (previous && previous.payout === row.payout) { previous.last = row.label; previous.label = `${previous.first} through ${row.label}`; }
+    else groups.push({ ...row, first: row.label, last: row.label });
+    return groups;
+  }, []);
   const hasFullSchedule = scenarioAmounts.length > 0 && scenarioAmounts.length === quote.payouts.length && scenarioAmounts.every(({ payout }) => payout !== null);
+  compactAmounts.forEach((group, index) => {
+    if (group.first === group.last) return;
+    const upper = group.last.match(/below (.+)$/i)?.[1];
+    const lower = group.first.match(/^At least (.+?)(?: and below|$)/i)?.[1];
+    if (index === 0 && /^Below /i.test(group.first) && upper) group.label = `Below ${upper}`;
+    else if (index === compactAmounts.length - 1 && lower && /^At least [^a-z]+$/i.test(group.last)) group.label = `At least ${lower}`;
+  });
   const worstLoss = hasFullSchedule ? scenarioAmounts.reduce((worst, row) => {
     const loss = quoteCost - row.payout!;
     return loss > worst ? loss : worst;
@@ -398,12 +412,14 @@ export default function QuotePage() {
           <h1 className="font-serif text-2xl font-bold">{paper ? "Paper position created" : "Arc position recorded"}</h1>
           <p className="text-sm th-muted">{paper ? "Your simulated position is ready to track." : "Your confirmed Arc acceptance is linked to this position."}</p>
         </div></div>
-        <dl className="quote-receipt">
+        {quote.sourceThesis ? <div className="rounded-xl border border-line p-4"><p className="font-semibold">{quote.sourceThesis.confirmedView}</p><p className="text-sm text-muted">{quote.sourceThesis.rationale}</p></div> : null}
+        <div className="demo-quote-metrics"><div><span>{paper ? "Simulated cost" : "Total cost"}</span><strong>{formatUsdc(resultCost)}</strong><small>USDC</small></div><div><span>Maximum payout</span><strong>{formatUsdc(BigInt(quote.maxPayout))}</strong><small>USDC</small></div></div>
+        <details className="demo-details"><summary>Receipt details</summary><dl className="quote-receipt">
           <div><dt>Position ID</dt><dd>{position.id}</dd></div>
           <div><dt>Quote ID</dt><dd>{quote.id}</dd></div>
           <div><dt>{paper ? "Simulated cost" : "Total cost"}</dt><dd>{formatUsdc(resultCost)} USDC</dd></div>
-        </dl>
-        <div className="flex flex-wrap gap-2"><Button href={`/positions/${position.id}`} icon="arrow-right">Open position</Button><Button href={resultThesis ? `/theses/${resultThesis}` : "/theses"} kind="secondary">Return to thesis</Button></div>
+        </dl></details>
+        <div className="flex flex-wrap gap-2"><a className="th-button th-button--primary" href={`/positions/${position.id}`}>Open position</a><a className="th-button" href={resultThesis ? `/theses/${resultThesis}` : "/theses"}>Return to thesis</a></div>
       </Card>
     );
   }
@@ -423,7 +439,8 @@ export default function QuotePage() {
       {quote.status === "unavailable" ? <p role="status" className="th-alert th-alert--warning text-sm">{quote.unavailableReason || "This offer is unavailable."}</p> : null}
       {accepted ? <p role="status" className="th-alert text-sm">{checking ? "Finding the recorded position…" : "This quote was already accepted. Check for the recorded position."}</p> : null}
       <Card>
-        <h2 className="font-serif text-xl">Exact terms</h2>
+        <div className="demo-quote-metrics"><div><span>Total cost</span><strong>{formatUsdc(quoteCost)}</strong><small>USDC · includes fees</small></div><div><span>Maximum loss</span><strong>{worstLoss === null ? "Unknown" : formatUsdc(worstLoss)}</strong><small>USDC</small></div></div>
+        <details className="demo-details"><summary>Exact quote terms</summary><h2 className="font-serif text-xl">Exact terms</h2>
         <dl className="quote-terms">
           <div><dt>Premium</dt><dd>{formatUsdc(BigInt(quote.premium))} USDC</dd></div>
           <div><dt>{paper ? "Simulated fee" : "Fee"}</dt><dd>{formatUsdc(BigInt(quote.fee))} USDC</dd></div>
@@ -437,10 +454,10 @@ export default function QuotePage() {
           {quote.signature !== "0x" ? <li>A proposed result has a {Math.ceil(quote.finalizationDelay / 3600)} hour correction window. After the delay, anyone may finalize before the longstop; any still-open position is refundable at the longstop.</li> : null}
           {!paper ? <li className="break-all">Escrow {quote.escrow}</li> : null}
         </ul>
-        <div className="table-scroll mt-4 max-h-60 overflow-y-auto overscroll-contain" tabIndex={0} aria-label="Full quoted payout schedule">
+        </details><div className="table-scroll mt-4 max-h-60 overflow-y-auto overscroll-contain" tabIndex={0} aria-label="Full quoted payout schedule">
           <table className="quote-scenarios text-sm">
             <thead><tr><th>Settlement scenario</th><th>Gross payout</th><th>Net result</th></tr></thead>
-            <tbody>{scenarioAmounts.map(({ label, payout }, index) => (
+            <tbody>{compactAmounts.map(({ label, payout }, index) => (
               <tr key={`${index}-${label}`}><td>{label}</td><td>{payout === null ? "—" : `${formatUsdc(payout)} USDC`}</td><td>{payout === null ? "—" : `${formatUsdc(payout - quoteCost, { signed: true })} USDC`}</td></tr>
             ))}</tbody>
           </table>

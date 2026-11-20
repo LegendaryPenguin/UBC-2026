@@ -18,7 +18,7 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; width: 340px; }
+body { margin: 0; width: 360px; background:#fff; }
 header {
   display: flex;
   gap: 8px;
@@ -28,7 +28,8 @@ header {
   border-bottom: 1px solid #dedcd5;
   font: 700 23px/1.2 'Thesis Serif', Georgia, serif;
 }
-main { padding: 18px; }
+main { padding: 24px; }
+.eyebrow { font-size:10px;letter-spacing:1.3px;text-transform:uppercase;color:#66717a;margin-bottom:18px; }
 h1 {
   margin: 0 0 12px;
   font: 700 23px/1.2 'Thesis Serif', Georgia, serif;

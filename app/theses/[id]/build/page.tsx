@@ -50,7 +50,8 @@ function initialLegs(thesis: ThesisRevision, family: MarketFamily, maximum: stri
 }
 
 export default function BuildPage() {
-  const { id } = useParams<{ id: string }>();
+  const routeParams = useParams<{ id: string }>();
+  const [id] = useState(routeParams.id);
   const { targetRange } = useResearchNotebook(`thesis:${id}`);
   const router = useRouter();
   const [thesis, setThesis] = useState<ThesisRevision | null>(null);
@@ -201,7 +202,7 @@ export default function BuildPage() {
 
   if (thesis.status === "draft") {
     return (
-      <div className="screen-workspace space-y-4">
+      <div className="screen-workspace screen-build demo-polished space-y-4">
         <header className="workspace-header"><div><p className="text-xs uppercase tracking-wide text-muted">{family.title}</p><h1 className="workspace-title screen-heading">Build a basket</h1><p className="mt-2 text-sm text-muted">{family.question}</p></div></header>
         <ThesisWorkspaceTabs thesisId={id} current="Build" lockedTabs={["Compare"]} />
         <Card>
@@ -248,11 +249,11 @@ export default function BuildPage() {
   }
 
   return (
-    <div className="screen-workspace space-y-4">
-      <header className="workspace-header"><div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="workspace-title screen-heading">{marketThesisTitle(thesis, family)}</h1><p className="mt-2 text-sm text-muted">{family.question}{family.closeTime ? ` · Closes ${new Date(family.closeTime).toLocaleString()}` : ""} · {family.mode === "replay" ? "Illustrative replay" : family.freshness}</p></div><span className="status-pill status-pill--good">Confirmed view · revision {thesis.revision}</span></div></header>
+    <div className="screen-workspace screen-build demo-polished space-y-4">
+      <header className="workspace-header"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="demo-eyebrow">{marketThesisTitle(thesis, family)}</p><h1 className="workspace-title screen-heading">Understand your Gemini basket</h1><p className="mt-2 text-sm text-muted">{family.question}{family.closeTime ? ` · Closes ${new Date(family.closeTime).toLocaleString()}` : ""} · {family.mode === "replay" ? "Recorded example · Paper" : family.freshness}</p></div><span className="status-pill status-pill--good">Confirmed view · revision {thesis.revision}</span></div></header>
       <ThesisWorkspaceTabs thesisId={id} current="Build" />
       <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-serif text-2xl font-bold">Does this construction match your view?</h2><span className="text-xs text-muted">Compare is optional · no order is submitted here</span></div>
-      {family.mode === "replay" ? <p className="rounded-lg bg-[#FFF8E7] p-3 text-xs text-muted">This board uses recorded walkthrough data. Prices and cost estimates are illustrative. Build does not create an order; a paper Arc quote can be requested from Compare in Paper mode.</p> : null}
+
       {constructionNotice ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">{constructionNotice}</p> : null}
       <div className="workspace-layout">
         <div className="space-y-4">
@@ -273,7 +274,7 @@ export default function BuildPage() {
               const pays = leg.enabled && predicate && selectedScenario && (selectedScenario.predicateYes[predicate.id] ? "yes" : "no") === leg.side;
               const style = pays ? "border-action bg-[#F2F5FF]" : leg.enabled ? "border-line" : "border-dashed border-line opacity-70";
               return (
-              <div key={index} className={`rounded-lg border p-3 ${style}`}>
+              <div key={index} className={`demo-basket-leg rounded-lg border p-3 ${style}`}><p className="demo-eyebrow">Leg {index + 1} · {leg.side.toUpperCase()}</p>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="font-medium">{leg.side.toUpperCase()} · {legContractOptions.find((contract) => contract.id === leg.contractId)?.label || `Leg ${index + 1}`}{leg.enabled ? "" : " · removed"}</h3>
                   <button type="button" className="min-h-10 px-2 text-sm text-action" onClick={() => updateLeg(index, { enabled: !leg.enabled })}>
@@ -299,14 +300,14 @@ export default function BuildPage() {
               </div>
               );
             })}
-            <Button kind="ghost" onClick={addSupportedLeg} disabled={!availableLegContracts.length || basket.length >= 4}>Add supported leg</Button>
+            <details className="demo-details"><summary>Adjust construction size or add a leg</summary><Button kind="ghost" onClick={addSupportedLeg} disabled={!availableLegContracts.length || basket.length >= 4}>Add supported leg</Button>
             <div className="grid gap-3 sm:grid-cols-[220px_1fr]">
               <Field label="Desired view maximum payout (USDC)" hint="Used to compare the basket against your confirmed view.">
                 <input className={inputCls()} type="number" min="0.01" step="0.01" value={max} onChange={(event) => updateMaximum(event.target.value)} />
               </Field>
               <div className="self-end pb-2 text-xs text-muted">The contract payout shown here is gross payout, before subtracting costs or fees.</div>
             </div>
-            {construction?.error ? <p role="alert" className="text-sm text-bad">{construction.error}</p> : null}
+            </details>{construction?.error ? <p role="alert" className="text-sm text-bad">{construction.error}</p> : null}
           </Card>
           {construction?.desired ? (
             <Card>
@@ -316,10 +317,10 @@ export default function BuildPage() {
               </div>
               <p className="th-alert mt-3 text-sm" role="status">{thesis.template === "range" && selectedScenario && selectedBasketPayout > 0n && selectedDesiredPayout === 0n ? "The Gemini basket still pays here, outside your intended range." : selectedBasketPayout === selectedDesiredPayout ? "The basket matches your view in this scenario." : "The basket pays a different amount from your view in this scenario."}</p>
               <div className="mt-3">
-                <PayoffChart labels={scenarioRows.map(({ label }) => label)} series={displayedSeries} selectedIndex={chartIndex} />
+                <PayoffChart labels={scenarioRows.map(({ label }) => label)} series={displayedSeries} selectedIndex={chartIndex} onSelect={(index) => setSelectedScenarioId(scenarioRows[index].id)} />
               </div>
               {compactGroups ? <Button kind="ghost" onClick={() => setShowAllScenarios((value) => !value)}>{showAllScenarios ? "Show three ranges" : `Show all ${family.scenarios.length} scenarios`}</Button> : null}
-              <div className="table-scroll mt-4"><table className="text-left text-sm"><thead><tr><th>Settlement scenario</th><th>Your basket · {payoutBasis}</th><th>Confirmed view · gross</th><th>Fit</th></tr></thead><tbody>{scenarioRows.map((scenario, rowIndex) => { const index = scenario.index; const basketPayout = construction.basketRows[index]?.payout ?? 0n; const desiredPayout = construction.desired?.rows[index]?.payout ?? 0n; return <tr key={scenario.id} className={rowIndex === chartIndex ? "bg-[#E9EEFF]" : ""}><td><button type="button" className="text-left font-medium underline decoration-dotted" aria-pressed={rowIndex === chartIndex} onClick={() => setSelectedScenarioId(scenario.id)}>{scenario.label}</button></td><td className="tabular-nums">{formatUsdcFixed(displayedPayout(basketPayout))} USDC</td><td className="tabular-nums">{formatUsdcFixed(desiredPayout)} USDC</td><td>{payoutBasis === "gross" ? basketPayout === desiredPayout ? "Matches" : "Differs" : "Net estimate"}</td></tr>; })}</tbody></table></div>
+              <details className="demo-details"><summary>Exact payout schedule</summary><div className="table-scroll mt-4"><table className="text-left text-sm"><thead><tr><th>Settlement scenario</th><th>Your basket · {payoutBasis}</th><th>Confirmed view · gross</th><th>Fit</th></tr></thead><tbody>{scenarioRows.map((scenario, rowIndex) => { const index = scenario.index; const basketPayout = construction.basketRows[index]?.payout ?? 0n; const desiredPayout = construction.desired?.rows[index]?.payout ?? 0n; return <tr key={scenario.id} className={rowIndex === chartIndex ? "bg-[#E9EEFF]" : ""}><td><button type="button" className="text-left font-medium underline decoration-dotted" aria-pressed={rowIndex === chartIndex} onClick={() => setSelectedScenarioId(scenario.id)}>{scenario.label}</button></td><td className="tabular-nums">{formatUsdcFixed(displayedPayout(basketPayout))} USDC</td><td className="tabular-nums">{formatUsdcFixed(desiredPayout)} USDC</td><td>{payoutBasis === "gross" ? basketPayout === desiredPayout ? "Matches" : "Differs" : "Net estimate"}</td></tr>; })}</tbody></table></div></details>
             </Card>
           ) : null}
           <Card>

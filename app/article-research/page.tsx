@@ -84,9 +84,9 @@ export default function ArticleResearchPage() {
         title: article.title.slice(0, 240),
         url: article.url,
         publisher: host,
-        excerpt: article.text.slice(0, 280),
+        excerpt: article.text.slice(0, 240),
       };
-      const title = /bitcoin/i.test(article.title) ? "Bitcoin: 5-year outlook" : article.title.slice(0, 100);
+      const title = /bitcoin/i.test(article.title) ? "Bitcoin: a measured rise" : article.title.slice(0, 100);
       const { thesis } = await api<{ thesis: { id: string } }>("/api/theses", {
         method: "POST",
         body: JSON.stringify({
@@ -116,16 +116,16 @@ export default function ArticleResearchPage() {
   const host = new URL(article.url).hostname.replace(/^www\./, "");
   const longArticle = /\b(?:5[- ]year|five[- ]year|long[- ]term|2031)\b/i.test(`${article.title} ${article.text}`);
 
-  return <main className="th-stack mx-auto max-w-6xl">
-    <header className="th-card th-card--hero">
+  return <main className="demo-article th-stack mx-auto">
+    <header className="demo-article-header">
       <p className="th-label th-muted">From article to market</p>
-      <h1 className="break-words">{article.title}</h1>
+      <h1>From an article to a question</h1><p className="th-muted">Your question, evidence, and position — together.</p>
       <a className="th-button mt-3" href={article.url} target="_blank" rel="noreferrer noopener">
         {host} <Icon name="external-link" /> <span className="sr-only">opens in a new tab</span>
       </a>
     </header>
 
-    <div className="grid items-start gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+    <div className="demo-article-columns"><div><section className="th-card demo-original-article"><p className="demo-eyebrow">{host} · Captured source</p><h2>{article.title}</h2><p className="th-muted">The article is a starting point for your own research.</p><a href={article.url} target="_blank" rel="noreferrer noopener">Open original article ↗</a></section>
       <section className="th-card" aria-labelledby="article-brief-title">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div><p className="source-pill">Article context</p><h2 id="article-brief-title" className="mt-2">What the article argues</h2></div>
@@ -140,7 +140,7 @@ export default function ArticleResearchPage() {
         </details>
       </section>
 
-      <section className="th-card" aria-labelledby="gemini-match-title">
+      </div><section className="th-card" aria-labelledby="gemini-match-title">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div><p className="source-pill">Live Gemini catalog</p><h2 id="gemini-match-title" className="mt-2">Markets related to this article</h2></div>
           <span className="text-xs th-muted">Prices are references, not certainty.</span>

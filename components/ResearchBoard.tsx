@@ -24,7 +24,7 @@ export function ResearchTile({ title, icon, detail, footer, kind, style, childre
 }) {
   const titleId = useId();
   return (
-    <section className="research-tile" data-kind={kind} style={style} aria-labelledby={titleId}>
+    <section className="research-tile" data-kind={kind} data-title={title} style={style} aria-labelledby={titleId}>
       <header className={kind === "chart" ? "sr-only" : "research-tile__header"}>
         <h2 id={titleId}>{icon ? <Icon name={icon} size={19} /> : null}{title}</h2>
         {detail}

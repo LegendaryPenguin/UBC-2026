@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 type AppDialogProps = {
   open: boolean;
@@ -38,6 +39,8 @@ export function AppDialog({
   keepMounted = false,
   backdropClassName = "",
 }: AppDialogProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const panelRef = useRef<HTMLElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -90,7 +93,7 @@ export function AppDialog({
   }, [modalOpen]);
 
   if (!open && !inline && !keepMounted) return null;
-  return (
+  const content = (
     <div
       className={`dialog-backdrop ${backdropClassName}`.trim()}
       hidden={!open && !inline}
@@ -113,4 +116,5 @@ export function AppDialog({
       </section>
     </div>
   );
+  return inline ? content : mounted ? createPortal(content, document.body) : null;
 }

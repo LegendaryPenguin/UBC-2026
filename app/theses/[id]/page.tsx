@@ -41,6 +41,15 @@ export default function ThesisEditor() {
   const [dirty, setDirty] = useState(false);
   const [reviewingConfirmation, setReviewingConfirmation] = useState(false);
   const [editingView, setEditingView] = useState(false);
+  const editSnapshot = useRef<{ thesis: ThesisRevision; dirty: boolean } | null>(null);
+  function beginViewEdit() {
+    if (thesis) editSnapshot.current = { thesis: structuredClone(thesis), dirty };
+    setEditingView(true);
+  }
+  function cancelViewEdit() {
+    if (editSnapshot.current) { setThesis(editSnapshot.current.thesis); setDirty(editSnapshot.current.dirty); }
+    setEditingView(false);
+  }
   const [pendingDestination, setPendingDestination] = useState("");
   const [evidenceFilter, setEvidenceFilter] = useState<"all" | "supports" | "challenges">("all");
   const [savedEvidence, setSavedEvidence] = useState<EvidenceItem[]>([]);
@@ -352,7 +361,7 @@ export default function ThesisEditor() {
           catch (cause) { setError(cause instanceof Error ? cause.message : "Could not clear the research range."); }
         }}>Return to listed Gemini view</Button> : <>
           {thesis.status === "draft" ? <Button icon="check" onClick={() => setReviewingConfirmation(true)} disabled={!viewValid}>Confirm view & build</Button> : <Button href={`/theses/${id}/build`} icon="build">Build a basket</Button>}
-          <Button kind="secondary" icon="edit" onClick={() => setEditingView(true)}>Edit view</Button>
+          <Button kind="secondary" icon="edit" onClick={beginViewEdit}>Edit view</Button>
         </>}
       </div>}
     >
@@ -386,14 +395,14 @@ export default function ThesisEditor() {
       {notice ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">{notice}</p> : null}
       {family ? (
         <>
-          <div className="research-board">
+          <div className="demo-research-layout"><div className="research-board">
             <div className="research-board__grid">
               {hasHistory ? <ResearchChart family={family} series={chartSeries} liveSession={Boolean(liveContract)} /> : null}
               {thesis.articleSource ? <ResearchArticleSourceTile source={thesis.articleSource} /> : null}
-              {hasHistory ? viewTile : null}
+
               <ResearchPrices family={family} hasHistory={hasHistory} footer={liveContract ? <Button kind="secondary" icon="bars" onClick={() => setMarketFeedOpen(true)}>View live market feed</Button> : null} />
               <ResearchRules family={family} contracts={selectedRuleContracts.length ? selectedRuleContracts : family.contracts} />
-              {!hasHistory ? viewTile : null}
+
               <ResearchTile title="Research focus" icon="research" detail={researchUpdate ? <span className="status-pill">{researchUpdate.clarification ? "Clarify" : researchUpdate.hasProposal ? "View ready" : "Latest question"}</span> : null}
                 footer={<div className="flex flex-wrap gap-2"><Button kind="secondary" icon="assistant" onClick={() => setAssistantRequest((value) => value + 1)}>{researchUpdate?.hasProposal && thesis.status === "draft" ? "Review suggested view" : "Open research assistant"}</Button>{offerRehearsal ? <Button kind="ghost" onClick={() => void openRecordedRange(thesis.rationale)} disabled={openingRehearsal || dirty}>{openingRehearsal ? "Opening rehearsal…" : "Rehearse a range in Paper"}</Button> : null}</div>}>
                 {researchUpdate ? <div className="space-y-3" aria-live="polite">
@@ -421,10 +430,10 @@ export default function ThesisEditor() {
               <ResearchSavedTile usedColumns={6 + (hasHistory ? 2 : 0) + (relatedContracts.length ? 1 : 0)} sources={savedEvidence} replies={notebook.replies} onSelectSource={openSource} onRemoveReply={notebook.removeReply} />
             </div>
           </div>
-          <WorkspaceAssistant slug={family.slug} family={family} evidence={evidence} thesis={thesis} context="view" title="Talk through your view"
+          <aside className="demo-research-rail">{viewTile}<WorkspaceAssistant slug={family.slug} family={family} evidence={evidence} thesis={thesis} context="view" title="Talk through your view"
             onThesisChange={(updated) => { setThesis(updated); setDirty(false); setEditingView(false); setNotice(`Voice-assisted edit saved as draft revision ${updated.revision}.`); }}
             openRequest={assistantRequest} onResearchUpdate={(update) => { setResearchUpdate(update); if (asksForCounterargument(update.question)) setCounterargument(update); }}
-            prefillQuestion={assistantPrompt} onPrefillConsumed={() => setAssistantPrompt("")} onSaveReply={notebook.saveReply} targetRange={customRange} onSaveRange={notebook.setTargetRange} />
+            prefillQuestion={assistantPrompt} onPrefillConsumed={() => setAssistantPrompt("")} onSaveReply={notebook.saveReply} targetRange={customRange} onSaveRange={notebook.setTargetRange} /></aside></div>
           <AppDrawer open={marketFeedOpen && Boolean(liveContract)} titleId="research-market-feed-title" onClose={() => setMarketFeedOpen(false)}>
             <header className="research-drawer__header"><h2 id="research-market-feed-title">Gemini live market</h2><button type="button" className="th-button th-button--ghost th-button--icon" aria-label="Close live market feed" onClick={() => setMarketFeedOpen(false)}><Icon name="close" /></button></header>
             {liveContract ? <GeminiLiveMarketFeed status={marketFeed.status} book={marketFeed.book} trades={marketFeed.trades} error={marketFeed.error} retry={marketFeed.retry}
@@ -455,9 +464,9 @@ export default function ThesisEditor() {
           </button>
         </div></div>
       )}
-      <AppDrawer open={editingView && !reviewingConfirmation && Boolean(family)} titleId="edit-thesis-view" onClose={() => { if (!saving) setEditingView(false); }}>
+      <AppDrawer open={editingView && !reviewingConfirmation && Boolean(family)} titleId="edit-thesis-view" onClose={() => { if (!saving) cancelViewEdit(); }}>
       <div className="space-y-3">
-        <header className="research-drawer__header"><div><h2 id="edit-thesis-view">Edit your view</h2><p className="mt-1 text-sm text-muted">Use the conditions supported by this Gemini market.</p></div><button type="button" className="th-button th-button--ghost th-button--icon" aria-label="Close view editor" disabled={saving !== null} onClick={() => setEditingView(false)}><Icon name="close" /></button></header>
+        <header className="research-drawer__header"><div><h2 id="edit-thesis-view">Edit your view</h2><p className="mt-1 text-sm text-muted">Use the conditions supported by this Gemini market.</p></div><button type="button" className="th-button th-button--ghost th-button--icon" aria-label="Close view editor" disabled={saving !== null} onClick={cancelViewEdit}><Icon name="close" /></button></header>
         {error ? <p role="alert" className="th-alert th-alert--warning text-sm">{error}</p> : null}
         <Field label="Template">
           <select className={inputCls()} value={thesis.template} onChange={(event) => changeTemplate(event.target.value as ThesisRevision["template"])}>
@@ -493,7 +502,7 @@ export default function ThesisEditor() {
         <Field label="I would reconsider if">
           <textarea className={`${inputCls()} min-h-20 py-2`} maxLength={2_000} value={thesis.invalidation} onChange={(event) => change("invalidation", event.target.value)} />
         </Field>
-        <div className="flex flex-wrap gap-2 border-t border-line pt-3"><Button onClick={async () => { if (await save("save")) setEditingView(false); }} disabled={saving !== null}>{saving === "save" ? "Saving…" : "Save draft"}</Button><Button onClick={() => setReviewingConfirmation(true)} disabled={saving !== null || !viewValid}>Review confirmation</Button><Button kind="ghost" onClick={() => setEditingView(false)} disabled={saving !== null}>Cancel</Button></div>
+        <div className="flex flex-wrap gap-2 border-t border-line pt-3"><Button onClick={async () => { if (await save("save")) setEditingView(false); }} disabled={saving !== null}>{saving === "save" ? "Saving…" : "Save draft"}</Button><Button onClick={() => setReviewingConfirmation(true)} disabled={saving !== null || !viewValid}>Review confirmation</Button><Button kind="ghost" onClick={cancelViewEdit} disabled={saving !== null}>Cancel</Button></div>
       </div>
       </AppDrawer>
       <AppDialog open={reviewingConfirmation} titleId="confirm-view-title" onClose={() => { if (!saving) setReviewingConfirmation(false); }} closeOnBackdrop={!saving}>

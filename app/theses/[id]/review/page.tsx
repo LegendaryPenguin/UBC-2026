@@ -59,7 +59,8 @@ function labelFor(choice: ConstructionChoice) {
 }
 
 export default function ReviewPage() {
-  const { id } = useParams<{ id: string }>();
+  const routeParams = useParams<{ id: string }>();
+  const [id] = useState(routeParams.id);
   const { targetRange } = useResearchNotebook(`thesis:${id}`);
   const router = useRouter();
   const { address } = useAccount();
@@ -238,14 +239,27 @@ export default function ReviewPage() {
     || family.scenarios.map(({ id, label }, index) => ({ id, label, index, indexes: [index] }));
   const selectedRange = scenarioRows.find(({ indexes }) => indexes.includes(activeScenarioIndex));
 
+  if (["arc-custom"].includes(choice)) return <div className="demo-custom-review space-y-5">
+    <span className="source-pill">{mode === "paper" ? "Paper simulation" : "Arc testnet"}</span>
+    <h1 className="font-serif text-3xl">Review custom range</h1>
+    <p className="text-sm text-muted">Separate custom payout · {family.mode === "replay" ? "Recorded market example" : "Gemini market reference"}</p>
+    <Card><p className="text-lg">{thesisViewLabel(thesis, family, { exact: true })}</p><p className="text-sm text-muted">Official settlement · {family.observationTime ? new Date(family.observationTime).toLocaleString() : "Not supplied"}</p></Card>
+    <table className="w-full text-left text-sm"><thead><tr><th>Settlement outcome</th><th>Gross payout</th></tr></thead><tbody>{scenarioRows.map(row => <tr key={row.id}><td>{row.label}</td><td>{formatUsdcFixed(selectedRows[row.index]?.payout ?? 0n)} USDC</td></tr>)}</tbody></table>
+    <p className="text-sm">Exact premium, fees and maximum loss appear on your quote.</p>
+    {family.sourceEvent.sourceUrl ? <a className="text-sm text-action underline" href={family.sourceEvent.sourceUrl} target="_blank" rel="noreferrer">Settlement rules and source ↗</a> : null}
+    <details className="demo-details"><summary>Construction and settlement details</summary><p>{family.question}</p><p className="text-sm">{quoteAvailability}</p><p className="text-sm">Maximum gross payout: {formatUsdc(selectedMaximum)} USDC. This custom position does not hold Gemini contract legs.</p></details>
+    {actionError ? <p role="alert" className="text-sm text-bad">{actionError}</p> : null}
+    <div className="space-y-3 border-t border-line pt-5"><Button onClick={() => void requestArcQuote()} disabled={pending || !budgetValid || !quoteAllowed}>{pending ? "Requesting quote…" : mode === "paper" ? "Request paper quote" : "Request Arc quote"}</Button><p className="text-sm text-muted">Requesting a quote does not accept it.</p><Button href={quoteHref} kind="ghost">Cancel review and return to Compare</Button></div>
+  </div>;
+
   return (
-    <div className="screen-workspace space-y-4">
+    <div className="screen-workspace screen-review demo-polished space-y-4">
       <header className="workspace-header"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-muted">{family.title} · {mode === "replay" ? "illustrative replay" : mode === "paper" ? "paper simulation" : "live data"}</p><h1 className="workspace-title screen-heading">Review {labelFor(choice)}</h1><p className="mt-2 text-sm text-muted">Review exact contracts, costs, execution details, and settlement rules before deciding.</p></div><span className="status-pill status-pill--good">View confirmed · revision {thesis.revision}</span></div></header>
       <ThesisWorkspaceTabs thesisId={id} current="Compare" />
       <p className="rounded-lg border border-line bg-white p-3 text-sm text-muted">Review is read-only. Opening it does not create a quote, order, or position. Cancel returns to the same comparison.</p>
       {calculations?.error ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{calculations.error}</p> : null}
       <div className="workspace-layout">
-        <ReviewContent focused={choice === "arc-custom" && arcAvailable} onClose={() => { if (!pending) router.push(quoteHref); }}>
+        <ReviewContent focused={false} onClose={() => { if (!pending) router.push(quoteHref); }}>
           <Card>
             <h2 className="font-serif text-xl">What you selected</h2>
             <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
