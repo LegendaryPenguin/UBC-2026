@@ -109,24 +109,15 @@ describe("Explore to research flow", () => {
     expect(screen.getByRole("link", { name: "Open research" }).getAttribute("href")).toBe("/topics/btc-friday");
   });
 
-  it("keeps a confirmed Replay recovery when live Gemini discovery is unavailable", async () => {
+  it("offers retry when live Gemini discovery is unavailable", async () => {
     liveCatalogError = true;
     render(<Shell><Explore /></Shell>);
     fireEvent.click(screen.getByRole("tab", { name: "Research topics" }));
 
-    await screen.findByRole("button", { name: "Switch to Replay" });
-    const liveError = screen.getByRole("status");
+    const liveError = await screen.findByRole("status");
     expect(liveError.textContent).toContain("Gemini API connection timed out.");
-    expect(liveError.textContent).toContain("Replay uses labeled walkthrough data.");
-    const switchButton = screen.getByRole("button", { name: "Switch to Replay" });
-    fireEvent.click(switchButton);
-    expect(await screen.findByRole("dialog", { name: /Switch to Replay data/ })).toBeTruthy();
-    expect(localStorage.getItem("thesis_mode")).toBe("live");
-    fireEvent.click(screen.getByRole("button", { name: "Switch context" }));
-    expect(localStorage.getItem("thesis_mode")).toBe("replay");
-    expect(await screen.findByText("Labeled walkthrough snapshots")).toBeTruthy();
-    expect(await screen.findByRole("link", { name: "Open research" })).toBeTruthy();
-    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).startsWith("/api/topics?mode=replay"))).toBe(true);
+    expect(liveError.textContent).toContain("Retry live Gemini discovery.");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Switch to Replay" })).toBeNull();
   });
 });

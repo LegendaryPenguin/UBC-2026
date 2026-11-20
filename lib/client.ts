@@ -14,14 +14,20 @@ export type LegacyMode = "live" | "replay" | "paper";
 
 function legacyMode(): LegacyMode {
   const value = localStorage.getItem("thesis_mode");
-  return value === "live" || value === "paper" ? value : "replay";
+  return value === "live" || value === "paper" ? value : "live";
 }
 
+/** Live Gemini market data is the only user-facing data context. */
 export function dataContextFromStorage(): DataContext {
-  if (typeof window === "undefined") return "replay";
+  if (typeof window === "undefined") return "live";
   const value = localStorage.getItem("thesis_data_context");
-  if (value === "live" || value === "replay") return value;
-  return legacyMode() === "live" ? "live" : "replay";
+  if (value === "replay") {
+    localStorage.setItem("thesis_data_context", "live");
+    if (localStorage.getItem("thesis_mode") === "replay") localStorage.setItem("thesis_mode", "live");
+    return "live";
+  }
+  if (value === "live") return value;
+  return legacyMode() === "live" ? "live" : "live";
 }
 
 export function executionEnvironmentFromStorage(): ExecutionEnvironment {
@@ -32,14 +38,15 @@ export function executionEnvironmentFromStorage(): ExecutionEnvironment {
 }
 
 export function modeFromStorage(): LegacyMode {
-  if (typeof window === "undefined") return "replay";
+  if (typeof window === "undefined") return "live";
   const execution = executionEnvironmentFromStorage();
   return execution === "paper" ? "paper" : dataContextFromStorage();
 }
 
 export function setDataContext(context: DataContext) {
-  localStorage.setItem("thesis_data_context", context);
-  localStorage.setItem("thesis_mode", executionEnvironmentFromStorage() === "paper" ? "paper" : context);
+  const next = context === "replay" ? "live" : context;
+  localStorage.setItem("thesis_data_context", next);
+  localStorage.setItem("thesis_mode", executionEnvironmentFromStorage() === "paper" ? "paper" : next);
 }
 
 export function setExecutionEnvironment(environment: ExecutionEnvironment) {
@@ -52,7 +59,7 @@ export function setMode(mode: LegacyMode) {
   if (mode === "paper") setExecutionEnvironment("paper");
   else {
     setExecutionEnvironment("none");
-    setDataContext(mode);
+    setDataContext(mode === "replay" ? "live" : mode);
   }
 }
 
@@ -81,6 +88,7 @@ export function requestModeChange(next: LegacyMode) {
 }
 
 export function requestDataContextChange(next: DataContext) {
+  if (next === "replay") return true;
   if (dataContextFromStorage() === next) return true;
   window.dispatchEvent(new CustomEvent(MODE_CHANGE_REQUEST_EVENT, { detail: { axis: "data", value: next } }));
   return false;

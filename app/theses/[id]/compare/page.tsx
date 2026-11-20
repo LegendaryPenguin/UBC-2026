@@ -8,12 +8,14 @@ import { formatUsdc, formatUsdcFixed, parseUsdc } from "@/lib/format";
 import { compileView } from "@/lib/payoffs/compile";
 import { buildComparisons, estimateBasketCost, estimateSingleTicketCost } from "@/lib/payoffs/compare";
 import { Button, Card, Field, inputCls } from "@/components/ui";
-import { VoicePanel } from "@/components/VoicePanel";
+import { WorkspaceAssistant } from "@/components/WorkspaceAssistant";
 import { evidenceForSlug } from "@/lib/evidence";
 import { PayoffChart } from "@/components/PayoffChart";
 import { ThesisWorkspaceTabs } from "@/components/ThesisWorkspaceTabs";
 import { ThesisViewPanel } from "@/components/ThesisViewPanel";
 import { useModeChange } from "@/lib/use-mode-change";
+import { useResearchNotebook } from "@/lib/use-research-notebook";
+import { ResearchRangeNotice } from "@/components/ResearchBoard";
 
 type BasketLeg = { contractId: string; side: "yes" | "no"; payoutAmount: string; enabled: boolean };
 type ConstructionChoice = "gemini-basket" | "gemini-single" | "arc-custom";
@@ -54,6 +56,7 @@ function normalizePayouts(values: bigint[], target: bigint, base: bigint | null)
 
 export default function ComparePage() {
   const { id } = useParams<{ id: string }>();
+  const { targetRange } = useResearchNotebook(`thesis:${id}`);
   const [thesis, setThesis] = useState<ThesisRevision | null>(null);
   const [family, setFamily] = useState<MarketFamily | null>(null);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
@@ -212,6 +215,7 @@ export default function ComparePage() {
   if (loading) return <p role="status">Loading construction comparison…</p>;
   if (error && !thesis) return <Card><p role="alert" className="text-sm text-bad">{error}</p><div className="mt-3"><Button href="/workspace" kind="ghost">My Theses</Button></div></Card>;
   if (!thesis || !family) return <Card><p role="alert" className="text-sm text-bad">{error || "Thesis could not be loaded."}</p></Card>;
+  if (targetRange) return <ResearchRangeNotice thesisId={id} range={targetRange} />;
   if (thesis.status === "draft") return (
     <div className="screen-workspace space-y-4">
       <header className="workspace-header"><h1 className="workspace-title screen-heading">Compare constructions</h1></header>
@@ -335,7 +339,7 @@ export default function ComparePage() {
               <p className="mt-3 text-xs text-muted">“Payout below cost” lists losing scenarios when costs are known. Gemini cost estimates use displayed ask-side references, exclude fees, size, and slippage, and are not executable quotes. A Gemini basket uses independent orders, not an exchange combo.</p>
             </Card>
             {activeConstruction !== "arc-custom" ? <Card><h2 className="font-serif text-lg">No Gemini order submitted</h2><p className="mt-2 text-sm text-muted">{geminiTradeState === "available" ? "This comparison does not submit the basket, because its legs are independent and can partially fill. Review individual orders at the Gemini event." : "Native Gemini trading remains gated until a sandbox order, status lookup, and position/fill retrieval are verified. You can continue with market research and payoff comparisons."}</p></Card> : null}
-            <VoicePanel slug={family.slug} family={family} evidence={evidence.length ? evidence : evidenceForSlug(family.slug, family.mode)} thesis={thesis} context="compare" maxPayout={budget} title="Talk through the comparison" />
+            <WorkspaceAssistant slug={family.slug} family={family} evidence={evidence.length ? evidence : evidenceForSlug(family.slug, family.mode)} thesis={thesis} context="compare" maxPayout={budget} title="Talk through the comparison" />
           </div>
           <aside className="view-rail">
             <ThesisViewPanel thesis={thesis} family={family} selectedScenarioId={selectedScenarioId} onScenarioChange={selectScenario} scenarioOutcome={outcome} scenarioOutcomeLabel="Selected construction · scenario result" action={action} />

@@ -48,7 +48,7 @@ export async function POST(req: Request) {
 
     const result = (await response.json()) as { text?: unknown; language_code?: unknown };
     const text = typeof result.text === "string" ? result.text.trim() : "";
-    if (!text) return fail("INVALID", "No speech was recognized. Try again or type your question.");
+    if (!text) return fail("NO_SPEECH", "No speech was recognized. Try again or type your question.");
     return ok({ text, languageCode: typeof result.language_code === "string" ? result.language_code : null });
   } catch {
     return fail("UNAVAILABLE", "ElevenLabs could not be reached. Your recording was not saved by this app.", 502);

@@ -14,6 +14,8 @@ import { ThesisWorkspaceTabs } from "@/components/ThesisWorkspaceTabs";
 import { ThesisViewPanel } from "@/components/ThesisViewPanel";
 import { VoicePanel } from "@/components/VoicePanel";
 import { useModeChange } from "@/lib/use-mode-change";
+import { useResearchNotebook } from "@/lib/use-research-notebook";
+import { ResearchRangeNotice } from "@/components/ResearchBoard";
 
 type ConstructionChoice = "gemini-basket" | "gemini-single" | "arc-custom";
 type Mode = "replay" | "paper" | "live";
@@ -56,6 +58,7 @@ function labelFor(choice: ConstructionChoice) {
 
 export default function ReviewPage() {
   const { id } = useParams<{ id: string }>();
+  const { targetRange } = useResearchNotebook(`thesis:${id}`);
   const router = useRouter();
   const { address } = useAccount();
   const [thesis, setThesis] = useState<ThesisRevision | null>(null);
@@ -186,6 +189,7 @@ export default function ReviewPage() {
   if (loading) return <p role="status">Loading exact construction terms…</p>;
   if (error) return <Card><p role="alert" className="text-sm text-bad">{error}</p><div className="mt-3 flex flex-wrap gap-2"><Button onClick={() => setLoadAttempt((n) => n + 1)} kind="secondary">Retry</Button><Button href={`/theses/${id}/compare`} kind="ghost">Cancel review</Button></div></Card>;
   if (!thesis || !family) return <Empty title="Review unavailable">Return to Compare and retry loading the selected construction.</Empty>;
+  if (targetRange) return <ResearchRangeNotice thesisId={id} range={targetRange} />;
   if (thesis.status === "draft") return <Card><h1 className="font-serif text-2xl">Confirm your view first</h1><p className="mt-2 text-sm text-muted">The view changed while you were reviewing. Your saved proposal is now a draft and must be reviewed and confirmed in Research before a quote can be requested.</p><div className="mt-3 flex flex-wrap gap-2"><Button href={`/theses/${id}`}>Review draft in Research</Button><Button href={`/theses/${id}/compare`} kind="ghost">Return to Compare</Button></div></Card>;
 
   const scenarioIndex = family.scenarios.findIndex((scenario) => scenario.id === selectedScenarioId);

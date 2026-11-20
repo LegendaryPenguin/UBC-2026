@@ -278,6 +278,7 @@ export default function GeminiEventPage() {
                 <th className="border-b border-line py-2 pr-3">Instrument</th>
                 <th className="border-b border-line py-2 pr-3">Status</th>
                 <th className="border-b border-line py-2 pr-3">YES bid / ask</th>
+                <th className="border-b border-line py-2 pr-3">NO bid / ask</th>
                 <th className="border-b border-line py-2 pr-3">Last trade</th>
                 <th className="border-b border-line py-2">Outcome</th>
               </tr></thead>
@@ -302,7 +303,8 @@ export default function GeminiEventPage() {
                   </td>
                   <td className="border-b border-line py-2 pr-3 font-mono text-xs">{contract.instrumentSymbol || contract.ticker || "Not listed"}</td>
                   <td className="border-b border-line py-2 pr-3">{contract.status || event.status}</td>
-                  <td className="border-b border-line py-2 pr-3">{contract.prices?.bestBid || contract.prices?.sell?.yes || "—"} / {contract.prices?.bestAsk || contract.prices?.buy?.yes || "—"}</td>
+                  <td className="whitespace-nowrap border-b border-line py-2 pr-3">{contract.prices?.sell?.yes ?? contract.prices?.bestBid ?? "—"} / {contract.prices?.buy?.yes ?? contract.prices?.bestAsk ?? "—"}</td>
+                  <td className="whitespace-nowrap border-b border-line py-2 pr-3">{contract.prices?.sell?.no ?? "—"} / {contract.prices?.buy?.no ?? "—"}</td>
                   <td className="border-b border-line py-2 pr-3">{contract.prices?.lastTradePrice || "—"}</td>
                   <td className="border-b border-line py-2">{contract.resolutionSide ? contract.resolutionSide.toUpperCase() : "—"}</td>
                 </tr>

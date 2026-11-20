@@ -1,6 +1,7 @@
-import { getTopic } from "@/lib/gemini/catalog";
-import { evidenceForSlug } from "@/lib/evidence";
-import { researchReply, type PayoffExplanation, type ResearchTurn } from "@/lib/research";
+import { discoverTopics, getTopic } from "@/lib/gemini/catalog";
+import { evidenceForFamily } from "@/lib/evidence";
+import { marketDiscovery, researchReply, type PayoffExplanation, type ResearchTurn } from "@/lib/research";
+import type { MarketFamily } from "@/lib/domain/types";
 import { buildComparisons } from "@/lib/payoffs/compare";
 import { compileView } from "@/lib/payoffs/compile";
 import { parseUsdc } from "@/lib/format";
@@ -96,14 +97,29 @@ export async function POST(req: Request) {
   }
 
   let family = null;
-  let evidence: ReturnType<typeof evidenceForSlug> = [];
-  if (body.slug) {
+  let evidence: ReturnType<typeof evidenceForFamily> = [];
+  let marketMatches: MarketFamily[] = [];
+  let marketUnavailable = false;
+  const discovery = marketDiscovery(question, conversation, thesis?.rationale || thesis?.title);
+  const mode = body.mode === "replay" ? "replay" : "live";
+  const explicitSlug = typeof body.slug === "string" ? body.slug.trim() : "";
+  const slug = explicitSlug || thesis?.topicSlug || "";
+  if (slug) {
     try {
-      family = await getTopic(body.slug, body.mode === "live" ? "live" : "replay");
-      if (!family) return fail("UNSUPPORTED_FAMILY", "Topic not found or not a compatible family.", 404);
-      evidence = evidenceForSlug(family.sourceEvent.ticker.toLowerCase(), family.mode);
+      family = await getTopic(slug, mode);
+      if (!family && explicitSlug) return fail("UNSUPPORTED_FAMILY", "Topic not found or not a compatible family.", 404);
+      if (family) evidence = evidenceForFamily(family);
     } catch {
-      return fail("GEMINI_UNAVAILABLE", "Topic data could not be loaded. Try again or switch to Replay.", 503);
+      if (explicitSlug) return fail("GEMINI_UNAVAILABLE", "Topic data could not be loaded. Retry the live Gemini request.", 503);
+    }
+  }
+  if (!family) {
+    try {
+      const found = await discoverTopics(mode, discovery);
+      marketMatches = found.families;
+      marketUnavailable = Boolean(found.liveError);
+    } catch {
+      marketUnavailable = true;
     }
   }
 
@@ -150,10 +166,22 @@ export async function POST(req: Request) {
     }
   }
 
-  const localReply = researchReply({ question, conversation, family, thesis, evidence, comparison });
+  const localReply = researchReply({ question, conversation, family, thesis, evidence, comparison, marketMatches, discovery, marketUnavailable });
   const proposed = localReply.proposed;
-  if (localReply.clarificationPrompt) {
-    return ok({ ...localReply, comparison, provider: "local" });
+  const matchPayload = marketMatches.map((item) => ({
+    slug: item.slug,
+    title: item.title,
+    question: item.question,
+    category: item.sourceEvent.category,
+    id: item.id,
+    version: item.version,
+    contracts: item.contracts.length,
+    contract: item.contracts[0]?.label,
+    eventTicker: item.sourceEvent.ticker,
+    predicates: item.predicates.length,
+  }));
+  if (!family || localReply.clarificationPrompt) {
+    return ok({ ...localReply, comparison, marketMatches: matchPayload, provider: "local" });
   }
   if (process.env.XAI_API_KEY) {
     try {
@@ -190,5 +218,11 @@ export async function POST(req: Request) {
       // Keep the written local response available if the model is unavailable.
     }
   }
-  return ok({ ...localReply, proposed, comparison, provider: "local" });
+  return ok({
+    ...localReply,
+    proposed,
+    comparison,
+    marketMatches: matchPayload,
+    provider: "local",
+  });
 }

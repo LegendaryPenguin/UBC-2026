@@ -10,6 +10,101 @@ export type PayoffExplanation = {
 
 export type ResearchTurn = { role: "user" | "assistant"; content: string };
 
+export function researchConversation(history: ResearchTurn[], question: string): ResearchTurn[] {
+  let remaining = 6_000 - question.length;
+  const recent = history.slice(-7).reverse().flatMap(({ role, content }) => {
+    const text = content.trim().slice(0, Math.min(remaining, 3_000));
+    remaining -= text.length;
+    return text ? [{ role, content: text }] : [];
+  });
+  return [...recent.reverse(), { role: "user", content: question }];
+}
+
+const MARKET_QUERY_STOPWORDS = new Set([
+  "about", "again", "available", "can", "change", "create", "doing", "dont", "don't", "find", "for", "from", "have",
+  "help", "how", "into", "just", "know", "looking", "make", "market", "markets", "more", "now", "please", "properly",
+  "question", "research", "right", "start", "that", "the", "there", "these", "thesis", "thesios", "this", "those",
+  "use", "want", "what", "when", "where", "which", "with", "wondering", "would", "you", "your",
+  "basket", "baskets", "something", "some", "explore", "match", "matching", "interested", "trade", "refine", "me",
+]);
+
+function marketWords(text: string) {
+  return text.toLowerCase().match(/[\p{L}\p{N}]+/gu)?.filter((word) => word.length > 1 && !MARKET_QUERY_STOPWORDS.has(word)) || [];
+}
+
+export function extractMarketQuery(question: string): string {
+  const quoted = question.match(/["“]([^"”]{2,80})["”]/)?.[1]?.trim();
+  return quoted || marketWords(question).slice(0, 6).join(" ").slice(0, 80);
+}
+
+const broadSports = /\b(football|sports?|basketball|baseball|hockey|soccer|tennis|nfl|ncaaf|cfb|nba|mlb|nhl)\b/;
+const footballTeams = [
+  ["georgia tech yellow jackets", /\b(georgia tech|yellow jackets)\b/],
+  ["georgia bulldogs", /\b(bulldogs|uga|university of georgia)\b/],
+  ["georgia state panthers", /\bgeorgia state\b/],
+  ["georgia southern eagles", /\bgeorgia southern\b/],
+  ["atlanta falcons", /\b(atlanta|falcons)\b/],
+  ["kansas city chiefs", /\b(kansas city|chiefs)\b/],
+] as const;
+
+export function marketDiscovery(question: string, turns: ResearchTurn[] = [], draft = "") {
+  const latest = extractMarketQuery(question);
+  const qualifier = /^(college|today|tonight|tomorrow|game|next|week|season|any|saturday|sunday|playoffs|national|championship|winner|win|wins|matchup|bowl|spread|total)$/;
+  const isGeneral = (value: string) => !value || value.split(" ").every((word) => broadSports.test(word) || qualifier.test(word) || /^\d+$/.test(word));
+  const previous = turns.slice(0, -1).filter((turn) => turn.role === "user").map((turn) => extractMarketQuery(turn.content));
+  const prior = previous.findLast((value) => !isGeneral(value)) || previous.at(-1) || draft;
+  const generic = isGeneral(latest);
+  const focus = generic && prior && !/^any\b/.test(latest) ? extractMarketQuery(prior) : latest;
+  const context = `${focus} ${latest}`;
+  const team = footballTeams.find(([, pattern]) => pattern.test(focus))?.[0];
+  const ambiguousGeorgia = !team && /\bgeorgia\b/.test(focus) && /\b(football|college|ncaaf|cfb)\b/.test(context);
+  const specificWords = (team || focus).split(" ").filter((word) => word && !broadSports.test(word) && !/^(college|game|season|win|wins|winner|next|week|today|tonight|tomorrow|against|versus|vs|team|outcome|gemini)$/.test(word));
+  const focusWords = specificWords.filter((word) => !/^\d+$/.test(word));
+  const queries = [...new Set([
+    ...(team && generic && latest && !broadSports.test(latest) ? [`${team} ${latest}`] : []),
+    team || focus,
+    focusWords.slice(0, 3).join(" "),
+    ...(ambiguousGeorgia ? ["bulldogs", "yellow jackets", "georgia"] : focusWords.slice(0, 3)),
+    broadSports.exec(context)?.[0],
+  ].filter((query): query is string => Boolean(query)))].slice(0, 5);
+  return { queries, focusWords, ambiguousGeorgia, sport: broadSports.exec(context)?.[0], focus, team, generic };
+}
+
+export function rankMarketMatches(families: MarketFamily[], discovery: ReturnType<typeof marketDiscovery>) {
+  const seen = new Set<string>();
+  const matchupCounts = new Map<string, number>();
+  return families.map((family) => {
+    const title = marketWords(`${family.title} ${family.sourceEvent.title} ${family.sourceEvent.ticker} ${family.slug}`);
+    const selection = marketWords(family.contracts.map((contract) => contract.label).join(" "));
+    const detail = [...marketWords(`${family.question} ${family.sourceEvent.category}`), ...selection];
+    const hits = discovery.focusWords.filter((word) => title.includes(word) || detail.includes(word));
+    const sportsMarket = /\bsports?\b/i.test(family.sourceEvent.category);
+    const footballMarket = /football|ncaaf|kxnfl|\b(?:nfl|cfb)\b/i.test(`${family.sourceEvent.ticker} ${family.sourceEvent.title} ${family.question}`);
+    const bareGeorgiaTeam = discovery.team === "georgia bulldogs" && title.includes("georgia") &&
+      !title.some((word) => /^(tech|southern|state)$/.test(word)) && sportsMarket;
+    const teamMatch = title.includes(discovery.focusWords.at(-1) || "") || hits.length >= 2 || bareGeorgiaTeam;
+    const sportMatch = Boolean(discovery.sport) && (
+      detail.includes(discovery.sport!) || title.includes(discovery.sport!) || (discovery.sport === "football" && footballMarket)
+    );
+    if ((discovery.team && !teamMatch) || (discovery.ambiguousGeorgia && !sportMatch && !sportsMarket)) return { family, score: 0 };
+    if (discovery.focusWords.length ? !hits.length : !sportMatch) return { family, score: 0 };
+    const segment = /:\s*(?:\d+(?:st|nd|rd|th)\s+(?:half|quarter)|first half|second half)/i.test(family.title);
+    const score = 5 + hits.length * 2 + hits.filter((word) => title.includes(word)).length * 2 +
+      hits.filter((word) => selection.includes(word)).length * 2 + Number(footballMarket) - (segment ? 4 : 0);
+    return { family, score };
+  }).filter(({ score }) => score > 0).sort((left, right) => right.score - left.score)
+    .flatMap(({ family }) => {
+      const key = family.sourceEvent.id || family.slug;
+      if (seen.has(key)) return [];
+      seen.add(key);
+      const matchup = family.title.split(":")[0].trim().toLowerCase();
+      const count = matchupCounts.get(matchup) || 0;
+      if (count >= 2) return [];
+      matchupCounts.set(matchup, count + 1);
+      return [family];
+    }).slice(0, 5);
+}
+
 function asksForView(question: string) {
   return /\b(create|draft|make|change|adjust|set|switch|narrow|wider|lower|raise)\b/.test(question) ||
     /\b(my view is|my thesis is|i expect|i think|i want to (create|build|change|set)|i want a (range|directional|view))\b/.test(question) ||
@@ -113,6 +208,9 @@ export function researchReply(input: {
   thesis?: ThesisRevision | null;
   evidence?: EvidenceItem[];
   comparison?: PayoffExplanation | null;
+  marketMatches?: MarketFamily[];
+  discovery?: ReturnType<typeof marketDiscovery>;
+  marketUnavailable?: boolean;
 }): { answer: string; citations: { id: string; title: string }[]; proposed?: Partial<ThesisRevision>; clarificationPrompt?: string } {
   const q = input.question.trim();
   const family = input.family;
@@ -120,7 +218,7 @@ export function researchReply(input: {
   const userDialogue = conversation.filter((turn) => turn.role === "user").map((turn) => turn.content).join(" ");
   const assistantDialogue = conversation.filter((turn) => turn.role === "assistant").map((turn) => turn.content).join(" ");
   const latestUser = [...conversation].reverse().find((turn) => turn.role === "user")?.content ?? q;
-  const availableEvidence = input.evidence || FEATURED_EVIDENCE.slice(0, 2);
+  const availableEvidence = input.evidence?.length ? input.evidence : FEATURED_EVIDENCE.slice(0, 2);
   function withEvidenceCitations(answer: string) {
     const byId = new Map(availableEvidence.map((item) => [item.id, item]));
     const ids = [...new Set([...answer.matchAll(/\[(ev-[a-z0-9-]+)\]/gi)].map((match) => match[1]))];
@@ -129,7 +227,39 @@ export function researchReply(input: {
     return { answer: safeAnswer.trim(), citations };
   }
   if (!family) {
-    return withEvidenceCitations("Pick a supported topic first. I can explain listed thresholds, source rules, and how a range view differs from a single YES ticket. I cannot place a trade.");
+    const matches = input.marketMatches || [];
+    const discovery = input.discovery || marketDiscovery(q, conversation);
+    const searchStatus = input.marketUnavailable ? "Gemini’s market search is unavailable right now. " : "";
+    if (/\b(what (?:is|does|are)|how (?:does|do)|explain|mean(?:s)?)\b/i.test(q)) {
+      if (/\b(?:point )?spread\b/i.test(q)) {
+        return withEvidenceCitations("A point spread sets a line on the scoring margin. A team can cover its spread even if it loses outright. The contract spells out the line and which part of the game counts. Which matchup should we check?");
+      }
+      if (/\bmoneyline\b/i.test(q)) {
+        return withEvidenceCitations("A moneyline contract asks who wins over the period in its rules. A first-half moneyline and a full-game moneyline can resolve differently. Which game are you looking at?");
+      }
+      if (/\b(?:points? total|total points|over\/under|over under)\b/i.test(q)) {
+        return withEvidenceCitations("A points total looks at the combined score in the stated period. The contract wording tells you whether it pays above or below the line and how ties are handled. Which game should we look up?");
+      }
+      if (/\bbaskets?\b/i.test(q)) {
+        return withEvidenceCitations("A basket groups multiple positions. Each leg follows its own settlement rules, and we can compare what the combination pays in different outcomes. Which team or game do you want to research first?");
+      }
+    }
+    if (discovery.ambiguousGeorgia) {
+      if (discovery.generic) return withEvidenceCitations(`${searchStatus}Should I keep the search focused on Georgia teams, or look for any college football or NFL matchup?`);
+      return withEvidenceCitations(`${searchStatus}Which Georgia football team are you looking for: the Georgia Bulldogs, Georgia Tech Yellow Jackets, or another team? Once we have the team, we can look for a game, a season outcome, or contracts you could compare for a basket.`);
+    }
+    if (matches.length) {
+      const lines = matches.slice(0, 5).map((item, index) => `${index + 1}. ${item.title} · ${item.contracts[0]?.label || item.question}`).join("\n");
+      const source = matches[0].mode === "replay" ? "the replay catalog" : "Gemini’s active catalog";
+      return withEvidenceCitations(`I found these results in ${source}:\n${lines}\n\n${matches.length === 1 ? "What outcome do you want to explore on this market?" : "Which event or outcome fits what you have in mind?"}`);
+    }
+    if (discovery.sport && !discovery.focusWords.length) {
+      return withEvidenceCitations(`${searchStatus}${discovery.sport === "football" ? "Are you interested in college football or the NFL?" : "Which league or team are you interested in?"} Is there a particular game or season outcome you want to explore?`);
+    }
+    if (discovery.focusWords.length) {
+      return withEvidenceCitations(`${searchStatus || "I didn’t find a matching listed market yet. "}${discovery.team ? `Are you looking for the ${discovery.team.replace(/\b\w/g, (letter) => letter.toUpperCase())} in a particular game, or a season outcome?` : "Which team, event, or outcome should I search for?"}`);
+    }
+    return withEvidenceCitations(`${searchStatus}What would you like to research? A team, event, or outcome is enough to start a Gemini search.`);
   }
 
   const needsView = asksForView(userDialogue.toLowerCase());

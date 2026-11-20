@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, dataContextFromStorage, OPEN_ASSISTANT_EVENT } from "@/lib/client";
 import type { MarketFamily, ThesisRevision } from "@/lib/domain/types";
+import { extractMarketQuery } from "@/lib/research";
 import { AppDialog } from "@/components/AppDialog";
+import { BrandMark, Icon } from "@/components/thesis";
+import { Button } from "@/components/ui";
 
 export function StartThesisDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
@@ -17,101 +20,222 @@ export function StartThesisDialog({ open, onClose }: { open: boolean; onClose: (
   const [error, setError] = useState("");
   const [searchState, setSearchState] = useState("");
   const questionRef = useRef<HTMLTextAreaElement>(null);
+  const searchTimer = useRef<number | null>(null);
+  const searchRequest = useRef<AbortController | null>(null);
+  const lastSearch = useRef("");
+  const savePending = useRef(false);
 
   useEffect(() => {
     if (!open) return;
     const frame = window.requestAnimationFrame(() => questionRef.current?.focus());
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !creating) onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => { window.cancelAnimationFrame(frame); window.removeEventListener("keydown", onKey); };
-  }, [open, creating, onClose]);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      searchRequest.current?.abort();
+    };
+  }, [open]);
 
-  async function searchMarkets(event?: React.FormEvent<HTMLFormElement>) {
-    event?.preventDefault();
-    if (!question.trim()) {
-      setError("Enter the question you want to research first.");
+  useEffect(() => {
+    if (!open) return;
+    if (searchTimer.current !== null) window.clearTimeout(searchTimer.current);
+    const needle = extractMarketQuery(question);
+    if (needle.length < 2 || lastSearch.current === question) return;
+    searchTimer.current = window.setTimeout(() => { void runSearch(); }, 400);
+    return () => { if (searchTimer.current !== null) window.clearTimeout(searchTimer.current); };
+  }, [question, open]);
+
+  function changeQuestion(next: string) {
+    if (next === question) return;
+    searchRequest.current?.abort();
+    lastSearch.current = "";
+    setQuestion(next);
+    setSelected(null);
+    setResults([]);
+    setSearching(false);
+    setSearchState("");
+    setError("");
+  }
+
+  async function runSearch() {
+    if (savePending.current) return;
+    const query = question.trim();
+    if (extractMarketQuery(query).length < 2) {
+      setError("Enter a team, event, or market question first.");
       questionRef.current?.focus();
       return;
     }
-    setSelected(null);
+    if (searchTimer.current !== null) window.clearTimeout(searchTimer.current);
+    searchRequest.current?.abort();
+    const controller = new AbortController();
+    searchRequest.current = controller;
     setError("");
     setSearching(true);
-    setSearchState("");
+    setSearchState("Searching Gemini markets…");
     try {
       const mode = dataContextFromStorage();
-      const result = await api<{ families: MarketFamily[] }>(`/api/topics?mode=${mode}&q=${encodeURIComponent(question.trim())}`);
-      setResults(result.families || []);
-      setSearchState(result.families?.length ? "Choose the exact listed market that matches your question." : "No compatible market matched. Try a more specific term or browse Explore.");
+      const params = new URLSearchParams({ mode, discovery: "1", q: query });
+      const result = await api<{ families: MarketFamily[]; liveError?: string }>(`/api/topics?${params}`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      if (result.liveError) throw new Error("Gemini search is unavailable. You can still save your question.");
+      const families = result.families || [];
+      lastSearch.current = question;
+      setResults(families);
+      setSelected((current) => families.find((family) => family.id === current?.id) ?? null);
+      setSearchState(families.length
+        ? `Found ${families.length} market${families.length === 1 ? "" : "s"}. Choose one if you want to link it now.`
+        : "No matching market yet. You can save the question and find a market later.");
     } catch (cause) {
+      if (controller.signal.aborted) return;
       setError(cause instanceof Error ? cause.message : "Market search failed. Your question is still here; retry or browse Explore.");
-    } finally { setSearching(false); }
+      setSearchState("");
+    } finally {
+      if (!controller.signal.aborted) setSearching(false);
+    }
   }
 
   async function createDraft() {
-    if (question.trim().length < 8) return;
+    if (savePending.current) return;
+    if (question.trim().length < 8) {
+      setError("Add a short research question (at least 8 characters).");
+      questionRef.current?.focus();
+      return;
+    }
+    savePending.current = true;
+    searchRequest.current?.abort();
     setCreating(true);
+    setSearching(false);
     setError("");
     try {
       const mode = dataContextFromStorage();
-      const single = Boolean(selected && selected.predicates.length === 1 && selected.contracts.length === 1);
       const result = await api<{ thesis: ThesisRevision }>("/api/theses", {
         method: "POST",
         body: JSON.stringify({
-          topicSlug: selected?.slug,
-          familyId: selected?.id,
-          familyVersion: selected?.version,
+          ...(selected ? { topicSlug: selected.slug, familyId: selected.id, familyVersion: selected.version } : {}),
           mode,
-          title: title.trim() || undefined,
-          ...(selected ? {
-            template: single ? "binary" : selected.predicates.length >= 2 ? "range" : "directional",
-            lowerThreshold: single ? null : selected.predicates[0]?.threshold ?? null,
-            upperThreshold: !single && selected.predicates.length >= 2 ? selected.predicates[1]?.threshold ?? null : null,
-          } : {}),
-          direction: "yes",
+          title: title.trim() || selected?.title.slice(0, 100) || question.trim().slice(0, 100),
           rationale: question.trim(),
           evidenceIds: [],
         }),
       });
+      changeQuestion("");
+      setTitle("");
       onClose();
       router.push(`/theses/${result.thesis.id}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Draft could not be saved. Your question is still here to retry.");
+    } finally {
+      savePending.current = false;
       setCreating(false);
     }
   }
 
   function talkItThrough() {
     const savedQuestion = question.trim();
-    onClose();
+    closeForm();
     window.dispatchEvent(new CustomEvent(OPEN_ASSISTANT_EVENT, { detail: { question: savedQuestion } }));
   }
 
+  function closeForm() {
+    if (savePending.current) return;
+    searchRequest.current?.abort();
+    setSearching(false);
+    setSearchState((current) => current === "Searching Gemini markets…" ? "" : current);
+    onClose();
+  }
+
   return (
-    <AppDialog open={open} titleId="start-thesis-title" describedBy="start-thesis-description" onClose={() => { if (!creating) onClose(); }} closeOnBackdrop={!creating}>
+    <AppDialog open={open} titleId="start-thesis-title" describedBy="start-thesis-description" onClose={closeForm} closeOnBackdrop={!creating}>
       <header className="flex items-start justify-between gap-4">
-        <div><p className="source-pill">New research</p><h2 id="start-thesis-title" className="mt-3 font-serif text-3xl font-bold tracking-tight">What question are you exploring?</h2><p id="start-thesis-description" className="mt-2 text-sm text-muted">Turn a question into a research draft. You can explore without a wallet or funding.</p></div>
-        <button type="button" aria-label="Close new thesis" className="min-h-10 rounded-lg px-3 text-2xl leading-none text-muted hover:bg-[#F4F2ED] disabled:opacity-50" onClick={onClose} disabled={creating}>×</button>
+        <div>
+          <div className="th-brand">
+            <BrandMark size={24} />
+            Thesis
+          </div>
+          <h2 id="start-thesis-title" className="mt-4 font-serif text-[34px] font-bold leading-tight tracking-tight">What question are you exploring?</h2>
+          <p id="start-thesis-description" className="mt-2 text-sm th-muted">Turn a question or view into a researchable thesis.</p>
+        </div>
+        <button type="button" aria-label="Close new thesis" className="th-button th-button--ghost th-button--icon" onClick={closeForm} disabled={creating}><Icon name="close" /></button>
       </header>
-      <form onSubmit={(event) => void searchMarkets(event)} className="mt-5 space-y-4">
-        <label className="app-field block"><span className="mb-1 block text-sm font-semibold">Your question</span><textarea ref={questionRef} className="app-input min-h-28 w-full resize-y px-3 py-3 text-sm" maxLength={1500} value={question} onChange={(event) => { setQuestion(event.target.value); setSelected(null); setError(""); }} placeholder="Describe the question, event, or market you want to explore…" /></label>
-        <label className="app-field block"><span className="mb-1 block text-sm font-semibold">Title <span className="font-normal text-muted">· optional</span></span><input className="app-input min-h-11 w-full px-3 text-sm" value={title} maxLength={100} onChange={(event) => setTitle(event.target.value)} placeholder="A short name for this thesis" /></label>
+      <form onSubmit={(event) => { event.preventDefault(); void runSearch(); }} className="mt-5 space-y-4">
+        <label className="app-field block">
+          <span className="mb-1 block text-sm font-semibold">Your question</span>
+          <textarea
+            ref={questionRef}
+            className="app-input min-h-24 w-full resize-y px-3 py-3 text-sm"
+            maxLength={1500}
+            value={question}
+            disabled={creating}
+            onChange={(event) => changeQuestion(event.target.value)}
+            placeholder="Describe the question, event, or market you want to explore…"
+          />
+        </label>
+        <div className="flex flex-wrap gap-2" aria-label="Example questions">
+          {([
+            ["Bitcoin price by Friday?", "chart"],
+            ["ETH above $3,500?", "bars"],
+            ["Rate cut this quarter?", "news"],
+            ["S&P 500 higher this month?", "calendar"],
+          ] as const).map(([label, icon]) => (
+            <button
+              key={label}
+              type="button"
+              className="inline-flex min-h-10 items-center gap-2 rounded-full border border-line bg-[var(--th-soft)] px-3 text-sm hover:border-action"
+              onClick={() => changeQuestion(label)}
+              disabled={creating}
+            >
+              <Icon name={icon} size={14} />
+              {label}
+            </button>
+          ))}
+        </div>
+        <label className="app-field block">
+          <span className="mb-1 block text-sm font-semibold">Title <span className="font-normal text-muted">· optional</span></span>
+          <input className="app-input min-h-11 w-full px-3 text-sm" value={title} maxLength={100} onChange={(event) => setTitle(event.target.value)} placeholder="Defaults to your question or selected market" disabled={creating} />
+        </label>
         <div className="flex flex-wrap gap-2">
-          <button type="submit" disabled={!question.trim() || searching || creating} className="app-button inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-line px-4 text-sm font-semibold disabled:opacity-50"><span aria-hidden="true">⌕</span>{searching ? "Searching markets…" : "Search Gemini markets"}</button>
-          <button type="button" onClick={talkItThrough} disabled={!question.trim() || creating} className="app-button inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#E9EEFF] px-4 text-sm font-semibold text-action disabled:opacity-50"><span aria-hidden="true">♩</span>Talk it through</button>
+          <Button type="submit" kind="secondary" icon="search" disabled={!question.trim() || searching || creating} loading={searching}>
+            {searching ? "Searching markets…" : "Search Gemini markets"}
+          </Button>
+          <Button type="button" kind="ghost" icon="mic" onClick={talkItThrough} disabled={!question.trim() || creating}>Talk it through</Button>
         </div>
         {searchState ? <p role="status" className="text-sm text-muted">{searchState}</p> : null}
-        {error ? <p role="alert" className="rounded-lg border border-bad/30 bg-[#FFF5F4] p-3 text-sm text-bad">{error}{error.toLowerCase().includes("failed") || error.toLowerCase().includes("could not") ? <button type="button" className="ml-2 font-semibold underline" onClick={() => void searchMarkets()}>Retry</button> : null}</p> : null}
-        {results.length ? <div className="max-h-64 space-y-2 overflow-y-auto rounded-xl border border-line p-2" aria-label="Matching markets">
-          {results.map((family) => <button key={family.id} type="button" aria-pressed={selected?.id === family.id} onClick={() => { setSelected(family); setError(""); }} className={`block w-full rounded-lg border p-3 text-left transition-colors ${selected?.id === family.id ? "border-action bg-[#EEF2FF]" : "border-line hover:border-action"}`}>
-            <span className="block text-xs text-muted">{family.mode === "live" ? "Gemini live market" : "Illustrative replay"} · {family.freshness}</span><span className="mt-1 block font-semibold">{family.title}</span><span className="mt-1 block text-sm text-muted">{family.question}</span><span className="mt-2 block text-xs text-muted">{family.contracts.length} listed contract{family.contracts.length === 1 ? "" : "s"} · observed {family.observationTime ? new Date(family.observationTime).toLocaleString() : "time unavailable"}</span>
-          </button>)}
-        </div> : null}
-        {selected ? <div className="rounded-lg border border-[#CCD6F5] bg-[#F7F8FF] p-3"><p className="text-xs font-semibold uppercase tracking-wide text-action">Selected market</p><p className="mt-1 font-medium">{selected.title}</p><p className="mt-1 text-sm text-muted">The draft will open on Research with these exact Gemini contract identities. You can refine the supported view before confirming.</p></div> : null}
+        {error ? (
+          <p role="alert" className="rounded-lg border border-bad/30 bg-[#FFF5F4] p-3 text-sm text-bad">
+            {error}
+          </p>
+        ) : null}
+        {results.length ? (
+          <div className="max-h-72 space-y-2 overflow-y-auto rounded-xl border border-line bg-[var(--th-canvas)] p-2" aria-label="Matching markets">
+            {results.map((family) => (
+              <button
+                key={family.id}
+                type="button"
+                aria-pressed={selected?.id === family.id}
+                disabled={creating}
+                onClick={() => { setSelected((current) => current?.id === family.id ? null : family); setError(""); }}
+                className={`block w-full rounded-xl border p-3 text-left transition-colors ${selected?.id === family.id ? "border-action bg-white shadow-[inset_0_0_0_1px_var(--action)]" : "border-transparent bg-white/80 hover:border-action/40"}`}
+              >
+                <span className="block text-xs text-muted">{family.mode === "live" ? "Gemini live market" : "Recorded replay"} · {family.freshness}</span>
+                <span className="mt-1 block font-semibold">{family.title}</span>
+                <span className="mt-1 block text-sm text-muted">{family.question}</span>
+                <span className="mt-2 block text-xs text-muted">{family.contracts.length} listed contract{family.contracts.length === 1 ? "" : "s"} · observed {family.observationTime ? new Date(family.observationTime).toLocaleString() : "time unavailable"}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {selected ? (
+          <div className="rounded-xl border border-[#CCD6F5] bg-[#F7F8FF] p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-action">Selected market</p>
+            <p className="mt-1 font-medium">{selected.title}</p>
+            <button type="button" className="text-sm text-action underline" disabled={creating} onClick={() => setSelected(null)}>Remove market</button>
+          </div>
+        ) : null}
         <footer className="flex flex-wrap justify-end gap-2 border-t border-line pt-4">
-          <button type="button" onClick={onClose} disabled={creating} className="app-button min-h-11 rounded-lg border border-line px-4 text-sm font-semibold">Cancel</button>
-          <button type="button" onClick={() => void createDraft()} disabled={question.trim().length < 8 || creating} className="app-button min-h-11 rounded-lg bg-action px-5 text-sm font-semibold text-white disabled:opacity-50">{creating ? "Creating draft…" : selected ? "Create market-linked draft" : "Create draft"}</button>
+          <Button kind="ghost" onClick={closeForm} disabled={creating}>Cancel</Button>
+          <Button icon="plus" onClick={() => void createDraft()} disabled={question.trim().length < 8 || creating} loading={creating}>
+            {creating ? "Creating draft…" : "Create draft"}
+          </Button>
         </footer>
-        <p className="text-center text-xs text-muted">Market selection is optional. An unbound draft opens in Research so you can attach a compatible market later. Creating a draft never places or authorizes a trade.</p>
+        <p className="text-center text-xs text-muted">{selected ? "You can refine your view in Research after saving." : "Save your question now and link a market when you’re ready."}</p>
       </form>
     </AppDialog>
   );

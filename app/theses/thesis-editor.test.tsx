@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { MarketFamily, ThesisRevision } from "@/lib/domain/types";
 
 const navigation = vi.hoisted(() => ({ push: vi.fn(), historySeries: [] as unknown[] }));
@@ -124,6 +124,7 @@ describe("thesis research contract rules", () => {
   it("anchors a binary view to its contract history and appends streamed Gemini trade prints", async () => {
     render(<ThesisEditor />);
     expect(await screen.findByTestId("price-history")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "View live market feed" }));
     expect(screen.getByTestId("live-market-feed")).toBeTruthy();
     const series = navigation.historySeries as { label: string; points: { timestamp: string; price: string }[] }[];
     expect(series).toHaveLength(1);
@@ -134,12 +135,13 @@ describe("thesis research contract rules", () => {
   it("shows exact selected-contract wording and keeps event terms separately labeled", async () => {
     render(<ThesisEditor />);
 
+    fireEvent.click(await screen.findByRole("button", { name: "Read full rules" }));
     expect(await screen.findByText(contract.description!)).toBeTruthy();
     expect(screen.getByText(/Strike: above · 95000/)).toBeTruthy();
     expect(screen.getByText("Settlement source: LS-LRRR-XBTUSD")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open exact Gemini contract rules" }).getAttribute("href"))
       .toBe("https://example.com/exact-contract-rules");
-    expect(screen.getByRole("link", { name: "Open event-level Gemini terms" }).getAttribute("href"))
+    expect(screen.getByRole("link", { name: "Open event-level Gemini rules" }).getAttribute("href"))
       .toBe("https://example.com/event-rules");
   });
 
@@ -147,16 +149,16 @@ describe("thesis research contract rules", () => {
     activeFamily = family({ description: null, termsUrl: null, strike: null, source: null });
     render(<ThesisEditor />);
 
+    fireEvent.click(await screen.findByRole("button", { name: "Read full rules" }));
     expect(await screen.findByText("Gemini did not include contract-level wording in this response.")).toBeTruthy();
     expect(screen.getByText("No contract-specific rules link was supplied.")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Open exact Gemini contract rules" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Open event-level Gemini terms" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open event-level Gemini rules" })).toBeTruthy();
   });
 
   it("refreshes market data on mode changes without losing edits when refresh fails", async () => {
     render(<ThesisEditor />);
-    expect(await screen.findByText(contract.description!)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Edit view" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit view" }));
     const rationale = screen.getByLabelText("Rationale") as HTMLTextAreaElement;
     fireEvent.change(rationale, { target: { value: "Keep my unsaved reasoning." } });
 
@@ -189,8 +191,7 @@ describe("thesis research contract rules", () => {
     }));
     render(<ThesisEditor />);
 
-    expect(await screen.findByText(contract.description!)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Edit view" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit view" }));
     fireEvent.change(screen.getByLabelText("Rationale"), { target: { value: "Edited research rationale." } });
     fireEvent.click(screen.getByRole("button", { name: "Review confirmation" }));
     expect(screen.getByRole("heading", { name: "Confirm this thesis view?" })).toBeTruthy();
@@ -202,7 +203,7 @@ describe("thesis research contract rules", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Confirm view & build" }).at(-1)!);
     expect((await screen.findByRole("alert")).textContent).toContain("Temporary save failure.");
     expect(screen.getAllByRole("button", { name: "Confirm view & build" }).length).toBeGreaterThan(0);
-    expect((screen.getByLabelText("Rationale") as HTMLTextAreaElement).value).toBe("Edited research rationale.");
+    expect(within(screen.getByRole("dialog", { name: "Confirm this thesis view?" })).getByText("Edited research rationale.")).toBeTruthy();
     expect(navigation.push).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Confirm view & build" }).at(-1)!);

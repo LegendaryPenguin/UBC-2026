@@ -1,12 +1,23 @@
 import { randomInt } from "node:crypto";
 import { cookies } from "next/headers";
+import { googleOAuthSetup } from "@/lib/server/google-oauth";
 import { fail, ok, readJson } from "@/lib/server/http";
 import { clearSession, createSession, currentSession } from "@/lib/server/session";
-import { migrateGuestData, mutate, uid } from "@/lib/server/store";
+import { migrateGuestData, mutate, storeBackend, uid } from "@/lib/server/store";
 
 export async function GET() {
   const ctx = currentSession();
-  return ok({ account: ctx?.account ?? null });
+  const google = googleOAuthSetup();
+  return ok({
+    account: ctx?.account ?? null,
+    auth: {
+      googleConfigured: google.configured,
+      googleMissing: google.missing,
+      googleRedirectUri: google.redirectUri,
+      emailDemoEnabled: process.env.NODE_ENV === "development",
+      storage: storeBackend(),
+    },
+  });
 }
 
 export async function POST(req: Request) {
@@ -44,6 +55,9 @@ export async function POST(req: Request) {
           interests: [],
           wallet: null,
           closed: false,
+          googleId: null,
+          authProvider: "email",
+          avatarUrl: null,
         };
         s.accounts.push(acc);
       }

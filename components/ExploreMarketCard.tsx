@@ -115,8 +115,7 @@ function whenLabel({ event, contract }: MarketSelection, now: number) {
   return { label: `Closes in ${count} ${unit}${count === 1 ? "" : "s"}`, full, date };
 }
 
-function askLabel(contract?: GeminiContract) {
-  const value = contract?.prices?.buy?.yes ?? contract?.prices?.bestAsk;
+function askLabel(value: string | undefined) {
   if (typeof value !== "string" || !value.trim()) return null;
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0 || number > 1) return null;
@@ -124,8 +123,29 @@ function askLabel(contract?: GeminiContract) {
 }
 
 const palette = ["#2544a5", "#087650", "#a5224f", "#7b3aa2", "#b45318", "#086e83", "#384a66"];
-const categoryIcon: Record<string, IconName> = { sports: "target", crypto: "wallet", economics: "chart", politics: "globe", culture: "news", technology: "network" };
+const categoryIcon: Record<string, IconName> = { sports: "trophy", crypto: "coins", economics: "chart", politics: "ballot", culture: "news", technology: "network" };
+const cryptoIcons = [
+  { code: "btc", icon: "bitcoin", title: /\b(?:bitcoin|btc)\b/i },
+  { code: "eth", icon: "ethereum", title: /\b(?:ethereum|ether|eth)\b/i },
+  { code: "sol", icon: "solana", title: /\b(?:solana|sol)\b/i },
+  { code: "xrp", icon: "xrp", title: /\bxrp\b/i },
+] as const;
 const prompts: Record<Group, string> = { Winner: "Who will win?", Spread: "Point spread", Total: "Combined score", Props: "Player outcomes", Other: "Available outcomes", Contracts: "Available outcomes" };
+
+function marketMark(event: GeminiEvent, category: string): { icon: IconName; asset?: string } {
+  if (category === "crypto") {
+    const ticker = event.ticker.match(/^[a-z]+/i)?.[0].toLowerCase();
+    const asset = cryptoIcons.find(({ code }) => ticker === code)
+      ?? cryptoIcons.find(({ title }) => title.test(event.title));
+    if (asset) return { icon: asset.icon, asset: asset.code };
+  }
+  if (category === "economics") {
+    if (/\b(?:federal reserve|fed|fomc|central bank|rate (?:cut|hike|decision)|interest rates?)\b/i.test(event.title)) return { icon: "bank" };
+    if (/\b(?:cpi|inflation|gdp|jobs|payrolls|unemployment)\b/i.test(event.title)) return { icon: "bars" };
+  }
+  if (category === "politics" && /\b(?:bill|court|law|tariff|legislation)\b/i.test(event.title)) return { icon: "rules" };
+  return { icon: categoryIcon[category] || "explore" };
+}
 
 function markColor(code: string, offset = 0) {
   const index = [...code].reduce((sum, letter) => (sum * 31 + letter.charCodeAt(0)) % palette.length, 0);
@@ -157,11 +177,13 @@ export function ExploreMarketCard({ card, mode, now, watchedSlugs, watchBusy, on
   const slug = selectionTopic(selection, mode);
   const watched = Boolean(slug && watchedSlugs?.has(slug));
   const category = card.event.category || "Market";
+  const categoryKey = category.toLowerCase();
+  const mark = marketMark(card.event, categoryKey);
   const preview = section.selections.slice(0, 2);
   if (preview.length === 2 && !preview.includes(selection)) preview[1] = selection;
   const display = expanded ? section.selections : preview;
   const hasVariants = card.teams && section.selections.some(({ event }) => event.ticker !== section.selections[0].event.ticker);
-  const settled = section.selections.every(({ event }) => event.status === "settled");
+  const settled = section.selections.every(({ event, contract }) => event.status === "settled" || contract?.status === "settled");
   const status = selection.event.status.replaceAll("_", " ");
   const link = marketDetailHref(selection, mode);
 
@@ -170,7 +192,7 @@ export function ExploreMarketCard({ card, mode, now, watchedSlugs, watchBusy, on
       <div className="explore-market-card__icons">
         <div className="explore-market-card__marks" aria-hidden="true">
           {card.teams ? card.teams.map((team, index) => <span key={team.code} className="explore-market-card__team" title={team.name} style={{ backgroundColor: markColor(team.code, index && markColor(team.code) === markColor(card.teams![0].code) ? 1 : 0) }}>{team.code}</span>) : (
-            <span className="explore-market-card__category" data-category={category.toLowerCase()}><Icon name={categoryIcon[category.toLowerCase()] || "target"} size={24} /></span>
+            <span className="explore-market-card__category" data-category={categoryKey} data-asset={mark.asset}><Icon name={mark.icon} size={24} /></span>
           )}
         </div>
         <div className="explore-market-card__status">
@@ -195,20 +217,37 @@ export function ExploreMarketCard({ card, mode, now, watchedSlugs, watchBusy, on
         </div>
       ) : null}
 
-      <div className="explore-market-card__body">
-        <div className="explore-market-card__outcome-head"><strong>{prompts[section.name]}</strong><span title={settled ? "Gemini resolution" : "Gemini YES reference ask"}>{settled ? "Resolved" : "YES ask"}</span></div>
+      <div className="explore-market-card__body" data-settled={settled}>
+        <div className="explore-market-card__outcome-head">
+          <strong>{prompts[section.name]}</strong>
+          {settled ? <span>Resolved</span> : <><span title="Gemini YES reference ask">Yes ask</span><span title="Gemini NO reference ask">No ask</span></>}
+        </div>
         <ul id={panelId} className="explore-market-card__outcomes" data-expanded={expanded}>
           {display.map((item) => {
             const key = selectionKey(item);
             const label = item.contract?.label || item.event.title;
             const variant = hasVariants
               ? item.event.title.split(":").slice(1).join(":").trim() : "";
+            const prices = item.contract?.prices;
+            const resolved = item.event.status === "settled" || item.contract?.status === "settled";
             const outcome = item.contract?.resolutionSide?.toUpperCase();
-            const value = settled ? outcome === "YES" || outcome === "NO" ? outcome : null : askLabel(item.contract);
+            const resolution = outcome === "YES" || outcome === "NO" ? outcome : null;
             return <li key={key}>
               <button type="button" className="explore-market-card__outcome" aria-pressed={selectionKey(selection) === key} onClick={() => setPicked(key)}>
                 <span>{label}{variant && !label.toLowerCase().includes(variant.toLowerCase()) ? <small>{variant}</small> : null}</span>
-                <strong className={!value ? "explore-market-card__unpriced" : undefined} aria-label={value || (settled ? "Resolution unavailable" : "YES ask unavailable")}>{value ?? "—"}</strong>
+                {resolved ? (
+                  <strong className={`explore-market-card__resolution${resolution ? "" : " explore-market-card__unpriced"}`}>
+                    {resolution ? <><span className="sr-only">Resolved </span>{resolution}</> : <><span className="sr-only">Resolution unavailable</span><span aria-hidden="true">—</span></>}
+                  </strong>
+                ) : ([
+                  ["Yes", askLabel(prices?.buy?.yes) ?? askLabel(prices?.bestAsk)],
+                  ["No", askLabel(prices?.buy?.no)],
+                ] as const).map(([side, value]) => (
+                  <strong key={side} className={!value ? "explore-market-card__unpriced" : undefined} title={!value ? `${side} ask unavailable` : undefined}>
+                    <span className="sr-only">{side} ask{value ? " " : " unavailable"}</span>
+                    {value ?? <span aria-hidden="true">—</span>}
+                  </strong>
+                ))}
               </button>
             </li>;
           })}

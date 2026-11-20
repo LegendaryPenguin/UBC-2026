@@ -127,19 +127,26 @@ describe("Gemini Research topic flow", () => {
     render(<TopicPage />);
 
     expect(await screen.findByRole("heading", { name: "Where will Bitcoin finish Friday?" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Read full rules" }));
     expect(screen.getByText(family.contracts[0].description!)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open exact Gemini contract rules" }).getAttribute("href")).toBe("https://gemini.example/contracts/hi95k-rules");
     expect(screen.getByRole("link", { name: "Open event-level Gemini rules" }).getAttribute("href")).toBe("https://gemini.example/event-rules");
     expect(screen.getByRole("link", { name: "Explore" }).getAttribute("href")).toBe("/explore");
     expect(screen.getByText("Demand strengthens")).toBeTruthy();
     expect(screen.getByText(/Gemini has not returned a history series/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close settlement rules" }));
+    fireEvent.click(screen.getByRole("button", { name: /Demand strengthens/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save source" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close evidence detail" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Form a view manually" }));
+    const create = screen.getByRole("button", { name: "Create draft" });
+    expect(create.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "NO The proposition fails" }));
+    fireEvent.click(create);
     expect((await screen.findByRole("alert")).textContent).toContain("Draft could not be saved. Retry when the service is available.");
-    expect(screen.getByRole("button", { name: "Form a view manually" }).hasAttribute("disabled")).toBe(true);
     expect(screen.getByRole("button", { name: "Retry draft creation" }).hasAttribute("disabled")).toBe(false);
     const firstPayload = JSON.parse(String(fetchMock.mock.calls.find(([url, init]) => String(url) === "/api/theses" && init?.method === "POST")?.[1]?.body));
-    expect(firstPayload).toMatchObject({ topicSlug: "btc-friday", mode: "live", template: "binary", direction: "yes", evidenceIds: ["evidence-inflows"] });
+    expect(firstPayload).toMatchObject({ topicSlug: "btc-friday", mode: "live", template: "binary", direction: "no", evidenceIds: ["evidence-inflows"] });
 
     fireEvent.click(screen.getByRole("button", { name: "Retry draft creation" }));
     await vi.waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/theses/thesis-42"));
@@ -160,12 +167,12 @@ describe("Gemini Research topic flow", () => {
 
   it("refreshes topic data after a confirmed app mode change", async () => {
     render(<TopicPage />);
-    expect(await screen.findByText(/This research view uses one Gemini contract/)).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Gemini prices" })).toBeTruthy();
     activeMode = "replay";
     localStorage.setItem("thesis_mode", "replay");
     act(() => window.dispatchEvent(new CustomEvent("thesis:mode-change", { detail: { mode: "replay" } })));
 
     expect(await screen.findByText(/Illustrative replay market and evidence/)).toBeTruthy();
-    expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/topics/btc-friday?mode=replay")).toBe(true);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url) === "/api/topics/btc-friday?mode=live")).toHaveLength(2);
   });
 });

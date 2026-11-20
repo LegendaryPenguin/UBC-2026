@@ -17,12 +17,17 @@ const config: Config = {
         line: "#DEDCD5",
       },
       fontFamily: {
-        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
-        serif: ["var(--font-serif)", "Georgia", "serif"],
+        sans: ["Thesis Sans", "system-ui", "sans-serif"],
+        serif: ["Thesis Serif", "Georgia", "serif"],
         mono: ["var(--font-mono)", "ui-monospace", "monospace"],
       },
       borderRadius: {
         card: "12px",
+      },
+      boxShadow: {
+        soft: "0 1px 2px rgb(24 35 41 / 4%), 0 6px 20px rgb(24 35 41 / 5%)",
+        shell: "0 8px 32px rgb(24 35 41 / 10%)",
+        fab: "0 8px 24px rgb(24 35 41 / 14%)",
       },
     },
   },

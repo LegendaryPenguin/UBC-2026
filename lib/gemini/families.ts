@@ -11,7 +11,7 @@ import type {
 import { familyHash } from "@/lib/payoffs/hash";
 import { formatThreshold } from "@/lib/payoffs/compile";
 import type { GeminiContract, GeminiEvent, GeminiOrderbook } from "@/lib/gemini/client";
-import { geminiRichText } from "@/lib/gemini/types";
+import { geminiBinaryTopicSlug, geminiRichText } from "@/lib/gemini/types";
 
 const THRESHOLD_RE = /\$?\s*([\d,]+(?:\.\d+)?)\s+or above/i;
 
@@ -229,8 +229,7 @@ export function binaryFromEvent(
   if (live && !allowResolved && (event.status !== "active" || contract.status !== "active" || contract.marketState === "closed")) return null;
   const sourceEvent = toSourceEvent(event, fetchedAt, hash);
   const sourceContract = toSourceContract(event, contract, fetchedAt);
-  const slugPart = (value: string, max: number) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, max).replace(/-+$/g, "");
-  const slug = `gm-${slugPart(event.ticker, 34)}-${slugPart(contract.id, 38)}`.slice(0, 79).replace(/-+$/g, "");
+  const slug = geminiBinaryTopicSlug(event.ticker, contract.id);
   const observationTime = contract.expiryDate ?? event.expiryDate ?? null;
   const predicates: Predicate[] = [
     {

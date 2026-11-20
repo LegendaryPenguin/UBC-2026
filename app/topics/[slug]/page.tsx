@@ -1,164 +1,195 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, dataContextFromStorage } from "@/lib/client";
-import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
-import { Button, Card, Empty } from "@/components/ui";
-import { VoicePanel } from "@/components/VoicePanel";
-import { formatTime } from "@/lib/format";
-import { MarketPriceHistory } from "@/components/MarketPriceHistory";
+import type { Direction, EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
+import { Button, Card } from "@/components/ui";
+import { Icon } from "@/components/thesis";
+import { WorkspaceAssistant } from "@/components/WorkspaceAssistant";
+import { AppDrawer } from "@/components/AppDrawer";
+import {
+  hasResearchHistory,
+  ResearchChart,
+  ResearchEvidenceDrawer,
+  ResearchEvidenceList,
+  ResearchPrices,
+  ResearchRelatedContracts,
+  ResearchRules,
+  ResearchSavedTile,
+  ResearchTile,
+  researchTime,
+  type RelatedContract,
+} from "@/components/ResearchBoard";
 import { useModeChange } from "@/lib/use-mode-change";
+import { copyMarketReplies, useResearchNotebook } from "@/lib/use-research-notebook";
 
 export default function TopicPage() {
   const { slug } = useParams<{ slug: string }>();
   const router = useRouter();
   const [family, setFamily] = useState<MarketFamily | null>(null);
-  const [relatedContracts, setRelatedContracts] = useState<{ slug: string; label: string; instrumentSymbol: string; bid: string | null; ask: string | null }[]>([]);
+  const [relatedContracts, setRelatedContracts] = useState<RelatedContract[]>([]);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
+  const [selectedEvidence, setSelectedEvidence] = useState<EvidenceItem | null>(null);
+  const [sourceSaveError, setSourceSaveError] = useState("");
+  const [assistantPrompt, setAssistantPrompt] = useState("");
+  const [direction, setDirection] = useState<Direction | null>(null);
+  const [bookOpen, setBookOpen] = useState(false);
   const [topicError, setTopicError] = useState("");
   const [draftError, setDraftError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const bookTitleId = useId();
+  const requestId = useRef(0);
+  const savingDraft = useRef(false);
+  const notebook = useResearchNotebook(`market:${family?.slug || slug}`);
 
   const loadTopic = useCallback(async () => {
-    const mode = dataContextFromStorage();
+    const current = ++requestId.current;
+    const params = new URLSearchParams({ mode: dataContextFromStorage() });
+    const eventTicker = new URLSearchParams(window.location.search).get("event");
+    if (eventTicker) params.set("event", eventTicker);
     setTopicError("");
+    setRefreshing(true);
     try {
-      const res = await api<{ family: MarketFamily; relatedContracts: typeof relatedContracts; evidence: EvidenceItem[] }>(`/api/topics/${slug}?mode=${mode}`);
+      const res = await api<{ family: MarketFamily; relatedContracts: RelatedContract[]; evidence: EvidenceItem[] }>(`/api/topics/${slug}?${params}`);
+      if (current !== requestId.current) return;
       setFamily(res.family);
       setRelatedContracts(res.relatedContracts || []);
-      setEvidence(res.evidence);
+      setEvidence(res.evidence || []);
     } catch (err) {
-      setTopicError(err instanceof Error ? err.message : "Topic data could not be loaded.");
+      if (current === requestId.current) setTopicError(err instanceof Error ? err.message : "Topic data could not be loaded.");
+    } finally {
+      if (current === requestId.current) setRefreshing(false);
     }
   }, [slug]);
 
-  useEffect(() => { void loadTopic(); }, [loadTopic]);
+  useEffect(() => {
+    setFamily(null);
+    setDirection(null);
+    setDraftError("");
+    setSelectedEvidence(null);
+    setBookOpen(false);
+    void loadTopic();
+    return () => { requestId.current += 1; };
+  }, [loadTopic]);
   useModeChange(() => { void loadTopic(); });
 
+  const singleBinary = family?.predicates.length === 1 && family.contracts.length === 1;
+
   async function formView() {
-    if (!family) return;
+    if (!family || savingDraft.current || (singleBinary && !direction)) return;
+    savingDraft.current = true;
     setBusy(true);
     setDraftError("");
     try {
-      const lower = family.predicates[0]?.threshold ?? null;
-      const upper = family.predicates[1]?.threshold ?? null;
-      const res = await api<{ thesis: ThesisRevision }>("/api/theses", {
+      const { thesis } = await api<{ thesis: ThesisRevision }>("/api/theses", {
         method: "POST",
         body: JSON.stringify({
           topicSlug: family.slug,
           familyId: family.id,
           familyVersion: family.version,
           mode: dataContextFromStorage(),
-          template: family.predicates.length === 1 && family.contracts.length === 1 ? "binary" : family.predicates.length >= 2 ? "range" : "directional",
-          lowerThreshold: family.predicates.length === 1 && family.contracts.length === 1 ? null : lower,
-          upperThreshold: family.predicates.length === 1 && family.contracts.length === 1 ? null : upper,
-          direction: "yes",
+          ...(singleBinary ? { template: "binary", direction } : {}),
+          title: family.title,
           rationale: "",
-          evidenceIds: evidence.map((e) => e.id),
+          evidenceIds: notebook.sourceIds,
         }),
       });
-      router.push(`/theses/${res.thesis.id}`);
+      copyMarketReplies(family.slug, thesis.id);
+      router.push(`/theses/${thesis.id}${singleBinary ? "" : "?edit=1"}`);
     } catch (err) {
       setDraftError(err instanceof Error ? err.message : "Could not create draft");
     } finally {
+      savingDraft.current = false;
       setBusy(false);
     }
   }
 
   if (topicError && !family) return <Card><p role="alert" className="text-sm text-bad">{topicError}</p><div className="mt-3 flex gap-2"><Button onClick={() => void loadTopic()} kind="secondary">Retry market data</Button><Button href="/explore" kind="ghost">Explore</Button></div></Card>;
-  if (!family) return <p>Loading topic…</p>;
+  if (!family) return <p role="status">Loading Gemini research…</p>;
 
-  const initialHistory = family.predicates.slice(0, 2).map((predicate) => family.contracts.find((contract) => contract.id === predicate.contractId)).filter((contract) => contract != null);
+  const series = family.contracts.slice(0, 2).map((contract, index) => ({
+    label: contract.label,
+    color: index === 0 ? "#3559E0" : "#8D6CEB",
+    points: contract.priceHistory || [],
+  }));
+  const hasHistory = hasResearchHistory(series);
   const depth = family.contracts[0]?.orderBook;
-  const contractRulesUrl = family.contracts[0]?.termsUrl || null;
-  const eventRulesUrl = family.sourceEvent.sourceUrl && family.sourceEvent.sourceUrl !== contractRulesUrl ? family.sourceEvent.sourceUrl : null;
-  const singleBinary = family.predicates.length === 1 && family.contracts.length === 1;
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted"><Link href="/explore">Explore</Link> / Research</p>
-      <h1 className="font-serif text-3xl">{family.title}</h1>
-      {topicError ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{topicError}. Showing the previously loaded {family.mode} data. <button type="button" className="text-action underline" onClick={() => void loadTopic()}>Retry market data</button></p> : null}
-      <p className="text-sm text-muted">{family.question} · Observation {formatTime(family.observationTime)}</p>
-      {family.mode === "live" && family.predicates.length === 1 ? <p className="rounded-lg border border-line bg-white p-3 text-sm text-muted">This research view uses one Gemini contract with YES/NO outcomes. Related contracts remain separate until their settlement rules are verified as one compatible family.</p> : null}
-      {family.mode === "replay" ? <p className="rounded-lg bg-[#FFF8E7] p-3 text-xs text-muted">Illustrative replay market and evidence. Values are demonstration fixtures, not current Gemini inventory or news.</p> : null}
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,0.85fr)]">
-        <div className="space-y-4">
-          <MarketPriceHistory illustrative={family.mode === "replay"} series={initialHistory.map((contract, index) => ({ label: contract!.label, color: index === 0 ? "#3559E0" : "#8D6CEB", points: contract!.priceHistory || [] }))} />
-          <Card>
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="font-serif text-xl">{singleBinary ? "Selected Gemini contract" : "Related Gemini contracts"}</h2>
-              <span className="text-xs text-muted">{family.freshness} market reference{singleBinary ? "" : "s"}</span>
-            </div>
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead><tr><th className="border-b border-line py-2 pr-3">Contract</th><th className="border-b border-line py-2 pr-3">Bid · YES</th><th className="border-b border-line py-2 pr-3">Ask · YES</th><th className="border-b border-line py-2">Last trade</th></tr></thead>
-                <tbody>{family.contracts.map((contract) => (
-                  <tr key={contract.id}>
-                    <td className="border-b border-line py-2 pr-3">{contract.label}</td>
-                    <td className="border-b border-line py-2 pr-3">{contract.bid ?? "—"}</td>
-                    <td className="border-b border-line py-2 pr-3">{contract.ask ?? "—"}</td>
-                    <td className="border-b border-line py-2">{contract.lastTrade ?? "—"}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
-            </div>
-            <p className="mt-2 text-xs text-muted">Displayed prices are references and may not have executable size. Source: Gemini event {family.sourceEvent.ticker}.</p>
-          </Card>
-          <Card>
-            <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="font-serif text-xl">Gemini order book</h2><span className="text-xs text-muted">{depth ? "Snapshot" : "No depth returned"}</span></div>
-            {depth ? <>
-              <p className="mt-1 text-xs text-muted">Received {formatTime(depth.receivedAt)} · Gemini did not provide a source timestamp in this response. Depth can change before an order is submitted.</p>
-              <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                {([["Bids", depth.bids], ["Asks", depth.asks]] as const).map(([label, levels]) => <div key={label}>
-                  <h3 className="text-sm font-medium">{label}</h3>
-                  {levels.length ? <div className="mt-1 space-y-1">{levels.map((level, index) => <div key={`${label}-${index}`} className="grid grid-cols-2 rounded bg-surface px-2 py-1 text-xs"><span>{level.price}</span><span className="text-right">{level.quantity}</span></div>)}</div> : <p className="mt-1 text-xs text-muted">No levels returned.</p>}
-                </div>)}
-              </div>
-            </> : <p className="mt-2 text-sm text-muted">Gemini returned no order-book levels for this contract. Bid/ask and last-trade values remain reference prices; they do not prove available size or an executable cost.</p>}
-          </Card>
-          {relatedContracts.length ? <Card>
-            <h2 className="font-serif text-xl">Related Gemini contracts</h2>
-            <p className="mt-1 text-xs text-muted">Each remains a separate YES/NO proposition until its settlement rules are verified as a compatible family.</p>
-            <div className="mt-3 grid gap-2">{relatedContracts.map((contract) => <Link key={contract.slug} href={`/topics/${contract.slug}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line p-3 text-sm hover:border-action"><span>{contract.label}</span><span className="text-xs text-muted">YES bid {contract.bid ?? "—"} · ask {contract.ask ?? "—"}</span></Link>)}</div>
-          </Card> : null}
-          <Card>
-            <h2 className="font-serif text-xl">Resolution rules</h2>
-            <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-              {family.contracts[0]?.description ? <div className="sm:col-span-2"><dt className="text-muted">Exact Gemini contract wording</dt><dd className="mt-1 whitespace-pre-wrap">{family.contracts[0].description}</dd></div> : <div className="sm:col-span-2"><dt className="text-muted">Exact Gemini contract wording</dt><dd className="mt-1">Gemini did not include contract-level wording in this response. Use the contract rules link when available.</dd></div>}
-              {family.contracts[0]?.strike ? <div><dt className="text-muted">Gemini strike</dt><dd>{family.contracts[0].strike.type || "Type not listed"}{family.contracts[0].strike.value ? ` · ${family.contracts[0].strike.value}` : " · value not available"}{family.contracts[0].strike.availableAt ? ` · available ${formatTime(family.contracts[0].strike.availableAt)}` : ""}</dd></div> : null}
-              <div><dt className="text-muted">Observation</dt><dd>{formatTime(family.observationTime)}</dd></div>
-              <div><dt className="text-muted">Source</dt><dd>{family.sourceEvent.sourceAgency || "Gemini listed source"} / {family.contracts[0]?.source || family.sourceEvent.sourceIndex || "see terms"}</dd></div>
-              <div><dt className="text-muted">Market status</dt><dd className="capitalize">{family.sourceEvent.status}</dd></div>
-              <div><dt className="text-muted">Trade cutoff</dt><dd>{family.closeTime ? formatTime(family.closeTime) : "Not provided by this market response"}</dd></div>
-            </dl>
-            {contractRulesUrl ? <a className="mt-3 inline-block text-sm text-action underline" href={contractRulesUrl} target="_blank" rel="noreferrer">Open exact Gemini contract rules</a> : null}
-            {eventRulesUrl ? <a className="mt-3 inline-block text-sm text-action" href={eventRulesUrl} target="_blank" rel="noreferrer">Open event-level Gemini rules</a> : null}
-            <p className="mt-3 break-all border-t border-line pt-3 text-xs text-muted">Source snapshot received {formatTime(family.sourceEvent.fetchedAt)} · SHA-256 {family.sourceEvent.payloadHash}</p>
-          </Card>
-          <Card>
-            <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="font-serif text-xl">Evidence</h2>{family.mode === "replay" ? <span className="text-xs text-muted">Illustrative</span> : null}</div>
-            {evidence.length ? <div className="mt-3 grid gap-3 md:grid-cols-2">{evidence.map((item) => (
-              <article key={item.id} className="rounded-lg border border-line p-3">
-                <span className={`inline-flex rounded-full px-2 py-1 text-xs capitalize ${item.stance === "supports" ? "bg-[#E3F5EC] text-good" : item.stance === "challenges" ? "bg-[#FCE8E8] text-bad" : "bg-[#E9EEFF] text-action"}`}>{item.stance || "context"}</span>
-                <Link href={`/topics/${slug}/evidence/${item.id}`} className="mt-2 block font-medium">{item.title}</Link>
-                <p className="mt-1 text-xs text-muted">{item.publisher} · retrieved {formatTime(item.retrievedAt)}</p>
-                <p className="mt-2 text-sm">{item.excerpt}</p>
-              </article>
-            ))}</div> : <p className="mt-3 text-sm text-muted">No evidence feed is available for this market. You can inspect its rules and create a view manually.</p>}
-          </Card>
+  const hasDepth = Boolean(depth && (depth.bids.length || depth.asks.length));
+  const savedSources = evidence.filter((item) => notebook.sourceIds.includes(item.id));
+  function openSource(item: EvidenceItem) {
+    setSourceSaveError("");
+    setSelectedEvidence(item);
+  }
+  const view = (
+    <ResearchTile title="Your view" icon="target" kind="view" detail={<span className="status-pill">New draft</span>} footer={
+      <Button onClick={() => void formView()} icon="arrow-right" disabled={busy || (singleBinary && !direction)} loading={busy}>
+        {busy ? "Saving draft…" : draftError ? "Retry draft creation" : "Create draft"}
+      </Button>
+    }>
+      <h3 className="research-view__question">{singleBinary ? family.contracts[0].label : "What do you expect at settlement?"}</h3>
+      {singleBinary ? (
+        <div className="research-view__directions" role="group" aria-label="Choose an outcome">
+          {(["yes", "no"] as const).map((side) => (
+            <button key={side} type="button" aria-pressed={direction === side} disabled={busy} onClick={() => { setDirection(side); setDraftError(""); }}>
+              <strong>{side.toUpperCase()}</strong><span>{side === "yes" ? "The proposition holds" : "The proposition fails"}</span>
+            </button>
+          ))}
         </div>
-        <aside className="space-y-4">
-          <VoicePanel slug={family.slug} family={family} evidence={evidence} title="What do you think will happen?" />
-          <Card>
-            <h2 className="font-serif text-xl">Your view</h2>
-            <p className="mt-2 text-sm text-muted">{singleBinary ? "Speak or type an opinion. For this contract, choose whether Gemini resolves its exact proposition YES or NO. Edit and confirm before moving to Build." : "Speak or type an opinion. Choose supported boundaries from the listed contracts, edit the proposal, and confirm before moving to Build."}</p>
-            {draftError ? <div role="alert" className="mt-3 rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad"><p>{draftError}</p><div className="mt-2"><Button kind="ghost" onClick={() => void formView()} disabled={busy}>Retry draft creation</Button></div></div> : null}
-            <div className="mt-3"><Button onClick={formView} disabled={busy || Boolean(draftError)}>{busy ? "Saving draft…" : "Form a view manually"}</Button></div>
-          </Card>
-        </aside>
+      ) : <p className="research-tile__muted mt-3">Save a draft to choose a direction or a range from the listed Gemini thresholds.</p>}
+      {draftError ? <p role="alert" className="text-sm text-bad mt-2">{draftError}</p> : null}
+    </ResearchTile>
+  );
+  return (
+    <div className="screen-market-research">
+      <header className="research-board-heading">
+        <Link className="research-board-heading__back" href="/explore"><Icon name="arrow-left" size={16} />Explore</Link>
+        <div className="research-board-heading__main">
+          <div><h1 className="workspace-title screen-heading">{family.title}</h1><p className="research-workspace__meta text-sm th-muted"><span>{family.mode === "replay" ? "Illustrative replay market and evidence" : "Gemini market"}</span><span>{family.sourceEvent.category}</span><span className="capitalize">{family.sourceEvent.status.replaceAll("_", " ")}</span></p></div>
+          <Button icon="refresh" kind="secondary" onClick={() => void loadTopic()} disabled={refreshing}>{refreshing ? "Refreshing…" : "Refresh data"}</Button>
+        </div>
+      </header>
+      {topicError ? <p role="alert" className="th-alert th-alert--warning my-3 text-sm">{topicError} Showing the last loaded snapshot. <button type="button" className="text-action underline" onClick={() => void loadTopic()}>Retry market data</button></p> : null}
+      <div className="research-board">
+        <div className="research-board__grid">
+          {hasHistory ? <ResearchChart family={family} series={series} /> : null}
+          {hasHistory ? view : null}
+          <ResearchPrices family={family} hasHistory={hasHistory} footer={hasDepth ? <Button kind="secondary" icon="bars" onClick={() => setBookOpen(true)}>View order book</Button> : null} />
+          <ResearchRules family={family} />
+          {!hasHistory ? view : null}
+          <ResearchTile title={family.mode === "live" ? "Evidence & sources" : "Evidence"} icon="news" detail={<span className="status-pill">{evidence.length}</span>}>
+            {evidence.length ? <ResearchEvidenceList items={evidence} onSelect={openSource} /> : <p className="research-tile__muted">No evidence has been returned for this market.</p>}
+          </ResearchTile>
+          {relatedContracts.length ? <ResearchRelatedContracts ticker={family.sourceEvent.ticker} contracts={relatedContracts} /> : null}
+          <ResearchSavedTile usedColumns={4 + (hasHistory ? 2 : 0) + (relatedContracts.length ? 1 : 0)} sources={savedSources} replies={notebook.replies} onSelectSource={openSource} onRemoveReply={notebook.removeReply} />
+        </div>
       </div>
+      <WorkspaceAssistant key={family.id} slug={family.slug} family={family} evidence={evidence} title="Talk through this market" onSaveReply={notebook.saveReply} preparedEvidenceIds={notebook.sourceIds}
+        prefillQuestion={assistantPrompt} onPrefillConsumed={() => setAssistantPrompt("")} />
+      <ResearchEvidenceDrawer item={selectedEvidence} onClose={() => setSelectedEvidence(null)} saved={notebook.sourceIds.includes(selectedEvidence?.id || "")} saveLabel="Save source" saveError={sourceSaveError}
+        onSave={(item) => {
+          setSourceSaveError("");
+          try { notebook.toggleSource(item.id); }
+          catch (cause) { setSourceSaveError(cause instanceof Error ? cause.message : "Could not save the source."); }
+        }} onAsk={(item) => {
+        setSelectedEvidence(null);
+        setAssistantPrompt(`Explain this source for the selected Gemini market: ${item.title}. ${item.excerpt}`);
+      }} />
+      <AppDrawer open={bookOpen && hasDepth} titleId={bookTitleId} onClose={() => setBookOpen(false)}>
+        {depth ? <>
+          <header className="research-drawer__header"><h2 id={bookTitleId}>Gemini order book</h2><button type="button" className="th-button th-button--ghost th-button--icon" aria-label="Close order book" onClick={() => setBookOpen(false)}><Icon name="close" /></button></header>
+          <p className="text-sm th-muted">Snapshot received {researchTime(depth.receivedAt)}{depth.sourceTime ? ` · Source time ${researchTime(depth.sourceTime)}` : ""}.</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {([["Bids", depth.bids], ["Asks", depth.asks]] as const).map(([label, levels]) => (
+              <div className="research-drawer__block" key={label}><h3>{label}</h3>
+                {levels.length ? <table className="w-full mt-2 text-left text-sm"><thead><tr><th>Price</th><th className="text-right">Quantity</th></tr></thead><tbody>{levels.map((level, index) => <tr key={`${level.price}-${index}`}><td>{level.price}</td><td className="text-right">{level.quantity}</td></tr>)}</tbody></table> : <p className="mt-2 text-sm th-muted">No levels returned.</p>}
+              </div>
+            ))}
+          </div>
+        </> : null}
+      </AppDrawer>
     </div>
   );
 }

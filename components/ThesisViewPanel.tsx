@@ -4,13 +4,14 @@ import type { MarketFamily, ThesisRevision } from "@/lib/domain/types";
 import { formatThreshold } from "@/lib/payoffs/compile";
 import { Button, Card } from "@/components/ui";
 
-function viewLabel(thesis: ThesisRevision, family?: MarketFamily | null) {
+export function thesisViewLabel(thesis: ThesisRevision, family?: MarketFamily | null) {
   const unit = family?.predicates[0]?.unit || "USD";
   if (thesis.template === "binary") {
     const proposition = family?.contracts[0]?.label || "selected contract";
-    return `${thesis.direction?.toUpperCase() || "YES"} · ${proposition}`;
+    return thesis.direction ? `${thesis.direction.toUpperCase()} · ${proposition}` : `Choose YES or NO · ${proposition}`;
   }
   if (thesis.template === "directional") {
+    if (!thesis.direction) return "Choose a direction and threshold";
     const threshold = thesis.lowerThreshold == null ? "a threshold" : formatThreshold(thesis.lowerThreshold, unit);
     return thesis.direction === "no" ? `Below ${threshold}` : `At or above ${threshold}`;
   }
@@ -42,10 +43,11 @@ export function ThesisViewPanel({
   const selectedScenario = family?.scenarios.find((scenario) => scenario.id === selectedScenarioId);
   const confirmed = thesis.status === "confirmed" || thesis.status === "quoted";
   return (
-    <Card className="view-summary space-y-4 lg:sticky lg:top-24">
+    <Card className="view-summary">
+      <div className="view-summary__content space-y-4">
       <div>
         <div className="flex items-center justify-between gap-2"><p className="section-label">Your view</p><span className={`status-pill ${confirmed ? "status-pill--good" : ""}`}>{confirmed ? "Confirmed" : "Draft · not confirmed"}</span></div>
-        <h2 className="mt-3 font-serif text-2xl font-bold tracking-tight">{viewLabel(thesis, family)}</h2>
+        <h2 className="mt-3 font-serif text-2xl font-bold tracking-tight">{thesisViewLabel(thesis, family)}</h2>
         <p className="mt-2 text-xs text-muted">Revision {thesis.revision}</p>
       </div>
       {thesis.rationale ? <p className="border-t border-line pt-3 text-sm text-muted">{thesis.rationale}</p> : null}
@@ -80,6 +82,7 @@ export function ThesisViewPanel({
         ) : <Button href={`/theses/${thesis.id}`} kind="ghost">Edit view</Button>}
         {editAction ? <div className="mt-2">{editAction.href ? <Button href={editAction.href} kind="ghost" disabled={editAction.disabled}>{editAction.label}</Button> : <Button onClick={editAction.onClick} kind="ghost" disabled={editAction.disabled}>{editAction.label}</Button>}</div> : null}
         <p className="mt-2 text-xs text-muted">Changing your view never changes a position you already hold.</p>
+      </div>
       </div>
     </Card>
   );

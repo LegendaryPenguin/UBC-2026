@@ -1,27 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, dataContextFromStorage } from "@/lib/client";
+import { api, dataContextFromStorage, OPEN_ASSISTANT_EVENT } from "@/lib/client";
 import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
-import { VoicePanel } from "@/components/VoicePanel";
-import { Button, Card, Empty, Field, inputCls } from "@/components/ui";
+import { WorkspaceAssistant } from "@/components/WorkspaceAssistant";
+import { Icon } from "@/components/thesis";
+import { Button, Empty, Field, inputCls } from "@/components/ui";
 import { ThesisWorkspaceTabs } from "@/components/ThesisWorkspaceTabs";
-import { ThesisViewPanel } from "@/components/ThesisViewPanel";
-import { MarketPriceHistory } from "@/components/MarketPriceHistory";
+import {
+  hasResearchHistory, ResearchChart, ResearchEvidenceDrawer, ResearchEvidenceList,
+  ResearchOutcomes, ResearchPrices, ResearchRelatedContracts, ResearchRules, ResearchSavedTile, ResearchTile, researchTime, type RelatedContract,
+} from "@/components/ResearchBoard";
+import { thesisViewLabel } from "@/components/ThesisViewPanel";
 import { useModeChange } from "@/lib/use-mode-change";
 import { useGeminiMarketStream } from "@/lib/gemini/use-market-stream";
 import { GeminiLiveMarketFeed } from "@/components/GeminiLiveMarketFeed";
 import { formatTime } from "@/lib/format";
 import { AppDrawer } from "@/components/AppDrawer";
 import { AppDialog } from "@/components/AppDialog";
+import { useResearchNotebook } from "@/lib/use-research-notebook";
+import { marketThesisTitle, researchRangeLabel } from "@/lib/research-range";
+
+type ResearchMarket = { family: MarketFamily; evidence: EvidenceItem[]; relatedContracts?: RelatedContract[] };
 
 export default function ThesisEditor() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [thesis, setThesis] = useState<ThesisRevision | null>(null);
   const [family, setFamily] = useState<MarketFamily | null>(null);
+  const [relatedContracts, setRelatedContracts] = useState<RelatedContract[]>([]);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -31,17 +40,50 @@ export default function ThesisEditor() {
   const [reviewingConfirmation, setReviewingConfirmation] = useState(false);
   const [editingView, setEditingView] = useState(false);
   const [pendingDestination, setPendingDestination] = useState("");
-  const [evidenceFilter, setEvidenceFilter] = useState<"all" | "supports" | "challenges" | "saved">("all");
+  const [evidenceFilter, setEvidenceFilter] = useState<"all" | "supports" | "challenges">("all");
   const [savedEvidence, setSavedEvidence] = useState<EvidenceItem[]>([]);
+  const [sourceSaveError, setSourceSaveError] = useState("");
+  const [savingEvidence, setSavingEvidence] = useState(false);
+  const evidencePending = useRef(false);
+  const notebook = useResearchNotebook(`thesis:${id}`);
   const [assistantPrompt, setAssistantPrompt] = useState("");
   const [matchingMarkets, setMatchingMarkets] = useState<MarketFamily[]>([]);
+  const [marketQuery, setMarketQuery] = useState("");
+  const [marketSearching, setMarketSearching] = useState(false);
+  const [marketError, setMarketError] = useState("");
   const [bindingMarket, setBindingMarket] = useState("");
   const [selectedEvidence, setSelectedEvidence] = useState<EvidenceItem | null>(null);
   const [updatesOpen, setUpdatesOpen] = useState(false);
+  const [marketFeedOpen, setMarketFeedOpen] = useState(false);
+  const [refreshingMarket, setRefreshingMarket] = useState(false);
+
+  const searchMarkets = useCallback(async (question: string, signal?: AbortSignal) => {
+    setMarketSearching(true);
+    setMarketError("");
+    setMatchingMarkets([]);
+    try {
+      const result = await api<{ families: MarketFamily[]; liveError?: string }>(
+        `/api/topics?mode=${dataContextFromStorage()}&discovery=1&q=${encodeURIComponent(question)}`, { signal },
+      );
+      if (signal?.aborted) return;
+      setMatchingMarkets(result.families || []);
+      if (result.liveError) setMarketError("Gemini search is unavailable. Try searching again.");
+    } catch {
+      if (!signal?.aborted) setMarketError("Markets could not be loaded. Try searching again.");
+    } finally {
+      if (!signal?.aborted) setMarketSearching(false);
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
-    if (new URLSearchParams(window.location.search).get("updates") === "1") setUpdatesOpen(true);
+    const controller = new AbortController();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("updates") === "1") setUpdatesOpen(true);
+    setEditingView(params.get("edit") === "1");
+    setFamily(null);
+    setRelatedContracts([]);
+    setSavedEvidence([]);
     setLoading(true);
     api<{ thesis: ThesisRevision }>(`/api/theses/${id}`)
       .then(async ({ thesis: current }) => {
@@ -49,14 +91,29 @@ export default function ThesisEditor() {
         setThesis(current);
         const mode = dataContextFromStorage();
         if (!current.topicSlug) {
-          const result = await api<{ families: MarketFamily[] }>(`/api/topics?mode=${mode}&q=${encodeURIComponent(current.rationale || current.title || "")}`);
-          if (active) setMatchingMarkets(result.families || []);
+          const query = (current.rationale || current.title || "").slice(0, 300);
+          setMarketQuery(query);
+          const selected = params.get("market");
+          if (selected && /^[a-z0-9][a-z0-9-]{0,79}$/.test(selected)) {
+            try {
+              const event = params.get("event");
+              const result = await api<{ family: MarketFamily }>(`/api/topics/${selected}?mode=${mode}${event ? `&event=${encodeURIComponent(event)}` : ""}`, { signal: controller.signal });
+              if (active && result.family) {
+                setMatchingMarkets([result.family]);
+                return;
+              }
+            } catch {
+              if (active) setNotice("That market could not be loaded. Try another listed market below.");
+            }
+          }
+          if (active && query) void searchMarkets(query, controller.signal);
           return;
         }
         try {
-          const topic = await api<{ family: MarketFamily; evidence: EvidenceItem[] }>(`/api/topics/${current.topicSlug}?mode=${mode}`);
+          const topic = await api<ResearchMarket>(`/api/topics/${current.topicSlug}?mode=${mode}`);
           if (active) {
             setFamily(topic.family);
+            setRelatedContracts(topic.relatedContracts || []);
             setEvidence(topic.evidence);
             setSavedEvidence(topic.evidence.filter((item) => current.evidenceIds.includes(item.id)));
           }
@@ -66,22 +123,26 @@ export default function ThesisEditor() {
       })
       .catch((err) => { if (active) setError(err instanceof Error ? err.message : "Thesis could not be loaded."); })
       .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [id]);
+    return () => { active = false; controller.abort(); };
+  }, [id, searchMarkets]);
 
   const refreshMarketData = useCallback(async () => {
     if (!thesis?.topicSlug) return;
     const mode = dataContextFromStorage();
+    setRefreshingMarket(true);
     try {
-      const topic = await api<{ family: MarketFamily; evidence: EvidenceItem[] }>(`/api/topics/${thesis.topicSlug}?mode=${mode}`);
+      const topic = await api<ResearchMarket>(`/api/topics/${thesis.topicSlug}?mode=${mode}`);
       setFamily(topic.family);
+      setRelatedContracts(topic.relatedContracts || []);
       setEvidence(topic.evidence);
       setSavedEvidence(topic.evidence.filter((item) => thesis.evidenceIds.includes(item.id)));
-      setNotice(`Market research refreshed for ${mode === "live" ? "Live data" : "Replay"}. Your view edits remain here.`);
+      setNotice(`Market research refreshed for ${topic.family.mode === "live" ? "Live data" : "Replay"}. Your view edits remain here.`);
     } catch (err) {
       setNotice(err instanceof Error ? `Market data could not refresh: ${err.message}. Your view edits remain here.` : "Market data could not refresh. Your view edits remain here.");
+    } finally {
+      setRefreshingMarket(false);
     }
-  }, [thesis?.topicSlug]);
+  }, [thesis?.topicSlug, thesis?.evidenceIds]);
 
   useModeChange(() => { void refreshMarketData(); });
 
@@ -145,8 +206,9 @@ export default function ThesisEditor() {
       });
       setThesis(result.thesis);
       setFamily(next);
-      const topic = await api<{ evidence: EvidenceItem[] }>(`/api/topics/${next.slug}?mode=${dataContextFromStorage()}`);
+      const topic = await api<ResearchMarket>(`/api/topics/${next.slug}?mode=${dataContextFromStorage()}`);
       setEvidence(topic.evidence || []);
+      setRelatedContracts(topic.relatedContracts || []);
       setMatchingMarkets([]);
       setNotice("Market attached. Review its exact rules and refine your view before confirming.");
     } catch (cause) {
@@ -157,7 +219,7 @@ export default function ThesisEditor() {
   }
 
   async function save(action: "save" | "confirm" | "duplicate" = "save"): Promise<boolean> {
-    if (!thesis) return false;
+    if (!thesis || (action === "confirm" && notebook.targetRange)) return false;
     setSaving(action);
     setError("");
     setNotice("");
@@ -204,172 +266,154 @@ export default function ThesisEditor() {
   }
 
   async function toggleSavedEvidence(item: EvidenceItem) {
-    if (!thesis) return;
-    const next = savedEvidence.some((saved) => saved.id === item.id)
-      ? savedEvidence.filter((saved) => saved.id !== item.id)
-      : [...savedEvidence, item];
-    setSavedEvidence(next);
+    if (!thesis || evidencePending.current) return;
+    const remove = thesis.evidenceIds.includes(item.id);
+    const ids = remove ? thesis.evidenceIds.filter((sourceId) => sourceId !== item.id) : [...thesis.evidenceIds, item.id];
+    evidencePending.current = true;
+    setSavingEvidence(true);
+    setSourceSaveError("");
     try {
       const result = await api<{ thesis: ThesisRevision }>(`/api/theses/${id}`, {
         method: "PATCH",
-        body: JSON.stringify({ evidenceIds: next.map((saved) => saved.id), mode: dataContextFromStorage() }),
+        body: JSON.stringify({ evidenceIds: ids, mode: dataContextFromStorage() }),
       });
-      setThesis(result.thesis);
-      setNotice(next.some((saved) => saved.id === item.id) ? "Evidence saved to this thesis." : "Evidence removed from this thesis.");
+      setThesis((current) => current?.id === id ? { ...current, evidenceIds: result.thesis.evidenceIds, updatedAt: result.thesis.updatedAt, status: result.thesis.status, revision: result.thesis.revision } : current);
+      setSavedEvidence((current) => remove ? current.filter((saved) => saved.id !== item.id) : [...current.filter((saved) => saved.id !== item.id), item]);
+      setNotice(remove ? "Evidence removed from this thesis." : "Evidence saved to this thesis.");
     } catch (cause) {
-      setSavedEvidence(savedEvidence);
-      setError(cause instanceof Error ? cause.message : "Evidence could not be saved.");
+      setSourceSaveError(cause instanceof Error ? cause.message : "Evidence could not be saved.");
+    } finally {
+      evidencePending.current = false;
+      setSavingEvidence(false);
     }
+  }
+
+  function openSource(item: EvidenceItem) {
+    setSourceSaveError("");
+    setSelectedEvidence(item);
   }
 
   if (loading) return <p role="status">Loading thesis…</p>;
   if (error && !thesis) return <Empty title="Thesis unavailable">{error}</Empty>;
   if (!thesis) return <Empty title="Thesis unavailable">This view could not be found.</Empty>;
-  const workspaceTitle = thesis.title?.trim() || family?.title || thesis.topicSlug.replaceAll("-", " ") || "Untitled thesis";
+  const workspaceTitle = marketThesisTitle(thesis, family);
+  const customRange = notebook.targetRange;
+  const hasDirection = thesis.direction === "yes" || thesis.direction === "no";
+  const hasLower = family?.predicates.some((predicate) => predicate.threshold === thesis.lowerThreshold);
+  const hasUpper = family?.predicates.some((predicate) => predicate.threshold === thesis.upperThreshold);
   const viewValid = thesis.template === "binary"
-    ? Boolean(family?.contracts[0] && (thesis.direction === "yes" || thesis.direction === "no"))
-    : thesis.lowerThreshold != null && (thesis.template === "directional" || thesis.upperThreshold != null && thesis.upperThreshold > thesis.lowerThreshold);
-  const shownEvidence = evidenceFilter === "saved" ? savedEvidence : evidenceFilter === "all" ? evidence : evidence.filter((item) => item.stance === evidenceFilter);
+    ? Boolean(family?.contracts[0] && hasDirection)
+    : Boolean(hasLower && (thesis.template === "directional" ? hasDirection : hasUpper && thesis.lowerThreshold != null && thesis.upperThreshold != null && thesis.upperThreshold > thesis.lowerThreshold));
+  const shownEvidence = evidenceFilter === "all" ? evidence : evidence.filter((item) => item.stance === evidenceFilter);
+  const chartContracts = selectedRuleContracts.length ? selectedRuleContracts : family?.contracts.slice(0, 2) || [];
+  const observation = family?.observationTime ? new Date(family.observationTime) : null;
+  const chartSeries = chartContracts.map((contract, index) => ({
+    label: contract!.label,
+    color: index === 0 ? "#3559E0" : "#8D6CEB",
+    points: [
+      ...(contract!.priceHistory || []),
+      ...(contract!.id === liveContract?.id ? marketFeed.trades.map((trade) => ({ timestamp: trade.eventAt, price: trade.price })) : []),
+    ],
+  }));
+  const hasHistory = hasResearchHistory(chartSeries);
+  const viewTile = (
+    <ResearchTile title="Your view" icon="target" kind="view"
+      detail={<span className={`status-pill ${customRange ? "status-pill--warning" : thesis.status === "draft" ? "" : "status-pill--good"}`}>{customRange ? "Research only" : thesis.status === "draft" ? "Draft" : "Confirmed"}</span>}
+      footer={<div className="flex flex-wrap items-center gap-2">
+        {customRange ? <Button kind="secondary" onClick={() => {
+          try { notebook.setTargetRange(null); setError(""); }
+          catch (cause) { setError(cause instanceof Error ? cause.message : "Could not clear the research range."); }
+        }}>Return to listed Gemini view</Button> : <>
+          {thesis.status === "draft" ? <Button icon="check" onClick={() => setReviewingConfirmation(true)} disabled={!viewValid}>Confirm view & build</Button> : <Button href={`/theses/${id}/build`} icon="build">Build a basket</Button>}
+          <Button kind="secondary" icon="edit" onClick={() => setEditingView(true)}>Edit view</Button>
+        </>}
+      </div>}
+    >
+      <p className="research-view__question">{customRange ? `YES · ${researchRangeLabel(customRange)}` : thesisViewLabel(thesis, family)}</p>
+      {customRange ? <p className="research-tile__muted mt-3">An Arc quote needs a verified settlement source for both boundaries. You can inspect what matches this view in Settlement outcomes.</p> : null}
+      {thesis.rationale ? <div className="research-view__rationale"><h3>Rationale</h3><p className="whitespace-pre-wrap text-sm th-muted">{thesis.rationale}</p></div> : null}
+      {!viewValid && thesis.status === "draft" ? <p className="research-tile__muted mt-3">Edit your view to select supported Gemini conditions.</p> : null}
+    </ResearchTile>
+  );
   return (
-    <div className="screen-workspace space-y-4">
+    <div className="screen-workspace screen-research screen-market-research space-y-4">
       <header className="workspace-header">
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div><h1 className="workspace-title screen-heading">{workspaceTitle}</h1><p className="mt-2 text-sm text-muted">{family?.question || "Market question unavailable"}{family?.closeTime ? ` · Closes ${formatTime(family.closeTime)}` : ""} · {family?.mode === "live" ? "Gemini live market data" : "Illustrative replay"}</p></div>
-          <div className="flex flex-wrap items-center gap-2">{family && evidence.length ? <button type="button" className="min-h-10 rounded-full bg-[#E9EEFF] px-3 text-sm font-semibold text-action" onClick={() => setUpdatesOpen(true)}>● {evidence.length} updates · New evidence</button> : null}<span role="status" className={`status-pill ${dirty ? "status-pill--warning" : "status-pill--good"}`}>{saving ? "Saving…" : dirty ? "Unsaved changes" : `Revision ${thesis.revision} · ${thesis.status}`}</span><button type="button" onClick={() => void refreshMarketData()} className="min-h-10 rounded-lg border border-line bg-white px-3 text-sm font-semibold">Refresh data</button></div>
+          <div>
+            <h1 className="workspace-title screen-heading">{workspaceTitle}</h1>
+            <p className="research-workspace__meta text-sm th-muted">
+              {family ? <>
+                <span>{family.mode === "live" ? "Gemini market" : "Illustrative replay"}</span>
+                {observation && Number.isFinite(observation.getTime()) ? <span>Settlement <time dateTime={observation.toISOString()} title={observation.toISOString()}>{observation.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}</time></span> : null}
+              </> : <span>{thesis.topicSlug ? "Market data unavailable" : "Question-first draft · No market linked"}</span>}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">{family && evidence.length ? <button type="button" className="min-h-10 rounded-full bg-[#E9EEFF] px-3 text-sm font-semibold text-action" onClick={() => setUpdatesOpen(true)}>Review sources · {evidence.length}</button> : null}<span role="status" className={`status-pill ${dirty ? "status-pill--warning" : "status-pill--good"}`}>{saving ? "Saving…" : dirty ? "Unsaved changes" : `Revision ${thesis.revision} · ${thesis.status}`}</span>{thesis.topicSlug ? <Button kind="secondary" icon="refresh" disabled={refreshingMarket} onClick={() => void refreshMarketData()}>{refreshingMarket ? "Refreshing…" : "Refresh data"}</Button> : null}</div>
         </div>
       </header>
-      <ThesisWorkspaceTabs thesisId={id} current="Research" lockedTabs={thesis.status === "draft" ? ["Build", "Compare"] : []} onNavigate={navigateSafely} />
-      {error ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{error}</p> : null}
+      <ThesisWorkspaceTabs thesisId={id} current="Research" lockedTabs={customRange || thesis.status === "draft" ? ["Build", "Compare"] : []} onNavigate={navigateSafely} />
+      {error && !editingView && !reviewingConfirmation ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{error}</p> : null}
       {notice ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">{notice}</p> : null}
       {family ? (
-        <div className="workspace-layout">
-          <div className="space-y-4">
-            <MarketPriceHistory
-              illustrative={family.mode === "replay"}
-              liveSession={Boolean(liveContract)}
-              series={selectedRuleContracts.map((contract, index) => ({
-                label: contract!.label,
-                color: index === 0 ? "#3559E0" : "#8D6CEB",
-                points: [
-                  ...(contract!.priceHistory || []),
-                  ...(contract!.id === liveContract?.id ? marketFeed.trades.map((trade) => ({ timestamp: trade.eventAt, price: trade.price })) : []),
-                ],
-              }))}
-            />
-            {liveContract ? <GeminiLiveMarketFeed
-              status={marketFeed.status}
-              book={marketFeed.book}
-              trades={marketFeed.trades}
-              error={marketFeed.error}
-              retry={marketFeed.retry}
-              restBid={liveContract.bid}
-              restAsk={liveContract.ask}
-              lastBookUpdateAt={marketFeed.lastBookUpdateAt}
-              connectedAt={marketFeed.connectedAt}
-            /> : null}
-            <Card>
-              <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-serif text-2xl font-bold">What does the market expect?</h2><p className="mt-1 text-sm text-muted">Gemini contract-price reference · cents</p></div><span className="source-pill">{family.mode === "replay" ? "Illustrative replay" : "Gemini live data"}</span></div>
-              <p className="mt-2 text-xs text-muted">{family.freshness} · observed {family.observationTime ? formatTime(family.observationTime) : "time not provided"}</p>
-              {family.mode === "replay" ? <p className="mt-2 rounded-lg bg-[#FFF8E7] p-3 text-xs text-muted">Replay prices and evidence are walkthrough fixtures. They are not current prices, news, or executable quotes.</p> : null}
-              <div className="table-scroll mt-3">
-                <table className="w-full text-left text-sm">
-                  <thead><tr><th className="border-b border-line py-2 pr-3">Contract</th><th className="border-b border-line py-2 pr-3">Bid · YES</th><th className="border-b border-line py-2 pr-3">Ask · YES</th><th className="border-b border-line py-2">Last trade</th></tr></thead>
-                  <tbody>{family.contracts.map((contract) => (
-                    <tr key={contract.id}>
-                      <td className="border-b border-line py-2 pr-3">{contract.label}</td>
-                      <td className="border-b border-line py-2 pr-3">{contract.bid ?? "—"}</td>
-                      <td className="border-b border-line py-2 pr-3">{contract.ask ?? "—"}</td>
-                      <td className="border-b border-line py-2">{contract.lastTrade ?? "—"}</td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              </div>
-              <p className="mt-2 text-xs text-muted">Prices show market references only. They do not guarantee available size or execution.</p>
-            </Card>
-            <Card>
-              <h2 className="font-serif text-xl">Resolution rules</h2>
-              <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-                <div><dt className="text-muted">Observation</dt><dd>{family.observationTime ? new Date(family.observationTime).toLocaleString() : "Not provided"}</dd></div>
-                <div><dt className="text-muted">Market status</dt><dd className="capitalize">{family.sourceEvent.status}</dd></div>
-                <div><dt className="text-muted">Trade cutoff</dt><dd>{family.closeTime ? new Date(family.closeTime).toLocaleString() : "Not provided"}</dd></div>
-              </dl>
-              <div className="mt-3 space-y-3">
-                {selectedRuleContracts.length ? selectedRuleContracts.map((contract) => (
-                  <div key={contract!.id} className="rounded-lg border border-line p-3 text-sm">
-                    <p className="font-medium">{contract!.label}</p>
-                    <p className="mt-2 text-xs font-medium text-muted">Exact Gemini contract wording</p>
-                    <p className="mt-1 whitespace-pre-wrap">{contract!.description || "Gemini did not include contract-level wording in this response."}</p>
-                    {contract!.strike ? <p className="mt-2 text-xs text-muted">Strike: {contract!.strike.type || "type not listed"} · {contract!.strike.value || "value not available"}{contract!.strike.availableAt ? ` · available ${new Date(contract!.strike.availableAt).toLocaleString()}` : ""}</p> : null}
-                    <p className="mt-1 text-xs text-muted">Settlement source: {contract!.source || family.sourceEvent.sourceIndex || family.sourceEvent.sourceAgency || "not listed"}</p>
-                    {contract!.termsUrl ? <a className="mt-2 inline-block text-sm text-action underline" href={contract!.termsUrl} target="_blank" rel="noreferrer">Open exact Gemini contract rules</a> : <p className="mt-2 text-xs text-muted">No contract-specific rules link was supplied.</p>}
-                  </div>
-                )) : <p className="rounded-lg border border-line p-3 text-sm text-muted">The current view has no mapped contract boundary. Refresh market data or choose listed boundaries before relying on a contract-level rule.</p>}
-              </div>
-              {family.sourceEvent.sourceUrl && !selectedRuleContracts.some((contract) => contract?.termsUrl === family.sourceEvent.sourceUrl) ? <a className="mt-3 inline-block text-sm text-action underline" href={family.sourceEvent.sourceUrl} target="_blank" rel="noreferrer">Open event-level Gemini terms</a> : null}
-            </Card>
-            <Card>
-              <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="font-serif text-2xl font-bold">Evidence board</h2><p className="mt-1 text-sm text-muted">Source material stays separate from the assistant’s interpretation.</p></div>{family.mode === "replay" ? <span className="source-pill">Illustrative replay</span> : null}</div>
-              <nav className="mt-4 flex flex-wrap gap-2" aria-label="Filter evidence">
-                {([ ["all", `All (${evidence.length})`], ["supports", `Supports (${evidence.filter((item) => item.stance === "supports").length})`], ["challenges", `Challenges (${evidence.filter((item) => item.stance === "challenges").length})`], ["saved", `Saved (${savedEvidence.length})`] ] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={evidenceFilter === value} onClick={() => setEvidenceFilter(value)} className={`min-h-9 rounded-full border px-3 text-xs ${evidenceFilter === value ? "border-action bg-[#E9EEFF] font-semibold text-action" : "border-line bg-white text-muted"}`}>{label}</button>)}
-              </nav>
-              {shownEvidence.length ? <div className="evidence-grid mt-3">
-                {shownEvidence.map((item) => {
-                  const pinned = savedEvidence.some((saved) => saved.id === item.id);
-                  return <article key={item.id} className="evidence-card">
-                    <span className={`status-pill ${item.stance === "supports" ? "status-pill--good" : item.stance === "challenges" ? "status-pill--error" : ""}`}>{item.stance || "context"}</span>
-                    <button type="button" onClick={() => setSelectedEvidence(item)} className="mt-2 block text-left font-semibold leading-tight hover:text-action">{item.title}</button>
-                    <p className="mt-1 text-[11px] text-muted">{item.publisher} · retrieved {formatTime(item.retrievedAt)}</p>
-                    <p className="mt-2 line-clamp-3 text-sm">{item.excerpt}</p>
-                    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-2 text-xs">
-                      <button type="button" className="font-semibold text-action" onClick={() => toggleSavedEvidence(item)}>{pinned ? "Unsave" : "Save"}</button>
-                      <button type="button" className="font-semibold text-action" onClick={() => setAssistantPrompt(`Explain this source claim in the context of my view: “${item.excerpt}” Source: ${item.title} (${item.publisher}).`)}>Ask about this</button>
-                      <a className="ml-auto text-muted underline" href={item.url} target="_blank" rel="noreferrer">Original ↗</a>
-                    </div>
-                  </article>;
-                })}
-              </div> : <div className="mt-4 rounded-lg border border-dashed border-line bg-[#FAF9F6] p-5 text-sm text-muted">{evidenceFilter === "saved" ? "No evidence is saved on this device yet." : evidence.length ? "No evidence matches this filter." : "No current evidence cards are available for this market. You can refresh the source or edit your view manually."}<div className="mt-3 flex flex-wrap gap-2">{evidenceFilter === "saved" ? null : <button type="button" className="font-semibold text-action underline" onClick={() => void refreshMarketData()}>Refresh evidence and market data</button>}{evidenceFilter !== "all" ? <button type="button" className="font-semibold text-action underline" onClick={() => setEvidenceFilter("all")}>Show all</button> : null}</div></div>}
-              <p className="mt-3 text-xs text-muted">Evidence pins are saved with this guest or signed-in thesis. Original source text and retrieval time remain visible.</p>
-            </Card>
+        <>
+          <div className="research-board">
+            <div className="research-board__grid">
+              {hasHistory ? <ResearchChart family={family} series={chartSeries} liveSession={Boolean(liveContract)} /> : null}
+              {hasHistory ? viewTile : null}
+              <ResearchPrices family={family} hasHistory={hasHistory} footer={liveContract ? <Button kind="secondary" icon="bars" onClick={() => setMarketFeedOpen(true)}>View live market feed</Button> : null} />
+              <ResearchRules family={family} contracts={selectedRuleContracts.length ? selectedRuleContracts : family.contracts} />
+              {!hasHistory ? viewTile : null}
+              <ResearchTile title="Evidence board" icon="news" detail={<span className="status-pill">{evidence.length} sources</span>} footer={
+                <div className="research-filters" role="group" aria-label="Filter evidence">
+                  {([["all", "All"], ["supports", "Supports"], ["challenges", "Challenges"]] as const).map(([value, label]) => (
+                    <button key={value} type="button" aria-pressed={evidenceFilter === value} onClick={() => setEvidenceFilter(value)}>{label}</button>
+                  ))}
+                </div>
+              }>
+                {shownEvidence.length ? <ResearchEvidenceList items={shownEvidence} onSelect={openSource} /> : <p className="research-tile__muted">{evidence.length ? "No evidence matches this filter." : "No evidence has been returned for this market."}</p>}
+              </ResearchTile>
+              {relatedContracts.length ? <ResearchRelatedContracts ticker={family.sourceEvent.ticker} contracts={relatedContracts} /> : null}
+              <ResearchOutcomes family={family} range={customRange} />
+              <ResearchSavedTile usedColumns={5 + (hasHistory ? 2 : 0) + (relatedContracts.length ? 1 : 0)} sources={savedEvidence} replies={notebook.replies} onSelectSource={openSource} onRemoveReply={notebook.removeReply} />
+            </div>
           </div>
-          <aside className="view-rail">
-            <ThesisViewPanel
-              thesis={thesis}
-              family={family}
-              action={thesis.status === "draft"
-                ? { label: "Confirm view & build", onClick: () => setReviewingConfirmation(true), disabled: !viewValid }
-                : { label: "Build a basket", href: `/theses/${id}/build` }}
-              editAction={{ label: "Edit view", onClick: () => setEditingView(true) }}
-            />
-            <VoicePanel
-              slug={family.slug}
-              family={family}
-              evidence={evidence}
-              thesis={thesis}
-              onThesisChange={(updated) => { setThesis(updated); setDirty(false); setEditingView(false); setNotice(`Voice-assisted edit saved as draft revision ${updated.revision}.`); }}
-              context="view"
-              title="Talk through your view"
-              prefillQuestion={assistantPrompt}
-              onPrefillConsumed={() => setAssistantPrompt("")}
-            />
-          </aside>
-        </div>
+          <WorkspaceAssistant slug={family.slug} family={family} evidence={evidence} thesis={thesis} context="view" title="Talk through your view"
+            onThesisChange={(updated) => { setThesis(updated); setDirty(false); setEditingView(false); setNotice(`Voice-assisted edit saved as draft revision ${updated.revision}.`); }}
+            prefillQuestion={assistantPrompt} onPrefillConsumed={() => setAssistantPrompt("")} onSaveReply={notebook.saveReply} targetRange={customRange} onSaveRange={notebook.setTargetRange} />
+          <AppDrawer open={marketFeedOpen && Boolean(liveContract)} titleId="research-market-feed-title" onClose={() => setMarketFeedOpen(false)}>
+            <header className="research-drawer__header"><h2 id="research-market-feed-title">Gemini live market</h2><button type="button" className="th-button th-button--ghost th-button--icon" aria-label="Close live market feed" onClick={() => setMarketFeedOpen(false)}><Icon name="close" /></button></header>
+            {liveContract ? <GeminiLiveMarketFeed status={marketFeed.status} book={marketFeed.book} trades={marketFeed.trades} error={marketFeed.error} retry={marketFeed.retry}
+              restBid={liveContract.bid} restAsk={liveContract.ask} lastBookUpdateAt={marketFeed.lastBookUpdateAt} connectedAt={marketFeed.connectedAt} /> : null}
+          </AppDrawer>
+        </>
       ) : (
-        <div className="workspace-layout">
-          <Card className="space-y-4">
-            <div><p className="source-pill">Question-first draft</p><h2 className="mt-3 font-serif text-2xl font-bold">Attach a market when you are ready</h2><p className="mt-2 text-sm text-muted">Your question and notes are saved. Choose a compatible listed market to unlock exact rules, confirmation, Build, and Compare.</p></div>
+        <div className="research-board"><div className="research-board__grid">
+          <ResearchTile title="Attach a market when you are ready" icon="search" kind="market-search" footer={<Button href="/explore" kind="secondary">Browse all markets</Button>}>
+            <p className="research-tile__muted mb-3">Choose a listed Gemini market to use its prices and settlement rules in your draft.</p>
             <div className="rounded-xl border border-[#CCD6F5] bg-[#F7F8FF] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">Research question</p><p className="mt-2 whitespace-pre-wrap text-sm">{thesis.rationale || thesis.title}</p></div>
-            {matchingMarkets.length ? <div className="grid gap-3">
+            <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); if (marketQuery.trim()) void searchMarkets(marketQuery.trim()); }}>
+              <div className="min-w-0 flex-1"><Field label="Search Gemini markets"><input className={inputCls()} value={marketQuery} maxLength={300} onChange={(event) => setMarketQuery(event.target.value)} /></Field></div>
+              <Button type="submit" icon="search" disabled={marketSearching || Boolean(bindingMarket) || !marketQuery.trim()}>{marketSearching ? "Searching…" : "Search"}</Button>
+            </form>
+            {marketError ? <p role="alert" className="mt-2 text-sm text-bad">{marketError}</p> : null}
+            {!marketSearching && matchingMarkets.length ? <div className="mt-3 grid gap-3">
               {matchingMarkets.map((market) => <article key={market.id} className="rounded-xl border border-line p-4"><p className="text-xs text-muted">{market.mode === "live" ? "Gemini live market" : "Illustrative replay"} · {market.contracts.length} contract{market.contracts.length === 1 ? "" : "s"}</p><h3 className="mt-1 font-serif text-xl font-bold">{market.title}</h3><p className="mt-1 text-sm text-muted">{market.question}</p><Button className="mt-3" disabled={Boolean(bindingMarket)} onClick={() => void bindMarket(market)}>{bindingMarket === market.id ? "Attaching…" : "Use this market"}</Button></article>)}
-            </div> : <Empty title="No compatible market found">Keep this draft and browse Explore. You can return and attach a market when one becomes available.</Empty>}
-            <Button href={`/explore?q=${encodeURIComponent(thesis.rationale || thesis.title || "")}`}>Browse all markets</Button>
-          </Card>
-          <aside className="view-rail"><Card><h2 className="font-serif text-xl font-bold">Your view</h2><p className="mt-2 text-sm text-muted">A view becomes confirmable after a listed market supplies supported boundaries and settlement rules.</p></Card></aside>
-        </div>
+            </div> : !marketSearching && !marketError ? <p className="research-tile__muted mt-3">No matching market. Try a team, event, or ticker.</p> : null}
+          </ResearchTile>
+          <ResearchTile title="Your view" icon="target" kind="view" detail={<span className="status-pill">Draft</span>}>
+            {thesis.rationale ? <p className="research-view__question">{thesis.rationale}</p> : null}
+            <p className="research-tile__muted mt-3">Link a market to confirm a view using its settlement conditions.</p>
+          </ResearchTile>
+          <ResearchSavedTile usedColumns={3} sources={[]} replies={notebook.replies} onSelectSource={openSource} onRemoveReply={notebook.removeReply} />
+          <button type="button" className="workspace-assistant-dock" onClick={() => window.dispatchEvent(new CustomEvent(OPEN_ASSISTANT_EVENT, { detail: { thesisId: id, question: marketQuery.trim() || thesis.rationale || thesis.title } }))}>
+            <Icon name="assistant" size={20} /><span>Ask Thesis</span><Icon name="chevron-up" size={19} />
+          </button>
+        </div></div>
       )}
-      {editingView ? <Card className="space-y-3">
-        <div>
-          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-serif text-2xl font-bold">Edit your view</h2><p className="mt-1 text-sm text-muted">Choose only conditions supported by the listed contract rules. This changes the draft, not an existing position.</p></div><button type="button" className="min-h-10 rounded-lg px-3 text-2xl leading-none text-muted hover:bg-[#F4F2ED]" aria-label="Close view editor" onClick={() => { setEditingView(false); if (!dirty) setNotice(""); }}>×</button></div>
-        </div>
+      <AppDrawer open={editingView && !reviewingConfirmation && Boolean(family)} titleId="edit-thesis-view" onClose={() => { if (!saving) setEditingView(false); }}>
+      <div className="space-y-3">
+        <header className="research-drawer__header"><div><h2 id="edit-thesis-view">Edit your view</h2><p className="mt-1 text-sm text-muted">Use the conditions supported by this Gemini market.</p></div><button type="button" className="th-button th-button--ghost th-button--icon" aria-label="Close view editor" disabled={saving !== null} onClick={() => setEditingView(false)}><Icon name="close" /></button></header>
+        {error ? <p role="alert" className="th-alert th-alert--warning text-sm">{error}</p> : null}
         <Field label="Template">
           <select className={inputCls()} value={thesis.template} onChange={(event) => changeTemplate(event.target.value as ThesisRevision["template"])}>
             {family?.predicates.length === 1 && family.contracts.length === 1 ? <option value="binary">Single Gemini contract</option> : <option value="directional">Directional threshold</option>}
@@ -378,7 +422,8 @@ export default function ThesisEditor() {
         </Field>
         {thesis.template === "directional" || thesis.template === "binary" ? (
           <Field label="Direction">
-            <select className={inputCls()} value={thesis.direction || "yes"} onChange={(event) => change("direction", event.target.value as "yes" | "no")}>
+            <select className={inputCls()} value={thesis.direction || ""} onChange={(event) => change("direction", event.target.value === "" ? null : event.target.value as "yes" | "no")}>
+              <option value="">Choose a direction</option>
               {thesis.template === "binary" ? <><option value="yes">YES · contract resolves YES</option><option value="no">NO · contract resolves NO</option></> : <><option value="yes">Pays at or above the threshold</option><option value="no">Pays below the threshold</option></>}
             </select>
           </Field>
@@ -404,12 +449,15 @@ export default function ThesisEditor() {
           <textarea className={`${inputCls()} min-h-20 py-2`} maxLength={2_000} value={thesis.invalidation} onChange={(event) => change("invalidation", event.target.value)} />
         </Field>
         <div className="flex flex-wrap gap-2 border-t border-line pt-3"><Button onClick={async () => { if (await save("save")) setEditingView(false); }} disabled={saving !== null}>{saving === "save" ? "Saving…" : "Save draft"}</Button><Button onClick={() => setReviewingConfirmation(true)} disabled={saving !== null || !viewValid}>Review confirmation</Button><Button kind="ghost" onClick={() => setEditingView(false)} disabled={saving !== null}>Cancel</Button></div>
-      </Card> : null}
+      </div>
+      </AppDrawer>
       <AppDialog open={reviewingConfirmation} titleId="confirm-view-title" onClose={() => { if (!saving) setReviewingConfirmation(false); }} closeOnBackdrop={!saving}>
         <div className="space-y-4">
           <div className="flex items-start justify-between gap-3"><div><p className="source-pill">Review your view</p><h2 id="confirm-view-title" className="mt-3 font-serif text-2xl font-bold">Confirm this thesis view?</h2></div><button type="button" aria-label="Back to editing" className="min-h-10 px-3 text-2xl text-muted" onClick={() => setReviewingConfirmation(false)} disabled={saving !== null}>×</button></div>
-          <div className="rounded-xl border border-[#CCD6F5] bg-[#F7F8FF] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">{family?.question}</p><p className="mt-2 text-lg font-semibold">{thesis?.template === "binary" ? `${thesis.direction?.toUpperCase() || "YES"} · ${family?.contracts[0]?.label || "selected contract"}` : thesis?.template === "directional" ? `${thesis.direction === "no" ? "Below" : "At or above"} ${thesis.lowerThreshold ?? "an unset threshold"}` : `${thesis?.template === "outside" ? "Outside" : "Between"} ${thesis?.lowerThreshold ?? "an unset lower bound"} and ${thesis?.upperThreshold ?? "an unset upper bound"}`}</p><p className="mt-1 text-xs text-muted">Settlement {family?.closeTime ? formatTime(family.closeTime) : "deadline not supplied"} · {family?.mode === "live" ? "Gemini live data" : "Illustrative replay"}</p></div>
+          <div className="rounded-xl border border-[#CCD6F5] bg-[#F7F8FF] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">{family?.question}</p><p className="mt-2 text-lg font-semibold">{thesisViewLabel(thesis, family)}</p><p className="mt-1 text-xs text-muted">Settlement {researchTime(family?.observationTime, "deadline not supplied")} · {family?.mode === "live" ? "Gemini live data" : "Illustrative replay"}</p></div>
+          {selectedRuleContracts.length ? <div className="research-drawer__block"><h3>Selected Gemini contracts</h3><ul className="mt-2 space-y-1 text-sm">{selectedRuleContracts.map((contract) => <li key={contract!.id}>{contract!.label}</li>)}</ul></div> : null}
           {thesis?.rationale ? <div><p className="text-sm font-semibold">Your rationale</p><p className="mt-1 whitespace-pre-wrap text-sm text-muted">{thesis.rationale}</p></div> : null}
+          {error ? <p role="alert" className="th-alert th-alert--warning text-sm">{error}</p> : null}
           {!viewValid ? <p role="alert" className="rounded-lg border border-bad/30 bg-[#FFF5F4] p-3 text-sm text-bad">Choose valid boundaries from the listed contracts before confirming.</p> : <p className="text-sm text-muted">Confirming saves this version and opens Build. It does not request a quote, connect a wallet, or submit a trade.</p>}
           <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-3"><Button onClick={() => setReviewingConfirmation(false)} kind="ghost" disabled={saving !== null}>Back to editing</Button><Button onClick={() => void save("confirm")} disabled={saving !== null || !viewValid}>{saving === "confirm" ? "Saving confirmed view…" : "Confirm view & build"}</Button></div>
         </div>
@@ -421,11 +469,12 @@ export default function ThesisEditor() {
           <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-3"><Button kind="ghost" onClick={() => setPendingDestination("")}>Stay</Button><Button kind="danger" onClick={() => void resolvePendingNavigation("discard")}>Discard unsaved</Button><Button onClick={() => void resolvePendingNavigation("save")} disabled={saving !== null}>{saving === "save" ? "Saving…" : "Save and leave"}</Button></div>
         </div>
       </AppDialog>
-      <AppDrawer open={Boolean(selectedEvidence)} titleId="evidence-detail-title" onClose={() => setSelectedEvidence(null)}>
-        {selectedEvidence ? <div className="space-y-4"><div className="flex items-start justify-between gap-3"><div><p className="source-pill">Evidence detail</p><h2 id="evidence-detail-title" className="mt-3 font-serif text-2xl font-bold">{selectedEvidence.title}</h2></div><button type="button" className="min-h-10 px-3 text-2xl text-muted" aria-label="Close evidence detail" onClick={() => setSelectedEvidence(null)}>×</button></div><p className="text-xs text-muted">{selectedEvidence.publisher} · retrieved {formatTime(selectedEvidence.retrievedAt)}</p><div className="rounded-xl border border-line p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">Source claim</p><p className="mt-2 whitespace-pre-wrap text-sm">{selectedEvidence.excerpt}</p></div><div className="rounded-xl bg-[#EEF2FF] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-action">Relationship to view</p><p className="mt-2 text-sm">{selectedEvidence.stance === "supports" ? "Potentially supports the current view." : selectedEvidence.stance === "challenges" ? "Challenges an assumption in the current view." : "Adds context without changing the selected boundaries."}</p></div><div className="flex flex-wrap gap-2"><Button href={selectedEvidence.url}>Open original</Button><Button kind="secondary" onClick={() => toggleSavedEvidence(selectedEvidence)}>{savedEvidence.some((item) => item.id === selectedEvidence.id) ? "Remove from thesis" : "Save to thesis"}</Button><Button kind="ghost" onClick={() => { setAssistantPrompt(`Explain this source in the context of my view: ${selectedEvidence.excerpt}`); setSelectedEvidence(null); }}>Ask about this</Button></div></div> : null}
-      </AppDrawer>
+
+      <ResearchEvidenceDrawer item={selectedEvidence} onClose={() => setSelectedEvidence(null)}
+        onSave={(item) => void toggleSavedEvidence(item)} saved={thesis.evidenceIds.includes(selectedEvidence?.id || "")} saving={savingEvidence} saveError={sourceSaveError}
+        onAsk={(item) => { setSelectedEvidence(null); setAssistantPrompt(`Explain this source in the context of my view: ${item.title}. ${item.excerpt}`); }} />
       <AppDrawer open={updatesOpen} titleId="research-updates-title" onClose={() => setUpdatesOpen(false)}>
-        <div className="flex items-start justify-between gap-3"><div><p className="source-pill">Review updates</p><h2 id="research-updates-title" className="mt-3 font-serif text-2xl font-bold">Since your last snapshot</h2><p className="mt-2 text-sm text-muted">New source material is shown separately. Your confirmed boundaries remain unchanged until you explicitly edit and reconfirm them.</p></div><button type="button" className="min-h-10 px-3 text-2xl text-muted" aria-label="Close research updates" onClick={() => setUpdatesOpen(false)}>×</button></div>
+        <div className="flex items-start justify-between gap-3"><div><p className="source-pill">Review updates</p><h2 id="research-updates-title" className="mt-3 font-serif text-2xl font-bold">Research sources</h2><p className="mt-2 text-sm text-muted">Review the sources attached to the current Gemini snapshot.</p></div><button type="button" className="min-h-10 px-3 text-2xl text-muted" aria-label="Close research updates" onClick={() => setUpdatesOpen(false)}>×</button></div>
         <div className="mt-5 grid gap-3">{evidence.map((item) => <article key={item.id} className="rounded-xl border border-line p-4"><p className="font-semibold">{item.title}</p><p className="mt-1 text-xs text-muted">{item.publisher} · {formatTime(item.retrievedAt)}</p><p className="mt-2 line-clamp-3 text-sm">{item.excerpt}</p><div className="mt-3 flex gap-2"><Button kind="secondary" onClick={() => { setUpdatesOpen(false); setSelectedEvidence(item); }}>Review source</Button><Button kind="ghost" onClick={() => toggleSavedEvidence(item)}>{savedEvidence.some((saved) => saved.id === item.id) ? "Saved" : "Save"}</Button></div></article>)}</div>
       </AppDrawer>
     </div>

@@ -67,5 +67,13 @@
   "save",
   "loading",
   "chevrons-expand",
-  "network"
+  "network",
+  "bitcoin",
+  "ethereum",
+  "solana",
+  "xrp",
+  "coins",
+  "bank",
+  "ballot",
+  "trophy"
 ]

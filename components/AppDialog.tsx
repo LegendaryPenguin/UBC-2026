@@ -11,6 +11,9 @@ type AppDialogProps = {
   labelledBy?: string;
   describedBy?: string;
   closeOnBackdrop?: boolean;
+  inline?: boolean;
+  keepMounted?: boolean;
+  backdropClassName?: string;
 };
 
 const FOCUSABLE = [
@@ -31,14 +34,18 @@ export function AppDialog({
   labelledBy,
   describedBy,
   closeOnBackdrop = true,
+  inline = false,
+  keepMounted = false,
+  backdropClassName = "",
 }: AppDialogProps) {
   const panelRef = useRef<HTMLElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const modalOpen = open && !inline;
 
   useEffect(() => {
-    if (!open) return;
+    if (!modalOpen) return;
     returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -47,6 +54,9 @@ export function AppDialog({
       (first || panelRef.current)?.focus();
     });
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      const focusedDialog = event.target instanceof Element ? event.target.closest('[role="dialog"][aria-modal="true"]') : null;
+      if (focusedDialog && focusedDialog !== panelRef.current && panelRef.current?.contains(focusedDialog)) return;
       if (event.key === "Escape") {
         event.preventDefault();
         onCloseRef.current();
@@ -77,25 +87,27 @@ export function AppDialog({
       document.body.style.overflow = previousOverflow;
       returnFocusRef.current?.focus();
     };
-  }, [open]);
+  }, [modalOpen]);
 
-  if (!open) return null;
+  if (!open && !inline && !keepMounted) return null;
   return (
     <div
-      className="dialog-backdrop"
-      role="presentation"
+      className={`dialog-backdrop ${backdropClassName}`.trim()}
+      hidden={!open && !inline}
+      data-inline={inline || undefined}
+      role={inline ? undefined : "presentation"}
       onMouseDown={(event) => {
-        if (closeOnBackdrop && event.target === event.currentTarget) onClose();
+        if (modalOpen && closeOnBackdrop && event.target === event.currentTarget) onClose();
       }}
     >
       <section
         ref={panelRef}
         tabIndex={-1}
         className={`dialog-panel ${className}`.trim()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={labelledBy || titleId}
-        aria-describedby={describedBy}
+        role={modalOpen ? "dialog" : undefined}
+        aria-modal={modalOpen || undefined}
+        aria-labelledby={modalOpen ? labelledBy || titleId : undefined}
+        aria-describedby={modalOpen ? describedBy : undefined}
       >
         {children}
       </section>

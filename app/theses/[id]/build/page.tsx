@@ -9,11 +9,14 @@ import { estimateBasketCost } from "@/lib/payoffs/compare";
 import { parseUsdc, formatUsdc, formatUsdcFixed, formatTime } from "@/lib/format";
 import { PayoffChart } from "@/components/PayoffChart";
 import { Button, Card, Field, inputCls } from "@/components/ui";
-import { VoicePanel } from "@/components/VoicePanel";
+import { WorkspaceAssistant } from "@/components/WorkspaceAssistant";
 import { evidenceForSlug } from "@/lib/evidence";
 import { ThesisWorkspaceTabs } from "@/components/ThesisWorkspaceTabs";
 import { ThesisViewPanel } from "@/components/ThesisViewPanel";
 import { useModeChange } from "@/lib/use-mode-change";
+import { useResearchNotebook } from "@/lib/use-research-notebook";
+import { marketThesisTitle } from "@/lib/research-range";
+import { ResearchRangeNotice } from "@/components/ResearchBoard";
 
 type BasketLegDraft = {
   contractId: string;
@@ -47,6 +50,7 @@ function initialLegs(thesis: ThesisRevision, family: MarketFamily, maximum: stri
 
 export default function BuildPage() {
   const { id } = useParams<{ id: string }>();
+  const { targetRange } = useResearchNotebook(`thesis:${id}`);
   const router = useRouter();
   const [thesis, setThesis] = useState<ThesisRevision | null>(null);
   const [family, setFamily] = useState<MarketFamily | null>(null);
@@ -191,6 +195,7 @@ export default function BuildPage() {
 
   if (loading) return <p role="status">Loading basket builder…</p>;
   if (error || !thesis || !family) return <Card><p role="alert" className="text-sm text-bad">{error || "This thesis could not be loaded."}</p><div className="mt-3"><Button href="/workspace" kind="ghost">My Theses</Button></div></Card>;
+  if (targetRange) return <ResearchRangeNotice thesisId={id} range={targetRange} />;
 
   if (thesis.status === "draft") {
     return (
@@ -233,7 +238,7 @@ export default function BuildPage() {
 
   return (
     <div className="screen-workspace space-y-4">
-      <header className="workspace-header"><div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="workspace-title screen-heading">{thesis.title?.trim() || family.title}</h1><p className="mt-2 text-sm text-muted">{family.question}{family.closeTime ? ` · Closes ${new Date(family.closeTime).toLocaleString()}` : ""} · {family.mode === "replay" ? "Illustrative replay" : family.freshness}</p></div><span className="status-pill status-pill--good">Confirmed view · revision {thesis.revision}</span></div></header>
+      <header className="workspace-header"><div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="workspace-title screen-heading">{marketThesisTitle(thesis, family)}</h1><p className="mt-2 text-sm text-muted">{family.question}{family.closeTime ? ` · Closes ${new Date(family.closeTime).toLocaleString()}` : ""} · {family.mode === "replay" ? "Illustrative replay" : family.freshness}</p></div><span className="status-pill status-pill--good">Confirmed view · revision {thesis.revision}</span></div></header>
       <ThesisWorkspaceTabs thesisId={id} current="Build" />
       <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-serif text-2xl font-bold">Does this construction match your view?</h2><span className="text-xs text-muted">Compare is optional · no order is submitted here</span></div>
       {family.mode === "replay" ? <p className="rounded-lg bg-[#FFF8E7] p-3 text-xs text-muted">This board uses recorded walkthrough data. Prices and cost estimates are illustrative. Build does not create an order; a paper Arc quote can be requested from Compare in Paper mode.</p> : null}
@@ -309,7 +314,7 @@ export default function BuildPage() {
             ) : <p className="mt-2 text-sm text-muted">A reference cost is unavailable for one or more legs. The scenario preview remains useful; do not treat it as an order cost.</p>}
             <p className="mt-2 text-xs text-muted">Reference prices do not promise available size or execution. Fees, slippage, order-size increments, and partial fills are not included. Gemini order submission remains gated pending sandbox qualification.</p>
           </Card>
-          {construction?.desired ? <VoicePanel slug={family.slug} family={family} evidence={evidenceForSlug(family.slug, family.mode)} thesis={thesis} context="payoff" maxPayout={max} title="Ask about these scenario payouts" /> : null}
+          {construction?.desired ? <WorkspaceAssistant slug={family.slug} family={family} evidence={evidenceForSlug(family.slug, family.mode)} thesis={thesis} context="payoff" maxPayout={max} title="Ask about these scenario payouts" /> : null}
         </div>
         <aside className="view-rail">
           <ThesisViewPanel thesis={thesis} family={family} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} scenarioOutcome={scenarioOutcome} scenarioOutcomeLabel="Basket · desired view payout" />

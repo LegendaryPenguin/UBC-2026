@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "@/lib/client";
 import type { ThesisRevision } from "@/lib/domain/types";
 import { Button, Card, Empty, Field, inputCls } from "@/components/ui";
+import { Icon } from "@/components/thesis";
 import { formatTime } from "@/lib/format";
 import { StartThesisDialog } from "@/components/StartThesisDialog";
 
@@ -124,9 +125,9 @@ export default function MyThesesLibrary() {
 
   return (
     <div className="screen-theses space-y-5">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div><h1 className="library-title screen-heading">Your thesis library</h1><p className="mt-2 text-base text-muted">Questions, constructions, and positions you’re working on.</p></div>
-        <Button onClick={() => setStartOpen(true)}>＋ New thesis</Button>
+      <header className="th-row th-between">
+        <div><h1 className="library-title screen-heading">Your thesis library</h1><p className="mt-2 text-base th-muted">Questions, constructions, and positions you’re working on.</p></div>
+        <Button icon="plus" onClick={() => setStartOpen(true)}>New thesis</Button>
       </header>
       <StartThesisDialog open={startOpen} onClose={() => setStartOpen(false)} />
 
@@ -134,9 +135,12 @@ export default function MyThesesLibrary() {
       {error ? <Card><p role="alert" className="text-sm text-bad">{error}</p><div className="mt-2"><Button onClick={() => void load()} kind="ghost">Retry</Button></div></Card> : null}
 
       <div className="library-controls">
-        <label className="app-field block"><span className="mb-1 block text-sm font-semibold">Search theses</span><input className={inputCls()} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search theses…" /></label>
-        <div className="flex min-h-11 flex-wrap items-center gap-1 rounded-xl border border-line bg-white p-1" role="tablist" aria-label="Filter theses">
-          {FILTERS.map((item) => <button key={item.id} type="button" role="tab" aria-selected={filter === item.id} className={`min-h-9 rounded-lg px-3 text-sm ${filter === item.id ? "bg-[#E9EEFF] font-semibold text-action" : "text-muted hover:bg-[#F5F4F0]"}`} onClick={() => setFilter(item.id)}>{item.label}</button>)}
+        <div className="explore-search-wrap">
+          <label className="sr-only" htmlFor="thesis-library-search">Search theses</label>
+          <input id="thesis-library-search" className={`${inputCls()} explore-search`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search theses…" />
+        </div>
+        <div className="flex min-h-11 flex-wrap items-center gap-1 rounded-full border border-line bg-white p-1" role="tablist" aria-label="Filter theses">
+          {FILTERS.map((item) => <button key={item.id} type="button" role="tab" aria-selected={filter === item.id} className={`min-h-9 rounded-full px-3.5 text-sm ${filter === item.id ? "bg-[#E9EEFF] font-semibold text-action" : "text-muted hover:bg-[#F5F4F0]"}`} onClick={() => setFilter(item.id)}>{item.label}</button>)}
         </div>
       </div>
 
@@ -156,14 +160,14 @@ export default function MyThesesLibrary() {
               {renamingId === thesis.id ? <div className="mt-3 rounded-lg border border-line bg-[#FAF9F6] p-3"><Field label="Thesis title"><input className={inputCls()} maxLength={100} value={renameDraft} onChange={(event) => setRenameDraft(event.target.value)} /></Field><div className="mt-2 flex gap-2"><Button onClick={() => void patchThesis(thesis, "rename")} disabled={!renameDraft.trim() || pendingId === thesis.id}>{pendingId === thesis.id ? "Saving…" : "Save"}</Button><Button kind="ghost" onClick={() => setRenamingId("")}>Cancel</Button></div></div> : null}
               {deleteId === thesis.id ? <div className="mt-3 rounded-lg border border-bad/30 bg-[#FFF7F6] p-3"><p className="text-sm font-semibold">Delete “{title}”?</p><p className="mt-1 text-xs text-muted">Only this unconfirmed draft is deleted. Quotes, positions, and execution history are kept.</p><div className="mt-2 flex gap-2"><Button kind="danger" onClick={() => void deleteDraft(thesis)} disabled={pendingId === thesis.id}>{pendingId === thesis.id ? "Deleting…" : "Delete draft"}</Button><Button kind="ghost" onClick={() => setDeleteId("")}>Cancel</Button></div></div> : null}
             </div>
-            <span className="library-stage">{stage}</span>
-            <span className="text-sm text-muted">{formatTime(thesis.updatedAt)}</span>
-            <Link href={nextHref} className="inline-flex min-h-10 items-center justify-center rounded-lg bg-action px-3 text-sm font-semibold text-white">{nextLabel} →</Link>
-            <details className="relative"><summary aria-label={`Actions for ${title}`} className="grid min-h-10 w-10 cursor-pointer list-none place-items-center rounded-lg border border-line text-xl">···</summary><div className="thesis-popover absolute right-0 z-10 mt-1 min-w-44 p-2">
-              <button className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[#F4F2ED]" onClick={() => { setRenamingId(thesis.id); setRenameDraft(title); }}>Rename</button>
-              <button className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[#F4F2ED] disabled:opacity-50" disabled={pendingId === thesis.id} onClick={() => void patchThesis(thesis, "duplicate")}>{pendingId === thesis.id ? "Duplicating…" : "Duplicate"}</button>
-              {thesis.archived ? <button className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[#F4F2ED] disabled:opacity-50" disabled={pendingId === thesis.id} onClick={() => void patchThesis(thesis, "unarchive")}>Unarchive</button> : <button className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[#F4F2ED] disabled:opacity-50" disabled={pendingId === thesis.id} onClick={() => void patchThesis(thesis, "archive")}>Archive</button>}
-              {thesis.canDelete ? <button className="block w-full rounded-lg px-3 py-2 text-left text-sm text-bad hover:bg-[#FFF1F0]" onClick={() => setDeleteId(thesis.id)}>Delete draft</button> : null}
+            <span className="library-stage inline-flex items-center gap-1.5"><Icon name={stage === "Research" ? "research" : stage === "Build" ? "build" : stage === "Review" ? "receipt" : "compare"} size={14} />{stage}</span>
+            <span className="inline-flex items-center gap-1.5 text-sm th-muted"><Icon name="clock" size={14} />{formatTime(thesis.updatedAt)}</span>
+            <Link href={nextHref} className="th-button th-button--primary inline-flex min-h-10 items-center justify-center px-3 text-sm">{nextLabel}<Icon name="arrow-right" size={14} /></Link>
+            <details className="relative"><summary aria-label={`Actions for ${title}`} className="th-button th-button--ghost th-button--icon list-none"><Icon name="more" /></summary><div className="thesis-popover absolute right-0 z-10 mt-1 min-w-44 p-2">
+              <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--th-soft)]" onClick={() => { setRenamingId(thesis.id); setRenameDraft(title); }}><Icon name="edit" size={16} />Rename</button>
+              <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--th-soft)] disabled:opacity-50" disabled={pendingId === thesis.id} onClick={() => void patchThesis(thesis, "duplicate")}><Icon name="duplicate" size={16} />{pendingId === thesis.id ? "Duplicating…" : "Duplicate"}</button>
+              {thesis.archived ? <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--th-soft)] disabled:opacity-50" disabled={pendingId === thesis.id} onClick={() => void patchThesis(thesis, "unarchive")}><Icon name="restore" size={16} />Unarchive</button> : <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--th-soft)] disabled:opacity-50" disabled={pendingId === thesis.id} onClick={() => void patchThesis(thesis, "archive")}><Icon name="archive" size={16} />Archive</button>}
+              {thesis.canDelete ? <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-bad hover:bg-[var(--th-danger-bg)]" onClick={() => setDeleteId(thesis.id)}><Icon name="trash" size={16} />Delete draft</button> : null}
             </div></details>
           </div>;
         })}

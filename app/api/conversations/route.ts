@@ -51,6 +51,20 @@ export async function POST(req: Request) {
     const assistant = typeof body.assistant === "string" ? body.assistant.trim() : "";
     if (!id || !user || user.length > 3_000 || !assistant || assistant.length > 6_000) return fail("INVALID", "A conversation turn needs a user question and assistant reply.");
     let structuredAction: ConversationRecord["messages"][number]["action"];
+    let marketOptions: ConversationRecord["messages"][number]["marketOptions"];
+    if (body.marketOptions !== undefined) {
+      if (!Array.isArray(body.marketOptions) || body.marketOptions.length > 5) return fail("INVALID", "Choose up to five suggested markets.");
+      marketOptions = [];
+      for (const item of body.marketOptions) {
+        if (!item || typeof item.slug !== "string" || !/^[a-z0-9][a-z0-9-]{0,79}$/.test(item.slug) ||
+          typeof item.title !== "string" || !item.title.trim() || item.title.length > 200 ||
+          (item.contract !== undefined && (typeof item.contract !== "string" || item.contract.length > 200)) ||
+          (item.eventTicker !== undefined && (typeof item.eventTicker !== "string" || !/^[a-z0-9._:-]{1,180}$/i.test(item.eventTicker)))) {
+          return fail("INVALID", "Each suggested market needs a valid topic and title.");
+        }
+        marketOptions.push({ slug: item.slug, title: item.title, ...(item.contract ? { contract: item.contract } : {}), ...(item.eventTicker ? { eventTicker: item.eventTicker } : {}) });
+      }
+    }
     if (body.structuredAction !== undefined) {
       const action = body.structuredAction as Record<string, unknown> | null;
       const href = typeof action?.href === "string" ? action.href : "";
@@ -68,7 +82,7 @@ export async function POST(req: Request) {
       const now = new Date().toISOString();
       item.messages.push(
         { id: uid("msg"), role: "user", content: user, createdAt: now },
-        { id: uid("msg"), role: "assistant", content: assistant, createdAt: now, ...(structuredAction ? { action: structuredAction } : {}) },
+        { id: uid("msg"), role: "assistant", content: assistant, createdAt: now, ...(structuredAction ? { action: structuredAction } : {}), ...(marketOptions?.length ? { marketOptions } : {}) },
       );
       if (item.title === "New conversation" && item.messages.length === 2) item.title = user.slice(0, 72);
       item.updatedAt = now;

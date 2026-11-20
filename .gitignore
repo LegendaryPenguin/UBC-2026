@@ -17,4 +17,5 @@ contracts/out
 contracts/broadcast
 .vercel
 .data/
+design-kit/
 *.tsbuildinfo

@@ -1,4 +1,4 @@
-import type { DataMode, EvidenceItem } from "@/lib/domain/types";
+import type { DataMode, EvidenceItem, MarketFamily } from "@/lib/domain/types";
 
 export const FEATURED_EVIDENCE: EvidenceItem[] = [
   {
@@ -43,4 +43,78 @@ export function evidenceForSlug(slug: string, mode: DataMode = "replay"): Eviden
   if (mode !== "replay") return [];
   if (slug.includes("btc") || slug.includes("eth") || slug.includes("crypto")) return FEATURED_EVIDENCE;
   return FEATURED_EVIDENCE.slice(0, 2);
+}
+
+/** Build source cards from the live Gemini listing itself — never invent news headlines. */
+export function evidenceForFamily(family: MarketFamily | null | undefined): EvidenceItem[] {
+  if (!family) return [];
+  if (family.mode === "replay") {
+    return evidenceForSlug(family.sourceEvent.ticker.toLowerCase() || family.slug, "replay");
+  }
+
+  const retrievedAt = family.fetchedAt || new Date().toISOString();
+  const publishedAt = family.sourceEvent.effectiveDate || family.observationTime || retrievedAt;
+  const contract = family.contracts[0];
+  const items: EvidenceItem[] = [];
+
+  const wording = contract?.description?.trim() || family.question?.trim();
+  const rulesUrl = contract?.termsUrl || family.sourceEvent.sourceUrl || "https://www.gemini.com/predictions";
+  if (wording) {
+    items.push({
+      id: "ev-contract-wording",
+      stance: "supports",
+      url: rulesUrl,
+      publisher: "Gemini contract wording",
+      title: `${family.title}: exact listed proposition`,
+      publishedAt,
+      retrievedAt,
+      excerpt: wording,
+      mode: "live",
+    });
+  }
+
+  const source = contract?.source || family.sourceEvent.sourceIndex || family.sourceEvent.sourceAgency;
+  if (source) {
+    items.push({
+      id: "ev-settlement-source",
+      stance: "supports",
+      url: rulesUrl,
+      publisher: "Gemini settlement source",
+      title: `Settlement source for ${contract?.label || family.title}`,
+      publishedAt,
+      retrievedAt,
+      excerpt: `Listed settlement source: ${source}. Gemini reference prices are not Arc quotes or certainty.`,
+      mode: "live",
+    });
+  }
+
+  if (contract?.termsUrl || family.sourceEvent.sourceUrl) {
+    items.push({
+      id: "ev-rules",
+      stance: "challenges",
+      url: rulesUrl,
+      publisher: "Gemini rules link",
+      title: "Open the exact contract rules before confirming a view",
+      publishedAt,
+      retrievedAt,
+      excerpt: "Event-level marketing copy is not a substitute for the contract-specific resolution rule. Review the linked terms.",
+      mode: "live",
+    });
+  }
+
+  if (!items.length) {
+    items.push({
+      id: "ev-listing",
+      stance: "challenges",
+      url: "https://www.gemini.com/predictions",
+      publisher: "Gemini listing",
+      title: `${family.title} is listed on Gemini`,
+      publishedAt,
+      retrievedAt,
+      excerpt: "Live news ingestion is not configured. Use the Gemini listing, contract wording, and rules link as primary evidence.",
+      mode: "live",
+    });
+  }
+
+  return items;
 }

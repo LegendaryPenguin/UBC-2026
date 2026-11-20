@@ -7,7 +7,10 @@ import { useModeChange } from "@/lib/use-mode-change";
 import { Button, Card, Field, inputCls } from "@/components/ui";
 import type { EvidenceItem, MarketFamily, ThesisRevision, ViewTemplate } from "@/lib/domain/types";
 import { AppDialog } from "@/components/AppDialog";
-import { RealtimeVoiceSession } from "@/components/RealtimeVoiceSession";
+import { ConversationalMic } from "@/components/ConversationalMic";
+import { researchConversation } from "@/lib/research";
+import { copyMarketReplies, type ResearchReply } from "@/lib/use-research-notebook";
+import { matchesListedRange, refineResearchRange, researchRangeLabel, type ResearchRange } from "@/lib/research-range";
 
 type VoiceStatus = "ready" | "connecting" | "listening" | "transcribing" | "thinking" | "speaking" | "ended" | "error";
 type VoiceAvailability = "checking" | "available" | "unavailable";
@@ -22,7 +25,6 @@ type ViewProposal = {
   invalidation: string;
 };
 type ResearchTurn = { role: "user" | "assistant"; content: string };
-type StoredConversation = { id: string; messages: { id: string; role: "user" | "assistant"; content: string; createdAt: string }[] };
 
 const STATUS_LABEL: Record<VoiceStatus, string> = {
   ready: "Ready",
@@ -61,6 +63,12 @@ export function VoicePanel({
   title,
   prefillQuestion,
   onPrefillConsumed,
+  compact = false,
+  onSaveReply,
+  preparedEvidenceIds = [],
+  targetRange,
+  onSaveRange,
+  visible = true,
 }: {
   slug: string;
   family: MarketFamily;
@@ -72,6 +80,12 @@ export function VoicePanel({
   title?: string;
   prefillQuestion?: string;
   onPrefillConsumed?: () => void;
+  compact?: boolean;
+  onSaveReply?: (reply: ResearchReply) => void;
+  preparedEvidenceIds?: string[];
+  targetRange?: ResearchRange | null;
+  onSaveRange?: (range: ResearchRange | null) => void;
+  visible?: boolean;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<VoiceStatus>("ready");
@@ -79,15 +93,16 @@ export function VoicePanel({
   const [muted, setMuted] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [conversation, setConversation] = useState<ResearchTurn[]>([]);
-  const [conversationId, setConversationId] = useState("");
-  const [savedTurns, setSavedTurns] = useState<ResearchTurn[]>([]);
+  const [latestReply, setLatestReply] = useState<ResearchReply | null>(null);
+  const [replySaved, setReplySaved] = useState(false);
+  const [rangePreview, setRangePreview] = useState<ResearchRange | null>(null);
   const [clarificationPrompt, setClarificationPrompt] = useState("");
   const [answer, setAnswer] = useState("");
   const [languageCode, setLanguageCode] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [voiceAvailability, setVoiceAvailability] = useState<VoiceAvailability>("checking");
-  const [realtimeAvailable, setRealtimeAvailable] = useState(false);
+  const [talking, setTalking] = useState(false);
   const [voiceMessage, setVoiceMessage] = useState("");
   const [citations, setCitations] = useState<{ id: string; title: string }[]>([]);
   const [proposal, setProposal] = useState<ViewProposal | null>(null);
@@ -110,23 +125,12 @@ export function VoicePanel({
   const mountedRef = useRef(true);
 
   useEffect(() => {
-    if (!thesis?.id) return;
-    let active = true;
-    api<{ conversations: StoredConversation[] }>(`/api/conversations?kind=thesis&thesisId=${encodeURIComponent(thesis.id)}`)
-      .then(({ conversations: stored }) => {
-        if (!active || !stored?.length) return;
-        const latest = stored[0];
-        setConversationId(latest.id);
-        setSavedTurns(latest.messages.map(({ role, content }) => ({ role, content })));
-      }).catch(() => { /* History remains local to this visit if server storage is unavailable. */ });
-    return () => { active = false; };
-  }, [thesis?.id]);
-
-  useEffect(() => {
     if (!prefillQuestion) return;
     setInputMode("text");
     setTranscript(prefillQuestion);
     setAnswer("");
+    setLatestReply(null);
+    setRangePreview(null);
     setCitations([]);
     setNotice("Source context added. Review the wording, then send when you’re ready.");
     onPrefillConsumed?.();
@@ -195,6 +199,13 @@ export function VoicePanel({
   }
 
   useEffect(() => {
+    if (visible) return;
+    if (status === "connecting") cancelConnecting();
+    if (status === "listening") cancelRecording();
+    if (status === "speaking") stopPlayback();
+  }, [visible, status]);
+
+  useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
@@ -229,15 +240,12 @@ export function VoicePanel({
       .then(({ services }) => {
         if (!active) return;
         const voice = services.find((service) => service.id === "voice");
-        const realtime = services.find((service) => service.id === "realtimeVoice");
         setVoiceAvailability(voice?.state === "available" ? "available" : "unavailable");
-        setRealtimeAvailable(realtime?.state === "available");
         setVoiceMessage(voice?.state === "available" ? "" : voice?.note || "Voice service is unavailable here. Text research remains available.");
       })
       .catch(() => {
         if (!active) return;
         setVoiceAvailability("unavailable");
-        setRealtimeAvailable(false);
         setVoiceMessage("Voice status could not be loaded. You can still type your question.");
       });
     return () => { active = false; };
@@ -371,13 +379,13 @@ export function VoicePanel({
     setInputMode("text");
     setStatus("ended");
     setError("");
-    setNotice("Text mode selected. Your transcript is preserved and uses the same research action.");
+    setNotice(compact ? "" : "Text mode selected. Your transcript is preserved and uses the same research action.");
   }
 
   function switchToVoice() {
     setInputMode("voice");
     setError("");
-    setNotice(voiceAvailability === "available" ? "Voice mode selected. Recording starts only after you press Record." : voiceMessage);
+    setNotice(compact ? "" : voiceAvailability === "available" ? "Voice mode selected. Recording starts only after you press Record." : voiceMessage);
   }
 
   function looksLikeDifferentTopic(question: string) {
@@ -395,13 +403,14 @@ export function VoicePanel({
     return Boolean(currentGroup && requestedGroup && currentGroup !== requestedGroup);
   }
 
-  async function ask(keepAsContext = false) {
-    if (!transcript.trim()) {
+  async function ask(keepAsContext = false, spoken?: string, voiceSignal?: AbortSignal) {
+    const askedText = (spoken ?? transcript).trim().slice(0, 3_000);
+    if (!askedText) {
       setError("Type or record a question first.");
       return;
     }
-    if (!keepAsContext && thesis && looksLikeDifferentTopic(transcript.trim())) {
-      setDifferentTopicQuestion(transcript.trim());
+    if (!keepAsContext && !spoken && thesis && looksLikeDifferentTopic(askedText)) {
+      setDifferentTopicQuestion(askedText);
       return;
     }
     releasePlayback();
@@ -410,21 +419,29 @@ export function VoicePanel({
     researchControllerRef.current = controller;
     setStatus("thinking");
     setError("");
-    setNotice("No thesis or financial state changes until you apply an editable view preview.");
-    const askedText = transcript.trim();
-    const priorTurns = conversation.length ? conversation : savedTurns.slice(-7);
-    const nextConversation = [...priorTurns, { role: "user" as const, content: askedText }].slice(-8);
+    setNotice(compact ? "" : "No thesis or financial state changes until you apply an editable view preview.");
+    const signal = voiceSignal ? AbortSignal.any([voiceSignal, controller.signal]) : controller.signal;
+    const nextConversation = researchConversation(conversation, askedText);
     try {
-      const result = await api<{
+      const requestedRange = thesis && onSaveRange ? refineResearchRange(askedText, family, thesis, targetRange) : null;
+      const pendingRange = !requestedRange && rangePreview && /^(yes|yes please|save (it|that|the range)|that(?:'s| is) right)[.!?\s]*$/i.test(askedText) ? rangePreview : null;
+      const refinement = requestedRange || pendingRange;
+      const listed = refinement && matchesListedRange(refinement, family);
+      const result: {
         answer: string;
         citations?: { id: string; title: string }[];
         proposed?: Partial<ThesisRevision>;
         clarificationPrompt?: string;
-      }>("/api/research", {
+      } = refinement ? {
+        answer: listed
+          ? `Do you want to update your thesis to “${researchRangeLabel(refinement)}” at settlement? I’ve prepared a draft using the listed Gemini boundaries.`
+          : `Do you want to save “${researchRangeLabel(refinement)}” as your view? The current Gemini contract doesn’t settle both boundaries, so it can be saved for research. An Arc quote would need a verified settlement source for that exact range.`,
+        ...(listed ? { proposed: { template: "range", lowerThreshold: refinement.lower, upperThreshold: refinement.upper, rationale: askedText } } : {}),
+      } : await api("/api/research", {
         method: "POST",
-        signal: controller.signal,
+        signal,
         body: JSON.stringify({
-          question: transcript.trim(),
+          question: askedText,
           conversation: nextConversation,
           slug,
           thesisId: thesis?.id,
@@ -433,50 +450,27 @@ export function VoicePanel({
           maxPayout,
         }),
       });
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || signal.aborted) return;
+      setRangePreview(refinement && !listed ? refinement : null);
       setAnswer(result.answer);
       setCitations(result.citations || []);
-      if (result.clarificationPrompt) {
-        setConversation([...nextConversation, { role: "assistant", content: result.clarificationPrompt }]);
-        setClarificationPrompt(result.clarificationPrompt);
-        setTranscript("");
-      } else {
-        setConversation([]);
-        setClarificationPrompt("");
-      }
-      const storedAssistant = [result.answer, result.clarificationPrompt].filter(Boolean).join("\n\n");
-      try {
-        let storedId = conversationId;
-        if (!storedId && thesis?.id) {
-          const existing = await api<{ conversations: StoredConversation[] }>(`/api/conversations?kind=thesis&thesisId=${encodeURIComponent(thesis.id)}`);
-          storedId = existing.conversations?.[0]?.id || "";
-        }
-        if (!storedId) {
-          const created = await api<{ conversation: StoredConversation }>("/api/conversations", {
-            method: "POST",
-            body: JSON.stringify({ action: "create", kind: thesis?.id ? "thesis" : "general", ...(thesis?.id ? { thesisId: thesis.id } : {}), title: family.title }),
-          });
-          storedId = created.conversation.id;
-        }
-        setConversationId(storedId);
-        await api<{ conversation: StoredConversation }>("/api/conversations", {
-          method: "POST",
-          body: JSON.stringify({ action: "save-turn", id: storedId, user: askedText, assistant: storedAssistant }),
-        });
-        setSavedTurns((current) => [...current, { role: "user", content: askedText }, { role: "assistant", content: storedAssistant }]);
-      } catch {
-        setNotice("Research reply is ready, but this turn could not be saved to conversation history. Retry after reconnecting.");
-      }
+      const assistantReply = [result.answer, result.clarificationPrompt].filter(Boolean).join("\n\n");
+      setConversation([...nextConversation, ...(assistantReply ? [{ role: "assistant" as const, content: assistantReply }] : [])]);
+      setClarificationPrompt(result.clarificationPrompt || "");
+      if (result.clarificationPrompt || (compact && !spoken)) setTranscript("");
+      setLatestReply(assistantReply ? { question: askedText, answer: assistantReply } : null);
+      setReplySaved(false);
       setProposal(result.proposed ? {
         template: result.proposed.template || thesis?.template || (family.predicates.length === 1 && family.contracts.length === 1 ? "binary" : family.predicates.length >= 2 ? "range" : "directional"),
         direction: result.proposed.direction ?? thesis?.direction ?? "yes",
         lowerThreshold: result.proposed.template === "binary" ? null : result.proposed.lowerThreshold ?? thesis?.lowerThreshold ?? family.predicates[0]?.threshold ?? null,
         upperThreshold: result.proposed.template === "binary" ? null : result.proposed.upperThreshold ?? thesis?.upperThreshold ?? family.predicates[1]?.threshold ?? null,
-        rationale: result.proposed.rationale ?? thesis?.rationale ?? transcript.trim(),
+        rationale: result.proposed.rationale ?? thesis?.rationale ?? askedText,
         invalidation: result.proposed.invalidation ?? thesis?.invalidation ?? "",
       } : null);
       setProposalSaved(false);
       setStatus("ended");
+      return assistantReply;
     } catch (err) {
       if (!mountedRef.current) return;
       if (err instanceof DOMException && err.name === "AbortError") {
@@ -485,6 +479,7 @@ export function VoicePanel({
       setError(err instanceof Error ? err.message : "Research failed. Your text remains available to retry.");
       setStatus("error");
     } finally {
+      if (voiceSignal?.aborted && mountedRef.current && researchControllerRef.current === controller) setStatus("ended");
       if (researchControllerRef.current === controller) researchControllerRef.current = null;
     }
   }
@@ -525,6 +520,10 @@ export function VoicePanel({
           }),
         });
         onThesisChange?.(result.thesis);
+        if (targetRange) {
+          try { onSaveRange?.(null); }
+          catch (cause) { setError(cause instanceof Error ? cause.message : "The listed view saved. Clear the research range from Your view to use it."); }
+        }
         setProposalSaved(true);
         setNotice("Suggested edit saved as a draft revision. Review the updated view before confirming it.");
       } else {
@@ -533,6 +532,7 @@ export function VoicePanel({
           body: JSON.stringify({
             mode: dataContextFromStorage(),
             topicSlug: family.slug,
+            title: family.title.slice(0, 100),
             familyId: family.id,
             familyVersion: family.version,
             template: proposal.template,
@@ -541,16 +541,10 @@ export function VoicePanel({
             upperThreshold: proposal.template === "directional" || proposal.template === "binary" ? null : proposal.upperThreshold,
             rationale: proposal.rationale || transcript.trim(),
             invalidation: proposal.invalidation,
-            evidenceIds: evidence.map((item) => item.id),
+            evidenceIds: preparedEvidenceIds,
           }),
         });
-        if (conversationId) {
-          try {
-            await api("/api/conversations", { method: "POST", body: JSON.stringify({ action: "link", id: conversationId, thesisId: result.thesis.id }) });
-          } catch {
-            setNotice("The thesis draft was created. The earlier conversation remains saved separately and could not be linked.");
-          }
-        }
+        copyMarketReplies(family.slug, result.thesis.id);
         router.push(`/theses/${result.thesis.id}`);
       }
     } catch (err) {
@@ -631,6 +625,9 @@ export function VoicePanel({
     setClarificationPrompt("");
     lastRecordingRef.current = null;
     setAnswer("");
+    setLatestReply(null);
+    setReplySaved(false);
+    setRangePreview(null);
     setCitations([]);
     setProposal(null);
     setProposalSaved(false);
@@ -662,36 +659,46 @@ export function VoicePanel({
     }
   }
 
-  const isBusy = status === "connecting" || status === "listening" || status === "transcribing" || status === "thinking";
-  const canEdit = status !== "connecting" && status !== "listening" && status !== "transcribing";
+  const isBusy = talking || status === "connecting" || status === "listening" || status === "transcribing" || status === "thinking";
+  const canEdit = !talking && status !== "connecting" && status !== "listening" && status !== "transcribing";
   const thresholds = family.predicates.map((predicate) => predicate.threshold);
+  const conversationMic = visible && inputMode === "voice" && voiceAvailability === "available" ? (
+    <ConversationalMic
+      primary={compact}
+      disabled={status === "connecting" || status === "listening" || status === "transcribing" || status === "thinking" || status === "speaking"}
+      onActive={setTalking}
+      onTurn={(text, signal) => {
+        setTranscript(text);
+        return ask(false, text, signal);
+      }}
+    />
+  ) : null;
+  const compactText = inputMode === "text" || voiceAvailability === "unavailable";
 
   return (
     <>
-    <Card className="voice-panel">
+    <Card className={compact ? "voice-panel voice-panel--compact" : "voice-panel"}>
+      {compact ? (
+        <div className="space-y-2">
+          {conversationMic}
+          {!talking ? <div className="flex flex-wrap items-center gap-2">
+            {voiceAvailability === "available" ? <Button kind="ghost" icon={inputMode === "voice" ? "chat" : "mic"} onClick={inputMode === "voice" ? switchToText : switchToVoice}>{inputMode === "voice" ? "Type instead" : "Back to voice"}</Button> : null}
+            {status === "thinking" ? <Button kind="ghost" onClick={() => cancelInFlight("research")}>Cancel reply</Button> : null}
+            {conversation.length && status !== "thinking" ? <Button kind="ghost" onClick={clearQuestion}>Start over</Button> : null}
+          </div> : null}
+          {voiceAvailability === "checking" ? <p className="text-sm th-muted" role="status">Connecting voice…</p> : null}
+          {voiceAvailability === "unavailable" && voiceMessage ? <p className="text-sm th-muted">{voiceMessage}</p> : null}
+        </div>
+      ) : (
+        <>
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-serif text-xl">{title || (context === "view" ? "Clarify your view" : context === "compare" ? "Explain this comparison" : context === "payoff" ? "Talk through the payoff" : "Talk through your research")}</h2>
         <span className="text-xs text-muted" role="status" aria-live="polite">{STATUS_LABEL[status]}</span>
       </div>
       <p className="mt-2 text-sm text-muted">
-        Voice and text use the same research request. Realtime Talk can converse live; Record remains the editable push-to-talk path. Research can suggest a view but never confirms it, accepts a quote, or moves funds.
+        Talk to work through your research aloud. Pause to send your turn, or record a transcript you can edit before sending.
       </p>
-      <div className="mt-3">
-        <RealtimeVoiceSession
-          available={realtimeAvailable}
-          onError={(message) => setError(message)}
-          onTranscript={(text, role) => {
-            if (role === "user") {
-              setTranscript(text);
-              setInputMode("text");
-              setNotice("Realtime transcript is editable. Review it before asking the research path, or keep talking.");
-            } else {
-              setAnswer(text);
-              setNotice("Realtime reply shown. Confirm any suggested view or destination on screen before continuing.");
-            }
-          }}
-        />
-      </div>
+      {conversationMic ? <div className="mt-3">{conversationMic}</div> : null}
       {status === "listening" || status === "transcribing" || status === "speaking" ? <div className="my-3 flex h-14 items-center justify-center gap-1 rounded-lg border border-[#E5E9F8] bg-[#F7F8FF]" role="status" aria-label={STATUS_LABEL[status]}>{Array.from({ length: 29 }, (_, index) => <span key={index} className="voice-wave-bar" style={{ animationDelay: `${(index % 9) * 80}ms` }} />)}</div> : null}
       <div className="mt-3 flex flex-wrap gap-2">
         {inputMode === "voice" ? (
@@ -700,7 +707,7 @@ export function VoicePanel({
             <Button onClick={toggleMute} kind="secondary">{muted ? "Unmute microphone" : "Mute microphone"}</Button>
             <Button onClick={cancelRecording} kind="ghost">Cancel and discard</Button>
           </> : status === "connecting" ? <Button onClick={cancelConnecting} kind="secondary">Cancel microphone request</Button> : (
-            <Button onClick={() => void startRecording()} disabled={voiceAvailability !== "available" || status === "transcribing" || status === "thinking"}>
+            <Button onClick={() => void startRecording()} disabled={talking || voiceAvailability !== "available" || status === "transcribing" || status === "thinking"}>
               {status === "speaking" ? "Interrupt reply and record" : voiceAvailability === "checking" ? "Checking voice…" : voiceAvailability === "unavailable" ? "Voice unavailable" : "Record a question"}
             </Button>
           )
@@ -728,10 +735,9 @@ export function VoicePanel({
         <p className="mt-1 text-sm">{clarificationPrompt}</p>
         <p className="mt-2 text-xs text-muted">Your earlier wording is retained for this follow-up. Answer by voice or text, or use Clear to start over.</p>
       </div> : null}
-      {savedTurns.length ? <details className="mt-3 rounded-lg border border-line bg-white p-3">
-        <summary className="cursor-pointer text-sm font-medium">Conversation history ({Math.ceil(savedTurns.length / 2)} turns)</summary>
-        <div className="mt-3 space-y-2">{savedTurns.map((turn, index) => <div key={`${index}-${turn.role}`} className={turn.role === "user" ? "rounded-lg bg-[#E9EEFF] p-2" : "rounded-lg bg-surface p-2"}><p className="text-xs font-semibold text-muted">{turn.role === "user" ? "You" : "Thesis"}</p><p className="mt-1 whitespace-pre-wrap text-sm">{turn.content}</p></div>)}</div>
-      </details> : null}
+        </>
+      )}
+      {!compact || compactText ? <>
       <Field label={clarificationPrompt ? (inputMode === "voice" ? "Spoken clarification or answer" : "Your clarification") : inputMode === "voice" ? "Editable transcript or question" : "Your question"}>
         <textarea
           id={`voice-question-${slug}`}
@@ -743,17 +749,40 @@ export function VoicePanel({
             setCitations([]);
             setProposal(null);
             setProposalSaved(false);
-            setNotice("Question edited. Ask again to refresh the research reply.");
+            if (!compact) setNotice("Question edited. Ask again to refresh the research reply.");
           }}
           placeholder={clarificationPrompt ? "Answer the clarification…" : context === "compare" ? "Explain how the custom payout differs by scenario from the ticket basket…" : context === "payoff" ? "Ask how each scenario pays, where this basket differs from your view, or what happens if you are wrong…" : "Ask about evidence, rules, or the view you want to express…"}
           maxLength={3_000}
           disabled={!canEdit}
         />
       </Field>
-      <p className="mt-1 text-right text-xs text-muted">{transcript.length} / 3,000</p>
+      {compact ? <Button className="mt-2" icon="send" onClick={() => void ask()} disabled={isBusy || !transcript.trim()}>{status === "thinking" ? "Thinking…" : "Send"}</Button> : <p className="mt-1 text-right text-xs text-muted">{transcript.length} / 3,000</p>}
+      </> : null}
       {languageCode ? <p className="mt-2 text-xs text-muted">Detected language: {languageCode}</p> : null}
       {notice ? <p className="mt-2 text-xs text-muted" role="status">{notice}</p> : null}
-      {answer ? (
+      {compact && latestReply ? <details className="workspace-assistant__detail" open={compactText || undefined}>
+        <summary>Read reply</summary>
+        <p className="my-2 text-xs th-muted">{latestReply.question}</p>
+        <p className="whitespace-pre-wrap text-sm">{latestReply.answer}</p>
+        {citations.length ? <div className="mt-2 flex flex-wrap gap-2">{citations.map((citation) => <a key={citation.id} className="text-xs text-action underline" href={evidence.find((item) => item.id === citation.id)?.url || `/topics/${slug}/evidence/${citation.id}`} target="_blank" rel="noreferrer">{citation.title}</a>)}</div> : null}
+        {onSaveReply ? <Button className="mt-2" kind="secondary" icon="bookmark" disabled={replySaved} onClick={() => {
+          try { onSaveReply(latestReply); setReplySaved(true); setError(""); }
+          catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save reply."); }
+        }}>{replySaved ? "Reply saved" : "Save reply"}</Button> : null}
+      </details> : null}
+      {rangePreview && onSaveRange ? <div className="workspace-assistant__detail" aria-label="Proposed research range">
+        <p className="text-sm font-semibold">Proposed view</p>
+        <p className="text-sm">YES · {researchRangeLabel(rangePreview)}</p>
+        <p className="text-xs th-muted">Research only. The exact range is unavailable for an Arc quote.</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button icon="bookmark" onClick={() => {
+            try { onSaveRange(rangePreview); setRangePreview(null); setNotice("Research range saved."); setError(""); }
+            catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save the research range."); }
+          }}>Save research range</Button>
+          <Button kind="ghost" onClick={() => setRangePreview(null)}>Keep current view</Button>
+        </div>
+      </div> : null}
+      {!compact && answer ? (
         <div className="mt-3 rounded-lg bg-surface p-3" aria-live="polite">
           <h3 className="text-sm font-medium">Research reply</h3>
           <p className="mt-1 whitespace-pre-wrap text-sm">{answer}</p>
@@ -769,8 +798,9 @@ export function VoicePanel({
         </div>
       ) : null}
       {proposal ? (
-        <div className="mt-3 space-y-3 rounded-lg border border-line p-3">
-          <h3 className="text-sm font-medium">Suggested view preview</h3>
+        <details className="workspace-assistant__detail" open={compact ? undefined : true}>
+          <summary>Suggested view preview</summary>
+          <div className="mt-2 space-y-3">
           {thesis ? (
             <p className="text-xs text-muted">Current revision {thesis.revision}: {thesis.template}, {thesis.lowerThreshold ?? "no lower threshold"}–{thesis.upperThreshold ?? "no upper threshold"}. Saving this preview creates a new draft revision and invalidates any available quote.</p>
           ) : <p className="text-xs text-muted">Review and edit every field. Confirming the button creates a draft only; it does not confirm a position or request a quote.</p>}
@@ -818,7 +848,8 @@ export function VoicePanel({
             {proposalSaved && thesis ? <Button href={`/theses/${thesis.id}`} kind="secondary">Review updated view</Button> : null}
             <Button onClick={() => { setProposal(null); setProposalSaved(false); }} kind="ghost" disabled={savingProposal}>Discard preview</Button>
           </div>
-        </div>
+          </div>
+        </details>
       ) : null}
       {error ? <p className="mt-2 text-sm text-bad" role="alert">{error}</p> : null}
     </Card>

@@ -1,5 +1,3 @@
-import fs from "node:fs";
-import path from "node:path";
 import type {
   AlertRule,
   NotificationItem,
@@ -8,6 +6,7 @@ import type {
   ThesisHistoryRecord,
   ThesisRevision,
 } from "@/lib/domain/types";
+import { legacyJsonPath, readKv, readLegacyJsonFile, writeKv } from "@/lib/server/db";
 
 export type AppMode = "research" | "paper" | "live" | "hackathon";
 
@@ -24,6 +23,9 @@ export interface Account {
   interests: string[];
   wallet: string | null;
   closed: boolean;
+  googleId?: string | null;
+  authProvider?: "email" | "google";
+  avatarUrl?: string | null;
 }
 
 export interface Session {
@@ -157,6 +159,7 @@ export interface ConversationMessage {
   content: string;
   createdAt: string;
   action?: { type: string; label: string; href?: string };
+  marketOptions?: { slug: string; title: string; contract?: string; eventTicker?: string }[];
 }
 
 export interface ConversationRecord {
@@ -223,9 +226,7 @@ export interface StoreShape {
   incidents: { id: string; title: string; body: string; at: string; state: string }[];
 }
 
-const FILE = process.env.THESIS_STORE_FILE
-  ? path.resolve(process.env.THESIS_STORE_FILE)
-  : path.join(process.cwd(), ".data", "store.json");
+const STORE_KEY = "app_store_v1";
 
 function empty(): StoreShape {
   return {
@@ -261,13 +262,12 @@ function empty(): StoreShape {
 
 let mem: StoreShape | null = null;
 
-function load(): StoreShape {
-  if (mem) return mem;
+function hydrate(raw: string | null): StoreShape {
+  if (!raw) return empty();
   try {
-    const raw = fs.readFileSync(FILE, "utf8");
     const stored = JSON.parse(raw) as Partial<StoreShape>;
     const defaults = empty();
-    mem = {
+    return {
       ...defaults,
       ...stored,
       maker: { ...defaults.maker, ...(stored.maker || {}) },
@@ -278,17 +278,39 @@ function load(): StoreShape {
       resolutionReports: stored.resolutionReports || [],
       streamNonces: stored.streamNonces || [],
       streamEvents: stored.streamEvents || [],
+      accounts: (stored.accounts || []).map((account) => ({
+        ...account,
+        googleId: account.googleId ?? null,
+        authProvider: account.authProvider ?? (account.googleId ? "google" : "email"),
+        avatarUrl: account.avatarUrl ?? null,
+      })),
     };
   } catch {
-    mem = empty();
+    return empty();
   }
+}
+
+function load(): StoreShape {
+  if (mem) return mem;
+  const fromDb = readKv(STORE_KEY);
+  if (fromDb) {
+    mem = hydrate(fromDb);
+    return mem;
+  }
+  const legacy = readLegacyJsonFile();
+  mem = hydrate(legacy);
+  if (legacy) writeKv(STORE_KEY, JSON.stringify(mem));
   return mem;
 }
 
 function save(next: StoreShape) {
   mem = next;
-  fs.mkdirSync(path.dirname(FILE), { recursive: true });
-  fs.writeFileSync(FILE, JSON.stringify(next, null, 2));
+  writeKv(STORE_KEY, JSON.stringify(next));
+}
+
+export function storeBackend() {
+  load();
+  return { kind: "sqlite" as const, legacyJson: legacyJsonPath() };
 }
 
 export function mutate<T>(fn: (s: StoreShape) => T): T {

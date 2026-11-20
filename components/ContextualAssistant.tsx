@@ -4,19 +4,24 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { api, dataContextFromStorage, OPEN_ASSISTANT_EVENT } from "@/lib/client";
 import { AppDialog } from "@/components/AppDialog";
-import { RealtimeVoiceSession } from "@/components/RealtimeVoiceSession";
+import { ConversationalMic } from "@/components/ConversationalMic";
+import { Icon } from "@/components/thesis";
+import { researchConversation } from "@/lib/research";
+import { useResearchNotebook } from "@/lib/use-research-notebook";
 
 type StructuredAction = { type: "navigate"; label: string; href: string };
-type Message = { id: string; role: "user" | "assistant"; content: string; createdAt: string; action?: StructuredAction };
+type MarketOption = { slug: string; title: string; contract?: string; eventTicker?: string };
+type Message = { id: string; role: "user" | "assistant"; content: string; createdAt: string; action?: StructuredAction; marketOptions?: MarketOption[] };
 type Conversation = { id: string; kind: "general" | "thesis"; thesisId: string | null; title: string; messages: Message[]; updatedAt: string };
 type VoiceStatus = "ready" | "listening" | "transcribing" | "sending" | "speaking";
 
-function safeAction(question: string, pathname: string): { action?: StructuredAction; reply: string } {
+function safeAction(question: string, pathname: string): { action?: StructuredAction; reply: string; research?: boolean } {
   const q = question.trim();
   const normalized = q.toLowerCase();
   const pathThesisId = pathname.match(/^\/theses\/([a-z0-9_-]+)/i)?.[1];
   const rememberedId = typeof window === "undefined" ? null : localStorage.getItem("thesis:last-active");
   const thesisId = pathThesisId || (rememberedId && /^th_[a-z0-9]+$/i.test(rememberedId) ? rememberedId : null);
+  const wantsCreate = /\b(create|start|new|draft|make)\b/.test(normalized) && /\b(thesis|thesi)\b/.test(normalized);
   const destinations: [RegExp, string, string][] = [
     [/\b(my theses|thesis library|library|saved theses)\b/, "/theses", "Open My Theses"],
     [/\b(portfolio|my positions|holdings)\b/, "/portfolio", "Open Portfolio"],
@@ -28,22 +33,33 @@ function safeAction(question: string, pathname: string): { action?: StructuredAc
   for (const [pattern, href, label] of destinations) {
     if (pattern.test(normalized)) return { action: { type: "navigate", href, label }, reply: `I can take you to ${label}. Review the destination below before opening it.` };
   }
-  if (thesisId) {
+  const marketDiscoveryRequest = /\b(find|search|look\s+for|show me|want|about)\b/.test(normalized) &&
+    /\b(basket|market|contract|football|basketball|game|team)\b/.test(normalized);
+  if (thesisId && !wantsCreate && !marketDiscoveryRequest) {
+    const resumeResearch =
+      /\b(open|continue|resume|return to|back to)\s+research\b/.test(normalized) ||
+      /\bresearch\s+again\b/.test(normalized) ||
+      /\b(change|take|put|send|move)\b[\w\s-]{0,40}\bthesis\b[\w\s-]{0,40}\bresearch\b/.test(normalized);
+    if (resumeResearch && !/\b(compare|build|history|review trade)\b/.test(normalized)) {
+      return {
+        action: { type: "navigate", href: `/theses/${thesisId}`, label: "Open thesis Research" },
+        reply: "I can reopen Research for your most recent thesis. Confirm the destination below; nothing is saved or traded from this suggestion.",
+      };
+    }
     const tabs: [RegExp, string, string][] = [
-      [/\b(compare|alternatives)\b/, "compare", "Open Compare"],
-      [/\b(build|basket|construction)\b/, "build", "Open Build"],
+      [/\b(compare this|compare my|open compare|show (?:me )?alternatives)\b/, "compare", "Open Compare"],
+      [/\b(open|go to|resume|return to)\s+(?:my\s+|the\s+)?(?:build|basket|construction)\b/, "build", "Open Build"],
       [/\b(history|revisions|thesis history)\b/, "history", "Open thesis History"],
-      [/\b(review|review trade|quote)\b/, "review", "Open trade Review"],
+      [/\b(review trade|open review|trade review)\b/, "review", "Open trade Review"],
     ];
     for (const [pattern, segment, label] of tabs) {
       if (pattern.test(normalized)) return { action: { type: "navigate", href: `/theses/${thesisId}/${segment}`, label }, reply: `I can open ${label} for your most recent thesis. Review the destination below; your position or saved view will not change.` };
     }
   }
-  if (/\b(search|find|explore|market|gemini|bitcoin|btc|ethereum|eth|price|prediction)\b/.test(normalized)) {
-    const href = `/explore?view=gemini&q=${encodeURIComponent(q)}`;
-    return { action: { type: "navigate", href, label: "Search Gemini markets" }, reply: "I can open Gemini market search with your wording prefilled. You can inspect the actual listed contracts and choose one before continuing." };
-  }
-  return { reply: "I can help you find a market, resume a thesis, or open a Portfolio view. Tell me what you want to inspect, or use the shortcuts below. Research and navigation never approve a financial action." };
+  return {
+    research: true,
+    reply: "I can search live Gemini markets, explain a selected contract, or open a destination you confirm. Research never approves a financial action.",
+  };
 }
 
 function errorText(error: unknown) {
@@ -65,7 +81,10 @@ export function ContextualAssistant() {
   const [notice, setNotice] = useState("");
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("ready");
   const [voiceAvailable, setVoiceAvailable] = useState(false);
-  const [realtimeAvailable, setRealtimeAvailable] = useState(false);
+  const [talking, setTalking] = useState(false);
+  const [draftScope, setDraftScope] = useState<string | null>(null);
+  const [localThread, setLocalThread] = useState<Conversation | null>(null);
+  const [showResearchText, setShowResearchText] = useState(false);
   const [muted, setMuted] = useState(false);
   const [manageAction, setManageAction] = useState<"rename" | "delete" | null>(null);
   const [threadTitle, setThreadTitle] = useState("");
@@ -77,9 +96,16 @@ export function ContextualAssistant() {
   const selectionMade = useRef(false);
   const audio = useRef<HTMLAudioElement | null>(null);
   const audioUrl = useRef<string | null>(null);
+  const sending = useRef(false);
 
   const builtInAssistant = /^\/topics\/[^/]+$/.test(pathname) || /^\/theses\/[^/]+(?:\/(?:build|compare|review))?$/.test(pathname);
-  const current = threads.find((thread) => thread.id === threadId) || null;
+  const researchOnly = Boolean(draftScope && pathname === `/theses/${draftScope}`);
+  const notebook = useResearchNotebook(researchOnly ? `thesis:${draftScope}` : "general");
+  const current = researchOnly ? (localThread?.thesisId === draftScope ? localThread : null) : threads.find((thread) => thread.id === threadId) || null;
+
+  useEffect(() => {
+    if (builtInAssistant) setOpen(false);
+  }, [pathname, builtInAssistant]);
 
   useEffect(() => {
     let active = true;
@@ -87,7 +113,7 @@ export function ContextualAssistant() {
       if (!active) return;
       const next = result.conversations || [];
       setThreads(next);
-      if (!selectionMade.current) setThreadId(next[0]?.id || "");
+      if (!selectionMade.current) setThreadId(next.find((thread) => thread.kind === "general")?.id || "");
     }).catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "Saved conversations could not be loaded."); });
     return () => { active = false; };
   }, []);
@@ -96,23 +122,27 @@ export function ContextualAssistant() {
     api<{ services: { id: string; state: string }[] }>("/api/status").then(({ services }) => {
       if (!active) return;
       setVoiceAvailable(services.some((service) => service.id === "voice" && service.state === "available"));
-      setRealtimeAvailable(services.some((service) => service.id === "realtimeVoice" && service.state === "available"));
     }).catch(() => {
       if (!active) return;
       setVoiceAvailable(false);
-      setRealtimeAvailable(false);
     });
     return () => { active = false; };
   }, []);
   useEffect(() => {
     const onOpen = (event: Event) => {
-      const question = (event as CustomEvent<{ question?: string }>).detail?.question;
+      const { question, thesisId } = (event as CustomEvent<{ question?: string; thesisId?: string }>).detail || {};
       setOpen(true);
       if (question) setDraft(question);
+      if (thesisId) {
+        setShowResearchText(false);
+        selectionMade.current = true;
+        setDraftScope(thesisId);
+        setThreadId(threads.find((thread) => thread.thesisId === thesisId)?.id || "");
+      }
     };
     window.addEventListener(OPEN_ASSISTANT_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_ASSISTANT_EVENT, onOpen);
-  }, []);
+  }, [threads]);
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
@@ -183,49 +213,114 @@ export function ContextualAssistant() {
     finally { setManagePending(false); }
   }
 
-  async function send() {
-    const question = draft.trim();
-    if (!question || voiceStatus === "sending" || voiceStatus === "transcribing") return;
+  async function send(spoken?: string, signal?: AbortSignal) {
+    const question = (spoken ?? draft).trim().slice(0, 3_000);
+    if (!question || sending.current || (!spoken && (talking || voiceStatus === "transcribing" || voiceStatus === "listening"))) return;
+    sending.current = true;
     setError("");
     setNotice("");
     setVoiceStatus("sending");
     try {
       let activeThread = current;
+      if (!activeThread && researchOnly) activeThread = { id: "local-research", kind: "thesis", thesisId: draftScope, title: "Research", messages: [], updatedAt: new Date().toISOString() };
       if (!activeThread) {
-        const created = await api<{ conversation: Conversation }>("/api/conversations", { method: "POST", body: JSON.stringify({ action: "create", kind: "general" }) });
+        const created = await api<{ conversation: Conversation }>("/api/conversations", {
+          method: "POST",
+          body: JSON.stringify({ action: "create", kind: draftScope ? "thesis" : "general", ...(draftScope ? { thesisId: draftScope } : {}) }),
+          signal,
+        });
         activeThread = created.conversation;
+        setThreads((items) => [created.conversation, ...items]);
         setThreadId(activeThread.id);
         selectionMade.current = true;
       }
-      const turns = [...activeThread.messages.map(({ role, content }) => ({ role, content })), { role: "user" as const, content: question }].slice(-8);
+      const turns = researchConversation(activeThread.messages, question);
       const activePath = activeThread.kind === "thesis" && activeThread.thesisId ? `/theses/${activeThread.thesisId}` : pathname;
       const nav = safeAction(question, activePath);
       let answer = nav.reply;
       let action = nav.action;
-      if (!action && activeThread.kind === "thesis" && activeThread.thesisId) {
-        action = { type: "navigate", label: "Return to thesis Research", href: `/theses/${activeThread.thesisId}` };
-        answer = "This conversation is linked to a thesis. I can reopen its Research workspace so we can continue with the saved market, view, and evidence.";
-      }
+      let marketOptions: MarketOption[] = [];
       const topicSlug = pathname.match(/^\/topics\/([a-z0-9-]+)$/i)?.[1];
-      const thesisId = pathname.match(/^\/theses\/([a-z0-9_-]+)/i)?.[1];
-      if (!action && topicSlug) {
-        const result = await api<{ answer?: string; clarificationPrompt?: string }>("/api/research", {
+      const thesisId = (activeThread.kind === "thesis" && activeThread.thesisId)
+        || pathname.match(/^\/theses\/([a-z0-9_-]+)/i)?.[1]
+        || undefined;
+      if (nav.research || !action) {
+        const result = await api<{
+          answer?: string;
+          clarificationPrompt?: string;
+          marketMatches?: (MarketOption & { id?: string; version?: string; predicates?: number; contracts?: number })[];
+        }>("/api/research", {
           method: "POST",
-          body: JSON.stringify({ question, conversation: turns, slug: topicSlug, thesisId, mode: dataContextFromStorage(), context: "research" }),
+          signal,
+          body: JSON.stringify({
+            question,
+            conversation: turns,
+            ...(topicSlug ? { slug: topicSlug } : {}),
+            ...(thesisId ? { thesisId } : {}),
+            mode: dataContextFromStorage(),
+            context: "research",
+          }),
         });
-        answer = [result.answer, result.clarificationPrompt].filter(Boolean).join("\n\n") || "I could not form a research reply. Try again or switch to text.";
+        answer = [result.answer, result.clarificationPrompt].filter(Boolean).join("\n\n")
+          || "I could not form a research reply. Try again with a team, event, or ticker name.";
+        const matches = result.marketMatches || [];
+        marketOptions = matches.slice(0, 5).map(({ slug, title, contract, eventTicker }) => ({
+          slug, title: title.slice(0, 200), contract: contract?.slice(0, 200),
+          eventTicker: eventTicker && /^[a-z0-9._:-]{1,180}$/i.test(eventTicker) ? eventTicker : undefined,
+        }));
+        const match = matches.length === 1 ? matches[0] : undefined;
+        const wantsThesis = /\b(create|start|draft|make)\s+(?:(?:a|new|my|a new)\s+)?thes(?:is|i)\b/i.test(question);
+        if (!spoken && !thesisId && wantsThesis && match?.slug && match.id) {
+          try {
+            const single = (match.predicates ?? 0) <= 1 && (match.contracts ?? 1) <= 1;
+            const created = await api<{ thesis: { id: string } }>("/api/theses", {
+              method: "POST",
+              body: JSON.stringify({
+                topicSlug: match.slug,
+                familyId: match.id,
+                familyVersion: match.version || "1",
+                mode: dataContextFromStorage(),
+                title: match.title.slice(0, 100),
+                template: single ? "binary" : (match.predicates ?? 0) >= 2 ? "range" : "directional",
+                direction: "yes",
+                rationale: question.trim(),
+                evidenceIds: [],
+              }),
+            });
+            action = {
+              type: "navigate",
+              label: `Open Research draft · ${match.title}`.slice(0, 80),
+              href: `/theses/${created.thesis.id}`,
+            };
+            answer = `${answer}\n\nI prepared a Research draft linked to “${match.title}”. Confirm the destination below to open it. No view is confirmed and no trade is placed.`;
+          } catch { /* The matching market is still available below. */ }
+        }
+      }
+      if (signal?.aborted) return;
+      if (researchOnly) {
+        const createdAt = new Date().toISOString();
+        const next = activeThread.messages.length;
+        setLocalThread({ ...activeThread, updatedAt: createdAt, messages: [
+          ...activeThread.messages,
+          { id: `question-${next}`, role: "user", content: question, createdAt },
+          { id: `reply-${next}`, role: "assistant", content: answer.slice(0, 6_000), createdAt, action, marketOptions },
+        ] });
+        setDraft("");
+        return answer;
       }
       const result = await api<{ conversation: Conversation }>("/api/conversations", {
         method: "POST",
-        body: JSON.stringify({ action: "save-turn", id: activeThread.id, user: question, assistant: answer, ...(action ? { structuredAction: action } : {}) }),
+        body: JSON.stringify({ action: "save-turn", id: activeThread.id, user: question, assistant: answer.slice(0, 6_000), ...(action ? { structuredAction: action } : {}), ...(marketOptions.length ? { marketOptions } : {}) }),
+        signal,
       });
       setThreads((items) => [result.conversation, ...items.filter((thread) => thread.id !== result.conversation.id)].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)));
       setThreadId(result.conversation.id);
       setDraft("");
       setNotice(action ? "Review the suggested destination before opening it. No view or position changes from this suggestion." : "Reply saved. No financial action was taken.");
+      return answer;
     } catch (cause) {
-      setError(errorText(cause));
-    } finally { setVoiceStatus("ready"); }
+      if (!signal?.aborted) setError(errorText(cause));
+    } finally { sending.current = false; setVoiceStatus("ready"); }
   }
 
   async function startRecording() {
@@ -296,76 +391,211 @@ export function ContextualAssistant() {
     } catch (cause) { stopSpeech(); setVoiceStatus("ready"); setError(errorText(cause)); }
   }
 
-  if (builtInAssistant) return null;
+  if (builtInAssistant && !open) return null;
   return (
     <>
-      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="contextual-assistant" className="assistant-launcher fixed bottom-16 right-4 z-40 rounded-full px-4 py-3 text-sm font-semibold md:bottom-5">
-        {open ? "Close Thesis" : "Ask Thesis"}
-      </button>
-      {open ? <aside id="contextual-assistant" aria-label="Ask Thesis assistant" className="assistant-panel fixed inset-x-0 bottom-12 top-auto z-50 flex h-[min(78vh,720px)] flex-col md:inset-y-4 md:left-auto md:right-4 md:w-[430px] md:rounded-2xl">
-        <header className="flex items-center justify-between gap-3 border-b border-line bg-white px-4 py-3">
-          <div><h2 className="font-serif text-xl">Ask Thesis</h2><p className="text-xs text-muted">Contextual research and navigation · no financial approvals</p></div>
-          <button type="button" className="min-h-10 rounded-lg border border-line px-3 text-sm" onClick={() => setOpen(false)}>Close</button>
-        </header>
-        <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
-          <label className="sr-only" htmlFor="assistant-thread">Conversation</label>
-          <select id="assistant-thread" className="min-h-10 min-w-0 flex-1 rounded-lg border border-line bg-white px-2 text-sm" value={threadId} onChange={(event) => { selectionMade.current = true; setThreadId(event.target.value); }}>
-            {!threads.length ? <option value="">New conversation</option> : null}
-            {threads.map((thread) => <option key={thread.id} value={thread.id}>{thread.kind === "thesis" ? `Thesis · ${thread.title}` : thread.title}</option>)}
-          </select>
-          <button type="button" className="min-h-10 rounded-lg border border-line px-2 text-sm" onClick={() => void newThread()}>New</button>
-          {current ? <>
-            <button type="button" className="min-h-10 rounded-lg border border-line px-2 text-sm" onClick={() => beginManageThread("rename")}>Rename</button>
-            <button type="button" className="min-h-10 rounded-lg border border-line px-2 text-sm text-bad" onClick={() => beginManageThread("delete")}>Delete</button>
-          </> : null}
-        </div>
-        <div className="flex-1 space-y-3 overflow-y-auto p-3" aria-live="polite">
-          {!current?.messages.length ? <div className="rounded-xl border border-line bg-white p-4"><p className="font-medium">What would you like to do?</p><p className="mt-1 text-sm text-muted">Ask about a supported market, resume a thesis, or move to a Portfolio view. I’ll show a destination for you to confirm.</p><div className="mt-3 flex flex-wrap gap-2">{[["Explore Gemini", "/explore?view=gemini"], ["My Theses", "/theses"], ["Portfolio", "/portfolio"]].map(([label, href]) => <button key={href} type="button" className="rounded-full border border-line px-3 py-2 text-xs hover:border-action" onClick={() => router.push(href)}>{label}</button>)}</div></div> : null}
-          {current?.messages.map((message) => <article key={message.id} className={`rounded-xl border border-line p-3 ${message.role === "user" ? "ml-5 bg-[#E9EEFF]" : "mr-3 bg-white"}`}>
-            <p className="text-xs font-semibold text-muted">{message.role === "user" ? "You" : "Thesis"}</p>
-            <p className="mt-1 whitespace-pre-wrap text-sm">{message.content}</p>
-            {message.action ? <button type="button" className="mt-3 min-h-10 rounded-lg bg-action px-3 py-2 text-sm font-medium text-white" onClick={() => router.push(message.action!.href)}>Review destination · {message.action.label}</button> : null}
-            {message.role === "assistant" && voiceAvailable ? <button type="button" className="mt-2 block text-xs text-action underline" onClick={() => voiceStatus === "speaking" ? stopSpeech() : void speak(message.content)}>{voiceStatus === "speaking" ? "Stop speaking" : "Speak reply"}</button> : null}
-          </article>)}
-        </div>
-        <footer className="space-y-2 border-t border-line bg-white p-3">
-          {error ? <p role="alert" className="rounded-lg bg-[#FFF3F1] p-2 text-sm text-bad">{error}</p> : null}
-          {notice ? <p role="status" className="text-xs text-muted">{notice}</p> : null}
-          {realtimeAvailable ? <RealtimeVoiceSession
-            available={realtimeAvailable}
-            compact
-            onError={(message) => setError(message)}
-            onTranscript={(text, role) => {
-              if (role === "user") setDraft(text);
-              else setNotice("Realtime reply received. Consequential actions still require an on-screen confirmation.");
-            }}
-            onPendingAction={(action) => {
-              setNotice(`Review destination · ${action.label}. No navigation happens until you confirm.`);
-            }}
-          /> : null}
-          {voiceStatus === "listening" ? <p className="text-xs text-muted">Listening. Mute pauses microphone input; stop transcribes, cancel discards.</p> : null}
-          <label htmlFor="assistant-question" className="sr-only">Your question</label>
-          <textarea id="assistant-question" className="min-h-20 w-full resize-y rounded-lg border border-line bg-[#FBFAF8] p-3 text-sm" maxLength={3000} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask a question or give a task…" disabled={voiceStatus === "sending" || voiceStatus === "transcribing"} />
-          <div className="flex flex-wrap justify-end gap-2">
-            {voiceAvailable && voiceStatus !== "listening" ? <button type="button" className="min-h-10 rounded-lg border border-line px-3 text-sm" onClick={() => void startRecording()} disabled={voiceStatus !== "ready"}>Record</button> : null}
-            {voiceStatus === "listening" ? <>
-              <button type="button" className="min-h-10 rounded-lg border border-line px-3 text-sm" onClick={() => { const track = stream.current?.getAudioTracks()[0]; if (track) { track.enabled = muted; setMuted(!muted); } }}>{muted ? "Unmute" : "Mute"}</button>
-              <button type="button" className="min-h-10 rounded-lg border border-line px-3 text-sm" onClick={() => stopRecording(true)}>Cancel recording</button>
-              <button type="button" className="min-h-10 rounded-lg border border-line px-3 text-sm" onClick={() => stopRecording()}>Stop and transcribe</button>
-              <button type="button" className="min-h-10 rounded-lg border border-line px-3 text-sm" onClick={() => stopRecording(true)}>Switch to text</button>
-            </> : null}
-            {voiceStatus === "speaking" ? <button type="button" className="min-h-10 rounded-lg border border-line px-3 text-sm" onClick={stopSpeech}>Interrupt speech</button> : null}
-            <button type="button" className="min-h-10 rounded-lg bg-action px-4 text-sm font-semibold text-white disabled:opacity-50" onClick={() => void send()} disabled={!draft.trim() || voiceStatus === "sending" || voiceStatus === "transcribing" || voiceStatus === "listening"}>{voiceStatus === "sending" ? "Thinking…" : voiceStatus === "transcribing" ? "Transcribing…" : "Send"}</button>
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (draftScope) {
+              setDraftScope(null);
+              setThreadId(threads.find((thread) => thread.kind === "general")?.id || "");
+              setDraft("");
+            }
+            setOpen(true);
+          }}
+          aria-expanded={false}
+          aria-controls="contextual-assistant"
+          className="th-assistant-launcher th-button assistant-launcher"
+        >
+          <Icon name="assistant" size={18} />
+          Ask Thesis
+        </button>
+      ) : null}
+
+      {open ? (
+        <aside id="contextual-assistant" aria-label="Ask Thesis assistant" className="assistant-panel">
+          <header className="assistant-panel__head">
+            <div className="assistant-panel__title">
+              <Icon name="assistant" size={20} />
+              <div>
+                <h2>Ask Thesis</h2>
+                {!researchOnly ? <p>Research and navigation · no financial approvals</p> : null}
+              </div>
+            </div>
+            <button type="button" aria-label="Close Ask Thesis" className="th-button th-button--ghost th-button--icon" onClick={() => setOpen(false)}>
+              <Icon name="close" />
+            </button>
+          </header>
+
+          {!researchOnly ? <div className="assistant-panel__toolbar">
+            <label className="sr-only" htmlFor="assistant-thread">Conversation</label>
+            <select
+              id="assistant-thread"
+              className="assistant-panel__select"
+              value={threadId}
+              disabled={talking || voiceStatus === "sending"}
+              onChange={(event) => { selectionMade.current = true; setDraftScope(null); setThreadId(event.target.value); }}
+            >
+              {!threadId || !threads.length ? <option value="">{draftScope ? "New thesis conversation" : "New conversation"}</option> : null}
+              {threads.map((thread) => (
+                <option key={thread.id} value={thread.id}>
+                  {thread.kind === "thesis" ? `Thesis · ${thread.title}` : thread.title}
+                </option>
+              ))}
+            </select>
+            <button type="button" className="th-button th-button--ghost th-button--icon" aria-label="New conversation" title="New" disabled={talking || voiceStatus === "sending"} onClick={() => { setDraftScope(null); void newThread(); }}>
+              <Icon name="plus" size={16} />
+            </button>
+            {current && !talking && voiceStatus !== "sending" ? (
+              <>
+                <button type="button" className="th-button th-button--ghost th-button--icon" aria-label="Rename conversation" title="Rename" onClick={() => beginManageThread("rename")}>
+                  <Icon name="edit" size={16} />
+                </button>
+                <button type="button" className="th-button th-button--ghost th-button--icon text-bad" aria-label="Delete conversation" title="Delete" onClick={() => beginManageThread("delete")}>
+                  <Icon name="trash" size={16} />
+                </button>
+              </>
+            ) : null}
+          </div> : null}
+
+          <div className="assistant-panel__messages" aria-live="polite">
+            {!researchOnly && !current?.messages.length ? (
+              <div className="assistant-panel__empty">
+                <p className="font-medium">What would you like to do?</p>
+                <p className="th-muted">Ask about a market, resume a thesis, or jump to Portfolio. Destinations always need your confirmation.</p>
+                <div className="assistant-panel__chips">
+                  {([["Explore markets", "/explore?view=gemini"], ["My Theses", "/theses"], ["Portfolio", "/portfolio"]] as const).map(([label, href]) => (
+                    <button key={href} type="button" className="assistant-panel__chip" onClick={() => router.push(href)}>{label}</button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {current?.messages.map((message, index) => (
+              <article key={message.id} className={`th-chat-message ${message.role === "user" ? "th-chat-message--user" : ""}`}>
+                <p className="assistant-panel__role">{message.role === "user" ? "You" : "Thesis"}</p>
+                <p className="assistant-panel__copy">{message.content}</p>
+                {message.action ? (
+                  <button type="button" className="th-button th-button--primary mt-3" onClick={() => { setOpen(false); router.push(message.action!.href); }}>
+                    <Icon name="arrow-right" size={16} />
+                    {message.action.label}
+                  </button>
+                ) : null}
+                {message.marketOptions?.length ? <ul className="mt-2 space-y-1">
+                  {message.marketOptions.map(({ slug, title, contract, eventTicker }) => <li key={slug}>
+                    <a className="th-button th-button--secondary !h-auto whitespace-normal text-left" href={current.thesisId
+                      ? `/theses/${current.thesisId}?market=${encodeURIComponent(slug)}${eventTicker ? `&event=${encodeURIComponent(eventTicker)}` : ""}`
+                      : `/topics/${slug}${eventTicker ? `?event=${encodeURIComponent(eventTicker)}` : ""}`} onClick={() => setOpen(false)}>
+                      <Icon name="arrow-right" size={16} />
+                      <span>{title}{contract ? <small className="block th-muted">{contract}</small> : null}</span>
+                    </a>
+                  </li>)}
+                </ul> : null}
+                {researchOnly && message.role === "assistant" && current.messages[index - 1]?.role === "user" ? (() => {
+                  const question = current.messages[index - 1].content;
+                  const saved = notebook.replies.some((reply) => reply.question === question && reply.answer === message.content);
+                  return <button type="button" className="assistant-panel__speak" disabled={saved} onClick={() => {
+                    try { notebook.saveReply({ question, answer: message.content }); setError(""); }
+                    catch (cause) { setError(errorText(cause)); }
+                  }}><Icon name="bookmark" size={14} />{saved ? "Reply saved" : "Save reply"}</button>;
+                })() : null}
+                {!researchOnly && message.role === "assistant" && voiceAvailable ? (
+                  <button type="button" className="assistant-panel__speak" disabled={talking || voiceStatus === "sending" || voiceStatus === "listening" || voiceStatus === "transcribing"} onClick={() => voiceStatus === "speaking" ? stopSpeech() : void speak(message.content)}>
+                    <Icon name={voiceStatus === "speaking" ? "stop" : "volume"} size={14} />
+                    {voiceStatus === "speaking" ? "Stop" : "Speak"}
+                  </button>
+                ) : null}
+              </article>
+            ))}
           </div>
-          {!voiceAvailable && !realtimeAvailable ? <p className="text-right text-xs text-muted">Voice is unavailable; text remains ready.</p> : null}
-        </footer>
-      </aside> : null}
+
+          <footer className="assistant-panel__composer">
+            {error ? <p role="alert" className="th-alert th-alert--error text-sm">{error}</p> : null}
+            {notice ? <p role="status" className="text-xs th-muted">{notice}</p> : null}
+            {voiceStatus === "listening" ? <p className="text-xs th-muted">Listening… Mute pauses input; stop transcribes; cancel discards.</p> : null}
+            {!researchOnly || !voiceAvailable || showResearchText ? <><label htmlFor="assistant-question" className="sr-only">Your question</label>
+            <textarea
+              id="assistant-question"
+              className="assistant-panel__input"
+              rows={2}
+              maxLength={3000}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void send();
+                }
+              }}
+              placeholder="Ask a question or describe a view…"
+              disabled={talking || voiceStatus === "sending" || voiceStatus === "transcribing"}
+            /></> : null}
+            <div className="assistant-panel__actions">
+              <div className="assistant-panel__voice">
+                {voiceAvailable ? <ConversationalMic primary={researchOnly} disabled={voiceStatus !== "ready"} onActive={setTalking} onTurn={(text, signal) => {
+                  setDraft(text);
+                  return send(text, signal);
+                }} /> : null}
+                {researchOnly && voiceAvailable && !talking && !showResearchText ? <button type="button" className="th-button th-button--ghost" onClick={() => setShowResearchText(true)}>Type instead</button> : null}
+                {!researchOnly && voiceAvailable && !talking && voiceStatus !== "listening" ? (
+                  <button type="button" className="th-button th-button--ghost" onClick={() => void startRecording()} disabled={voiceStatus !== "ready"}>
+                    Record & edit
+                  </button>
+                ) : null}
+                {voiceStatus === "listening" ? (
+                  <>
+                    <button type="button" className="th-button th-button--ghost" onClick={() => { const track = stream.current?.getAudioTracks()[0]; if (track) { track.enabled = muted; setMuted(!muted); } }}>
+                      <Icon name={muted ? "mic" : "mic-off"} size={16} />
+                      {muted ? "Unmute" : "Mute"}
+                    </button>
+                    <button type="button" className="th-button th-button--ghost" onClick={() => stopRecording(true)}>Cancel</button>
+                    <button type="button" className="th-button th-button--secondary" onClick={() => stopRecording()}>Stop</button>
+                  </>
+                ) : null}
+                {voiceStatus === "speaking" ? (
+                  <button type="button" className="th-button th-button--ghost" onClick={stopSpeech}>
+                    <Icon name="stop" size={16} /> Interrupt
+                  </button>
+                ) : null}
+              </div>
+              {!researchOnly || !voiceAvailable || showResearchText ? <button
+                type="button"
+                className="th-button th-button--primary"
+                onClick={() => void send()}
+                disabled={!draft.trim() || talking || voiceStatus === "sending" || voiceStatus === "transcribing" || voiceStatus === "listening"}
+              >
+                <Icon name="send" size={16} />
+                {voiceStatus === "sending" ? "Thinking…" : voiceStatus === "transcribing" ? "Transcribing…" : "Send"}
+              </button> : null}
+            </div>
+          </footer>
+        </aside>
+      ) : null}
+
       <AppDialog open={Boolean(manageAction)} titleId="assistant-manage-title" onClose={() => { if (!managePending) setManageAction(null); }} closeOnBackdrop={!managePending}>
         <p className="source-pill">Conversation</p>
         <h2 id="assistant-manage-title" className="mt-3 font-serif text-2xl font-bold">{manageAction === "rename" ? "Rename conversation" : "Delete conversation?"}</h2>
-        {manageAction === "rename" ? <label className="app-field mt-4 block"><span className="mb-1 block text-sm font-semibold">Conversation name</span><input className="app-input min-h-11 w-full px-3" autoFocus maxLength={100} value={threadTitle} onChange={(event) => setThreadTitle(event.target.value)} /></label> : <p className="mt-3 text-sm text-muted">“{current?.title}” and its assistant messages will be removed. Thesis drafts, saved views, evidence, and positions are unchanged.</p>}
+        {manageAction === "rename" ? (
+          <label className="th-field mt-4">
+            <span>Conversation name</span>
+            <input className="th-input" autoFocus maxLength={100} value={threadTitle} onChange={(event) => setThreadTitle(event.target.value)} />
+          </label>
+        ) : (
+          <p className="mt-3 text-sm th-muted">“{current?.title}” and its assistant messages will be removed. Thesis drafts, saved views, evidence, and positions are unchanged.</p>
+        )}
         {error ? <p role="alert" className="mt-3 text-sm text-bad">{error}</p> : null}
-        <div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" className="app-button min-h-11 rounded-lg border border-line px-4 text-sm font-semibold" onClick={() => setManageAction(null)} disabled={managePending}>Cancel</button><button type="button" className={`app-button min-h-11 rounded-lg px-5 text-sm font-semibold text-white disabled:opacity-50 ${manageAction === "delete" ? "bg-bad" : "bg-action"}`} onClick={() => void submitManageThread()} disabled={managePending || manageAction === "rename" && !threadTitle.trim()}>{managePending ? "Saving…" : manageAction === "rename" ? "Save name" : "Delete conversation"}</button></div>
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <button type="button" className="th-button th-button--secondary" onClick={() => setManageAction(null)} disabled={managePending}>Cancel</button>
+          <button
+            type="button"
+            className={`th-button ${manageAction === "delete" ? "th-button--danger" : "th-button--primary"}`}
+            onClick={() => void submitManageThread()}
+            disabled={managePending || manageAction === "rename" && !threadTitle.trim()}
+          >
+            {managePending ? "Saving…" : manageAction === "rename" ? "Save name" : "Delete conversation"}
+          </button>
+        </div>
       </AppDialog>
     </>
   );
