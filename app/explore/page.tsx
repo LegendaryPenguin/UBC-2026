@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { api, dataContextFromStorage, requestDataContextChange } from "@/lib/client";
+import { api, dataContextFromStorage } from "@/lib/client";
 import type { MarketFamily } from "@/lib/domain/types";
 import { Button, Card, Empty, inputCls } from "@/components/ui";
 import { formatTime } from "@/lib/format";
@@ -68,10 +68,10 @@ export default function Explore() {
     const url = new URL(window.location.href);
     if (next === "gemini") url.searchParams.delete("view"); else url.searchParams.set("view", next);
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-    if (next === "topics") void load(submittedQuery);
+    if (next === "topics" || (next === "watched" && !data)) void load(next === "watched" ? "" : submittedQuery);
   }
 
-  async function toggleWatch(family: MarketFamily) {
+  async function toggleWatch(family: Pick<MarketFamily, "slug" | "title">) {
     setWatchingSlug(family.slug);
     setWatchError("");
     setNotice("");
@@ -110,6 +110,7 @@ export default function Explore() {
     const latest = points[points.length - 1];
     return [{ family, contract, change: latest.price - first.price, firstAt: first.time, latestAt: latest.time }];
   })).sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).slice(0, 3), [data]);
+  const watchedSlugs = useMemo(() => new Set(watchlists.flatMap((list) => list.slugs)), [watchlists]);
 
   async function removeWatched(slug: string, list: Watchlist) {
     setWatchingSlug(slug);
@@ -131,17 +132,24 @@ export default function Explore() {
 
   return (
     <div className="screen-explore space-y-5">
-      <div>
-        <h1 className="explore-title screen-heading">Find a question worth exploring</h1>
-        <p className="mt-2 text-base text-muted">Browse Gemini markets, check the setup, and research the ideas that interest you.</p>
-      </div>
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Explore filters">
-        {([ ["gemini", "All"], ["topics", "Research topics"], ["watched", "Watching"], ["timeline", "Timeline"] ] as [ExploreView, string][]).map(([value, label]) => (
-          <button key={value} type="button" role="tab" aria-selected={view === value} onClick={() => chooseView(value)} className={`min-h-10 rounded-full border px-4 text-sm ${view === value ? "border-action bg-[#E9EEFF] font-semibold text-action" : "border-line bg-white text-muted hover:border-action"}`}>{label}</button>
+      <header className="explore-intro">
+        <div>
+          <h1 className="explore-title screen-heading">What’s your next thesis?</h1>
+          <p className="th-muted">Find a market. Explore the evidence. Form your view.</p>
+        </div>
+        <span className="explore-intro__source">Gemini Prediction Markets</span>
+      </header>
+      <div className="explore-navigation flex flex-wrap gap-2" role="tablist" aria-label="Explore filters">
+        {([ ["gemini", "Markets"], ["topics", "Research topics"], ["watched", "Watching"], ["timeline", "Timeline"] ] as [ExploreView, string][]).map(([value, label]) => (
+          <button key={value} type="button" role="tab" aria-selected={view === value} onClick={() => chooseView(value)} className={`min-h-9 rounded-full border px-4 text-sm ${view === value ? "border-action bg-[#E9EEFF] font-semibold text-action" : "border-line bg-white text-muted hover:border-action"}`}>{label}</button>
         ))}
       </div>
 
-      {view === "gemini" ? <GeminiMarketCatalog embedded /> : null}
+      {view === "gemini" ? <>
+        {notice ? <p role="status" className="explore-watch-notice th-alert">{notice}</p> : null}
+        {watchError ? <p role="alert" className="explore-watch-notice th-alert th-alert--error">{watchError}{/sign in/i.test(watchError) ? <> <Link className="font-semibold text-action underline" href="/auth?returnTo=%2Fexplore">Sign in</Link></> : null}</p> : null}
+        <GeminiMarketCatalog embedded watchedSlugs={watchedSlugs} watchBusy={Boolean(watchingSlug)} onWatch={(slug, title) => void toggleWatch({ slug, title })} />
+      </> : null}
       {view === "timeline" ? <MarketTimeline embedded /> : null}
       {view === "watched" ? (
         <section className="space-y-3">
@@ -161,8 +169,8 @@ export default function Explore() {
       </form>
       {data ? <p className="text-xs text-muted">{data.freshnessLabel}</p> : null}
       {data?.liveError ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-bad/30 bg-white p-3">
-        <p role="status" className="text-sm text-bad">{data.liveError}. Replay uses labeled walkthrough data.</p>
-        {dataContextFromStorage() !== "replay" ? <Button kind="secondary" onClick={() => requestDataContextChange("replay")}>Switch to Replay</Button> : null}
+        <p role="status" className="text-sm text-bad">{data.liveError}. Retry live Gemini discovery.</p>
+        <Button kind="ghost" onClick={() => void load(submittedQuery)}>Retry</Button>
       </div> : null}
       {notice ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">{notice}</p> : null}
       {watchError ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{watchError} <Link className="text-action underline" href="/auth">Sign in</Link></p> : null}
@@ -182,7 +190,7 @@ export default function Explore() {
       {movements.length ? (
         <Card>
           <h2 className="font-serif text-xl">Meaningful market movements</h2>
-          <p className="mt-1 text-xs text-muted">Change in Gemini YES reference price over the returned history window. This is not a probability forecast.{data?.families.some((family) => family.mode === "replay") ? " Replay movement points are demonstration data, not Gemini history." : ""}</p>
+          <p className="mt-1 text-xs text-muted">Change in Gemini YES reference price over the returned history window. This is not a probability forecast.</p>
           <div className="market-movements-grid mt-3 grid gap-3">
             {movements.map(({ family, contract, change, firstAt, latestAt }) => (
               <Link key={contract.id} href={`/topics/${family.slug}`} className="rounded-lg border border-line p-3 hover:border-action">

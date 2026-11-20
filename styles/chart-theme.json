@@ -1,0 +1,27 @@
+{
+  "background": "transparent",
+  "axisText": "#52616B",
+  "grid": "#DEDCD5",
+  "series": [
+    "#3559E0",
+    "#17643B",
+    "#805600",
+    "#884DA7"
+  ],
+  "lineWidth": 2,
+  "seriesDashPatterns": [
+    "solid",
+    "dash",
+    "dot",
+    "dash-dot"
+  ],
+  "fontFamily": "Thesis Sans",
+  "fontSize": 12,
+  "tooltip": {
+    "background": "#FFFFFF",
+    "text": "#182329",
+    "border": "#DEDCD5",
+    "radius": 8
+  },
+  "note": "Style only. Supply actual values, units, source, times and accessible table."
+}

@@ -1,0 +1,38 @@
+{
+  "cssVariables": {
+    "--th-canvas": "#f4f2ed",
+    "--th-surface": "#fff",
+    "--th-soft": "#faf9f6",
+    "--th-ink": "#182329",
+    "--th-muted": "#52616b",
+    "--th-primary": "#3559e0",
+    "--th-primary-hover": "#2948bd",
+    "--th-selected": "#eef1ff",
+    "--th-border": "#dedcd5",
+    "--th-control-border": "#89939a",
+    "--th-success": "#17643b",
+    "--th-success-bg": "#edf7ef",
+    "--th-warning": "#805600",
+    "--th-warning-bg": "#fff7df",
+    "--th-danger": "#ad3434",
+    "--th-danger-bg": "#fff0ed",
+    "--th-radius": "12px",
+    "--th-radius-sm": "8px",
+    "--th-shadow": "0 2px 8px #18232908,0 12px 32px #18232906",
+    "--th-overlay-shadow": "0 16px 64px #18232926",
+    "--th-font": "'Thesis Sans',system-ui,sans-serif",
+    "--th-heading": "'Thesis Serif',Georgia,serif",
+    "--th-space-1": "4px",
+    "--th-space-2": "8px",
+    "--th-space-3": "12px",
+    "--th-space-4": "16px",
+    "--th-space-6": "24px",
+    "--th-space-8": "32px",
+    "--th-space-12": "48px"
+  },
+  "fontWeights": [
+    400,
+    700
+  ],
+  "breakpointPx": 900
+}

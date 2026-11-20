@@ -123,3 +123,8 @@ export function flattenEvents(events: GeminiEvent[]): GeminiEvent[] {
   for (const event of events) visit(event);
   return result;
 }
+
+export function geminiBinaryTopicSlug(ticker: string, contractId: string) {
+  const slugPart = (value: string, max: number) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, max).replace(/-+$/g, "");
+  return `gm-${slugPart(ticker, 34)}-${slugPart(contractId, 38)}`.slice(0, 79).replace(/-+$/g, "");
+}

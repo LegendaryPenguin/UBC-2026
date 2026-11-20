@@ -1,0 +1,1 @@
+The original icons, leaf mark, CSS, component code and documentation in this kit may be used, modified and redistributed for your project without attribution. Third-party fonts retain their separate SIL Open Font License; see public/thesis/fonts/LICENSE-NOTO.txt. No third-party brand rights are granted.

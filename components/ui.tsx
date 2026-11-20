@@ -1,7 +1,20 @@
 import Link from "next/link";
+import { Icon, type IconName } from "@/components/thesis";
 
-export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <section className={`app-card rounded-card border border-line bg-surface p-5 shadow-sm ${className}`}>{children}</section>;
+export function Card({
+  children,
+  className = "",
+  variant,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  variant?: "soft" | "hero" | "selected";
+}) {
+  return (
+    <section className={`th-card ${variant ? `th-card--${variant}` : ""} ${className}`}>
+      {children}
+    </section>
+  );
 }
 
 export function Button({
@@ -12,6 +25,8 @@ export function Button({
   kind = "primary",
   type = "button",
   className = "",
+  icon,
+  loading = false,
 }: {
   children: React.ReactNode;
   href?: string;
@@ -20,50 +35,67 @@ export function Button({
   kind?: "primary" | "secondary" | "danger" | "ghost";
   type?: "button" | "submit";
   className?: string;
+  icon?: IconName;
+  loading?: boolean;
 }) {
-  const cls = {
-    primary: "bg-action text-white",
-    secondary: "bg-ink text-white",
-    danger: "bg-bad text-white",
-    ghost: "bg-transparent text-ink border border-line",
-  }[kind];
-  const shared = `app-button inline-flex min-h-11 items-center justify-center rounded-lg px-4 text-sm font-medium transition-colors disabled:opacity-50 ${cls} ${className}`;
-  if (href && !disabled) return <Link className={shared} href={href}>{children}</Link>;
-  return (
-    <button type={type} className={shared} onClick={onClick} disabled={disabled}>
+  const variant = kind === "primary" ? "primary"
+    : kind === "danger" ? "danger"
+      : kind === "ghost" ? "ghost"
+        : "secondary";
+  const shared = `th-button th-button--${variant} ${className}`;
+  const content = (
+    <>
+      {loading ? <Icon name="loading" className="th-spin" /> : icon ? <Icon name={icon} /> : null}
       {children}
+    </>
+  );
+  if (href && !disabled) return <Link className={shared} href={href}>{content}</Link>;
+  return (
+    <button type={type} className={shared} onClick={onClick} disabled={disabled || loading} aria-busy={loading || undefined}>
+      {content}
     </button>
   );
 }
 
 export function Banner({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="app-banner rounded-lg border border-line bg-[#EEF1F4] px-4 py-3 text-sm">
+    <div className="th-alert">
       <p className="font-medium">{title}</p>
-      <div className="mt-1 text-muted">{children}</div>
+      <div className="mt-1 th-muted">{children}</div>
     </div>
   );
 }
 
 export function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
-    <label className="app-field block">
-      <span className="mb-1 block text-sm font-medium">{label}</span>
+    <label className="th-field">
+      <span>{label}</span>
       {children}
-      {hint ? <span className="mt-1 block text-xs text-muted">{hint}</span> : null}
+      {hint ? <small className="th-muted">{hint}</small> : null}
     </label>
   );
 }
 
 export function inputCls(extra = "") {
-  return `app-input min-h-11 w-full rounded-lg border border-line bg-white px-3 text-sm ${extra}`;
+  return `th-input ${extra}`;
 }
 
-export function Empty({ title, children }: { title: string; children: React.ReactNode }) {
+export function Empty({ title, children, icon = "research" }: { title: string; children: React.ReactNode; icon?: IconName }) {
   return (
-    <Card>
-      <h2 className="font-serif text-xl">{title}</h2>
-      <div className="mt-2 text-sm text-muted">{children}</div>
+    <Card className="th-empty">
+      <Icon name={icon} size={36} />
+      <h3 className="font-serif text-xl">{title}</h3>
+      <div className="mt-2 text-sm th-muted">{children}</div>
     </Card>
   );
+}
+
+export function Badge({
+  children,
+  tone,
+}: {
+  children: React.ReactNode;
+  tone?: "primary" | "success" | "warning" | "danger";
+}) {
+  return <span className={`th-badge ${tone ? `th-badge--${tone}` : ""}`}>{children}</span>;
 }
