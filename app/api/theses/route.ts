@@ -35,6 +35,23 @@ export async function POST(req: Request) {
     return fail("INVALID", "Describe the question you want to research.");
   }
   if (hasBinding && (body.topicSlug!.length > 79 || !/^[a-z0-9][a-z0-9-]{0,78}$/i.test(body.topicSlug!))) return fail("INVALID", "Choose a valid topic.");
+  let articleSource: ThesisRevision["articleSource"] = null;
+  if (body.articleSource !== undefined && body.articleSource !== null) {
+    const source = body.articleSource;
+    if (!source || typeof source.title !== "string" || !source.title.trim() || source.title.length > 240 ||
+      typeof source.url !== "string" || source.url.length > 2_000 || typeof source.publisher !== "string" || source.publisher.length > 180 ||
+      typeof source.excerpt !== "string" || source.excerpt.length > 700) {
+      return fail("INVALID", "The attached article source is incomplete.");
+    }
+    try {
+      const url = new URL(source.url);
+      if (!/^https?:$/.test(url.protocol) || url.username || url.password) return fail("INVALID", "Choose a valid article source.");
+      url.hash = "";
+      articleSource = { title: source.title.trim(), url: url.href, publisher: source.publisher.trim(), excerpt: source.excerpt.trim() };
+    } catch {
+      return fail("INVALID", "Choose a valid article source.");
+    }
+  }
   const mode = body.mode === "live" ? "live" : "replay";
   const family = hasBinding ? await getTopic(body.topicSlug!, mode) : null;
   if (hasBinding && (!family || family.id !== body.familyId || (body.familyVersion && body.familyVersion !== family.version))) {
@@ -57,6 +74,7 @@ export async function POST(req: Request) {
   }
   const thesis: ThesisRevision & { accountId: string } = {
     id: uid("th"),
+    articleSource,
     title: typeof body.title === "string" && body.title.trim()
       ? body.title.trim().slice(0, 100)
       : hasBinding ? body.topicSlug!.replaceAll("-", " ") : body.rationale!.trim().slice(0, 100),

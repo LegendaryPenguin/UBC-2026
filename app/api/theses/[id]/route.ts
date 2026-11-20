@@ -81,6 +81,22 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (body.evidenceIds !== undefined && (!Array.isArray(body.evidenceIds) || body.evidenceIds.some((id) => typeof id !== "string"))) {
     return fail("INVALID", "Evidence references are invalid.");
   }
+  if (body.articleSource !== undefined && body.articleSource !== null) {
+    const source = body.articleSource;
+    if (!source || typeof source.title !== "string" || !source.title.trim() || source.title.length > 240 ||
+      typeof source.url !== "string" || source.url.length > 2_000 || typeof source.publisher !== "string" || source.publisher.length > 180 ||
+      typeof source.excerpt !== "string" || source.excerpt.length > 700) {
+      return fail("INVALID", "The attached article source is incomplete.");
+    }
+    try {
+      const url = new URL(source.url);
+      if (!/^https?:$/.test(url.protocol) || url.username || url.password) return fail("INVALID", "Choose a valid article source.");
+      url.hash = "";
+      body.articleSource = { title: source.title.trim(), url: url.href, publisher: source.publisher.trim(), excerpt: source.excerpt.trim() };
+    } catch {
+      return fail("INVALID", "Choose a valid article source.");
+    }
+  }
   if (body.savedConstruction !== undefined && body.savedConstruction !== null) {
     const construction = body.savedConstruction;
     if (!Array.isArray(construction.basket) || construction.basket.length > 4 ||
@@ -208,6 +224,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (body.rationale !== undefined) thesis.rationale = body.rationale;
     if (body.invalidation !== undefined) thesis.invalidation = body.invalidation;
     if (body.evidenceIds !== undefined) thesis.evidenceIds = [...body.evidenceIds];
+    if (body.articleSource !== undefined) thesis.articleSource = body.articleSource ? { ...body.articleSource } : null;
     if (body.savedConstruction !== undefined) {
       thesis.savedConstruction = body.savedConstruction ? {
         ...body.savedConstruction,

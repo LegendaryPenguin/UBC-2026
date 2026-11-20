@@ -125,6 +125,12 @@ export interface MarketFamily {
 export interface ThesisRevision {
   id: string;
   title?: string;
+  articleSource?: {
+    title: string;
+    url: string;
+    publisher: string;
+    excerpt: string;
+  } | null;
   archived?: boolean;
   topicSlug: string;
   familyId: string;
@@ -151,6 +157,7 @@ export interface ThesisRevision {
 
 export type ThesisSnapshot = Pick<
   ThesisRevision,
+  | "articleSource"
   | "topicSlug"
   | "familyId"
   | "familyVersion"
@@ -217,6 +224,7 @@ export interface PositionResearchContext {
   rationale: string;
   invalidation: string;
   revision: number;
+  articleSource?: ThesisRevision["articleSource"];
 }
 
 export interface SignedQuote {

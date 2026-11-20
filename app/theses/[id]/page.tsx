@@ -12,7 +12,7 @@ import { Button, Empty, Field, inputCls } from "@/components/ui";
 import { ThesisWorkspaceTabs } from "@/components/ThesisWorkspaceTabs";
 import {
   hasResearchHistory, ResearchChart, ResearchEvidenceDrawer, ResearchEvidenceList,
-  ResearchOutcomes, ResearchPrices, ResearchRelatedContracts, ResearchRules, ResearchSavedTile, ResearchTile, researchTime, type RelatedContract,
+  ResearchArticleSourceTile, ResearchOutcomes, ResearchPrices, ResearchRelatedContracts, ResearchRules, ResearchSavedTile, ResearchTile, researchTime, type RelatedContract,
 } from "@/components/ResearchBoard";
 import { thesisViewLabel } from "@/components/ThesisViewPanel";
 import { useModeChange } from "@/lib/use-mode-change";
@@ -232,7 +232,7 @@ export default function ThesisEditor() {
     try {
       const example = await findRecordedRangeMarket(observation);
       if (!example) throw new Error("A recorded range for this observation is unavailable.");
-      const draft = await createMarketResearchDraft(example, observation, "replay");
+      const draft = await createMarketResearchDraft(example, observation, "replay", thesis?.articleSource, thesis?.title);
       startRecordedRehearsal();
       router.push(`/theses/${draft.id}`);
     } catch (cause) {
@@ -389,6 +389,7 @@ export default function ThesisEditor() {
           <div className="research-board">
             <div className="research-board__grid">
               {hasHistory ? <ResearchChart family={family} series={chartSeries} liveSession={Boolean(liveContract)} /> : null}
+              {thesis.articleSource ? <ResearchArticleSourceTile source={thesis.articleSource} /> : null}
               {hasHistory ? viewTile : null}
               <ResearchPrices family={family} hasHistory={hasHistory} footer={liveContract ? <Button kind="secondary" icon="bars" onClick={() => setMarketFeedOpen(true)}>View live market feed</Button> : null} />
               <ResearchRules family={family} contracts={selectedRuleContracts.length ? selectedRuleContracts : family.contracts} />

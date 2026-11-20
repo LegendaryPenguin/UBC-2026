@@ -162,7 +162,7 @@ export default function BuildPage() {
       sessionStorage.setItem(`thesis-basket:${id}`, JSON.stringify(basket));
       sessionStorage.setItem(`thesis-build-max:${id}`, max);
     } catch { /* Compare still loads with its safe defaults */ }
-    router.push(`/theses/${id}/compare?maxPayout=${encodeURIComponent(max)}`);
+    router.push(`/theses/${id}/compare?maxPayout=${encodeURIComponent(max)}&scenario=${encodeURIComponent(selectedScenarioId)}`);
   }
 
   async function saveConstruction() {

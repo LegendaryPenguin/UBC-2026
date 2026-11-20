@@ -1,6 +1,6 @@
 import { extractArticle } from "./extract-article.js";
 
-const defaultOrigin = "http://localhost:3002";
+const defaultOrigin = "http://localhost:3000";
 const originField = document.querySelector("#origin");
 const addressSettings = document.querySelector("details");
 const form = document.querySelector("form");

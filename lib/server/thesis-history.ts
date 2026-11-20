@@ -4,6 +4,7 @@ import { uid } from "@/lib/server/store";
 
 export function thesisSnapshot(thesis: ThesisRevision): ThesisSnapshot {
   return {
+    articleSource: thesis.articleSource ? { ...thesis.articleSource } : null,
     topicSlug: thesis.topicSlug,
     familyId: thesis.familyId,
     familyVersion: thesis.familyVersion,

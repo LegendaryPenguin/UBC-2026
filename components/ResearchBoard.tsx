@@ -11,6 +11,7 @@ import { formatTime } from "@/lib/format";
 import { formatThreshold } from "@/lib/payoffs/compile";
 import type { ResearchReply } from "@/lib/use-research-notebook";
 import { researchRangeLabel, type ResearchRange } from "@/lib/research-range";
+import type { ThesisArticleSource } from "@/lib/article-research";
 
 export function ResearchTile({ title, icon, detail, footer, kind, style, children }: {
   title: string;
@@ -32,6 +33,16 @@ export function ResearchTile({ title, icon, detail, footer, kind, style, childre
       {footer ? <footer className="research-tile__footer">{footer}</footer> : null}
     </section>
   );
+}
+
+export function ResearchArticleSourceTile({ source }: { source: ThesisArticleSource }) {
+  return <ResearchTile title="Article source" icon="news" detail={<span className="status-pill">{source.publisher}</span>}>
+    <p className="font-serif text-lg font-bold leading-snug">{source.title}</p>
+    <p className="mt-2 text-sm th-muted">{source.excerpt}</p>
+    <a className="th-button mt-3" href={source.url} target="_blank" rel="noreferrer noopener">
+      Open original article <Icon name="external-link" />
+    </a>
+  </ResearchTile>;
 }
 
 function priceInCents(value: string | null | undefined) {

@@ -7,10 +7,38 @@ export type ArticleResearchSource = {
   url: string;
 };
 
+export type ArticleMarketMatch = {
+  id: string;
+  version: string;
+  slug: string;
+  title: string;
+  question: string;
+  observationTime: string | null;
+  fetchedAt: string;
+  freshness: string;
+  contracts: {
+    id: string;
+    label: string;
+    ask: string | null;
+    bid: string | null;
+    noAsk?: string | null;
+    noBid?: string | null;
+  }[];
+};
+
 export type ArticleResearch = {
   summary: string;
   provider: "grok" | "extract";
   sources: ArticleResearchSource[];
+  markets: ArticleMarketMatch[];
+  marketUnavailable: boolean;
+};
+
+export type ThesisArticleSource = {
+  title: string;
+  url: string;
+  publisher: string;
+  excerpt: string;
 };
 
 export function parseCapturedArticle(value: unknown): CapturedArticle | null {

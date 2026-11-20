@@ -139,6 +139,7 @@ export async function POST(req: Request) {
         rationale: thesis.rationale,
         invalidation: thesis.invalidation,
         revision: thesis.revision,
+        articleSource: thesis.articleSource ? { ...thesis.articleSource } : null,
       };
       s.quotes.push({ ...storedQuote, thesisId: thesis.id, accountId: owner, mode: body.mode, recordedScenarioIndex: recordedScenario?.index, sourceThesis });
       thesis.status = "quoted";

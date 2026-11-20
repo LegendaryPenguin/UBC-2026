@@ -187,6 +187,7 @@ export default function PositionPage() {
               <div className="rounded-lg bg-[#EDF1FF] p-3"><p className="text-xs font-semibold text-muted">Confirmed view · revision {sourceThesis.revision}</p><p className="mt-1 font-semibold">{sourceThesis.confirmedView}</p>{sourceThesis.observationTime ? <p className="mt-1 text-xs text-muted">Settlement <time dateTime={sourceThesis.observationTime}>{new Date(sourceThesis.observationTime).toLocaleString()}</time></p> : null}</div>
               {sourceThesis.rationale && sourceThesis.rationale !== sourceThesis.originalObservation ? <div><p className="text-xs font-semibold text-muted">Rationale at entry</p><p className="mt-1 whitespace-pre-wrap text-sm">{sourceThesis.rationale}</p></div> : null}
               {sourceThesis.invalidation ? <div><p className="text-xs font-semibold text-muted">What would change your mind</p><p className="mt-1 whitespace-pre-wrap text-sm">{sourceThesis.invalidation}</p></div> : null}
+              {sourceThesis.articleSource ? <a className="text-sm text-action underline" href={sourceThesis.articleSource.url} target="_blank" rel="noreferrer noopener">Read the original article: {sourceThesis.articleSource.title}</a> : null}
               <Button href={`/theses/${position.thesisId}`} kind="ghost">Revisit thesis</Button>
             </Card>
           ) : null}

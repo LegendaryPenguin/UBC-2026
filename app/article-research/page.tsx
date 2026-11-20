@@ -1,17 +1,40 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Icon } from "@/components/thesis";
-import { parseCapturedArticle, type ArticleResearch, type CapturedArticle } from "@/lib/article-research";
-import { api } from "@/lib/client";
+import { api, setDataContext } from "@/lib/client";
+import { parseCapturedArticle, type ArticleResearch, type ArticleMarketMatch, type CapturedArticle } from "@/lib/article-research";
+
+function marketPrice(value: string | null | undefined) {
+  if (value == null || value.trim() === "") return "Unavailable";
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? `${(parsed * 100).toLocaleString(undefined, { maximumFractionDigits: 1 })}¢` : "Unavailable";
+}
+
+function settlementTime(value: string | null) {
+  if (!value || !Number.isFinite(Date.parse(value))) return "Settlement time not supplied";
+  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+}
+
+function marketRelevance(article: CapturedArticle, market: ArticleMarketMatch) {
+  const articleHorizon = /\b(?:5[- ]year|five[- ]year|long[- ]term|2031)\b/i.test(`${article.title} ${article.text}`);
+  const observation = market.observationTime ? Date.parse(market.observationTime) : NaN;
+  const withinYear = Number.isFinite(observation) && observation - Date.now() < 366 * 24 * 60 * 60 * 1000;
+  return articleHorizon && withinYear
+    ? "Same Bitcoin subject, with a nearer listed settlement than the article’s five-year outlook."
+    : "Same underlying asset. Check this contract’s settlement time against the question you want to explore.";
+}
 
 export default function ArticleResearchPage() {
+  const router = useRouter();
   const [article, setArticle] = useState<CapturedArticle | null>(null);
   const [captureError, setCaptureError] = useState("");
   const [research, setResearch] = useState<ArticleResearch | null>(null);
   const [researchError, setResearchError] = useState("");
   const [retry, setRetry] = useState(0);
+  const [opening, setOpening] = useState("");
+  const [openError, setOpenError] = useState("");
   const initialized = useRef(false);
 
   useEffect(() => {
@@ -19,88 +42,139 @@ export default function ArticleResearchPage() {
     initialized.current = true;
     const { hash, pathname, search } = window.location;
     if (!hash.startsWith("#article=")) {
-      setCaptureError("Open the Chrome extension on an article and choose Open research in Thesis.");
+      setCaptureError("Open a web article in Chrome, then choose Open research in Thesis from the extension.");
       return;
     }
-
-    // The fragment keeps the article out of the navigation request. Clear it after the handoff.
     window.history.replaceState(window.history.state, "", `${pathname}${search}`);
     try {
-      const capture = hash.length <= 95_000 && parseCapturedArticle(JSON.parse(decodeURIComponent(hash.slice(9))));
+      if (hash.length > 95_000) throw new Error("The captured article is too long.");
+      const capture = parseCapturedArticle(JSON.parse(decodeURIComponent(hash.slice(9))));
       if (capture) {
         setArticle(capture);
         return;
       }
     } catch {
-      // Show the same recovery path for malformed and incomplete captures.
+      // Malformed captures use the same recovery path as incomplete ones.
     }
-    setCaptureError("This capture could not be read. Reopen the article and try the Chrome extension again.");
+    setCaptureError("This capture could not be read. Reopen the article and try the extension again.");
   }, []);
 
   useEffect(() => {
     if (!article) return;
     const controller = new AbortController();
+    setResearch(null);
+    setResearchError("");
     api<ArticleResearch>("/api/article-research", {
       method: "POST",
       body: JSON.stringify(article),
       signal: controller.signal,
     }).then(setResearch).catch((error: unknown) => {
-      if (!controller.signal.aborted) {
-        setResearchError(error instanceof Error ? error.message : "Research could not be loaded.");
-      }
+      if (!controller.signal.aborted) setResearchError(error instanceof Error ? error.message : "Article research could not be loaded.");
     });
     return () => controller.abort();
   }, [article, retry]);
 
-  if (!article) {
-    return (
-      <section className="th-card mx-auto max-w-3xl">
-        <h1>Article research</h1>
-        {captureError ? <p>{captureError}</p> : <p role="status" className="th-muted">Opening article…</p>}
-        {captureError && <Link href="/explore" className="th-button">Explore markets</Link>}
-      </section>
-    );
+  async function openMarket(market: ArticleMarketMatch) {
+    if (!article || opening) return;
+    setOpening(market.slug);
+    setOpenError("");
+    try {
+      const host = new URL(article.url).hostname.replace(/^www\./, "");
+      const articleSource = {
+        title: article.title.slice(0, 240),
+        url: article.url,
+        publisher: host,
+        excerpt: article.text.slice(0, 280),
+      };
+      const title = /bitcoin/i.test(article.title) ? "Bitcoin: 5-year outlook" : article.title.slice(0, 100);
+      const { thesis } = await api<{ thesis: { id: string } }>("/api/theses", {
+        method: "POST",
+        body: JSON.stringify({
+          title,
+          topicSlug: market.slug,
+          familyId: market.id,
+          familyVersion: market.version,
+          mode: "live",
+          rationale: "Exploring this article’s Bitcoin outlook alongside the listed settlement.",
+          articleSource,
+        }),
+      });
+      setDataContext("live");
+      router.push(`/theses/${thesis.id}`);
+    } catch (error) {
+      setOpenError(error instanceof Error ? error.message : "The market could not be opened. Try again.");
+      setOpening("");
+    }
   }
 
-  return (
-    <div className="th-stack mx-auto max-w-4xl">
-      <header className="th-card th-card--hero">
-        <p className="th-label th-muted">Article research</p>
-        <h1 className="break-words">{article.title}</h1>
-        <a className="th-button" href={article.url} target="_blank" rel="noreferrer">
-          {new URL(article.url).hostname} <Icon name="external-link" />
-        </a>
-      </header>
+  if (!article) return <section className="th-card mx-auto max-w-3xl">
+    <h1>Article research</h1>
+    {captureError ? <p role="alert">{captureError}</p> : <p role="status" className="th-muted">Opening article…</p>}
+    {captureError ? <a href="/explore" className="th-button mt-4">Explore markets</a> : null}
+  </section>;
 
-      <section className="th-card" aria-labelledby="article-summary">
-        <h2 id="article-summary">{research?.provider === "grok" ? "Research brief" : "Article highlights"}</h2>
-        {research && <p className="whitespace-pre-line break-words">{research.summary}</p>}
-        {!research && !researchError && <p role="status" className="th-muted">Reading the captured text…</p>}
-        {researchError && <>
-          <p role="alert">{researchError}</p>
-          <button className="th-button" onClick={() => { setResearchError(""); setRetry((attempt) => attempt + 1); }}>Try again</button>
-        </>}
+  const host = new URL(article.url).hostname.replace(/^www\./, "");
+  const longArticle = /\b(?:5[- ]year|five[- ]year|long[- ]term|2031)\b/i.test(`${article.title} ${article.text}`);
+
+  return <main className="th-stack mx-auto max-w-6xl">
+    <header className="th-card th-card--hero">
+      <p className="th-label th-muted">From article to market</p>
+      <h1 className="break-words">{article.title}</h1>
+      <a className="th-button mt-3" href={article.url} target="_blank" rel="noreferrer noopener">
+        {host} <Icon name="external-link" /> <span className="sr-only">opens in a new tab</span>
+      </a>
+    </header>
+
+    <div className="grid items-start gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+      <section className="th-card" aria-labelledby="article-brief-title">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><p className="source-pill">Article context</p><h2 id="article-brief-title" className="mt-2">What the article argues</h2></div>
+          <span className="status-pill">{host}</span>
+        </div>
+        {research?.summary ? <p className="mt-4 whitespace-pre-line">{research.summary}</p> : null}
+        {!research && !researchError ? <p role="status" className="mt-4 th-muted">Reading the article and checking Gemini’s live catalog…</p> : null}
+        {researchError ? <div className="mt-4" role="alert"><p>{researchError}</p><button className="th-button mt-3" onClick={() => { setResearchError(""); setRetry((attempt) => attempt + 1); }}>Try again</button></div> : null}
+        <details className="mt-4 rounded-xl border border-line p-3">
+          <summary className="cursor-pointer font-semibold">Captured article text</summary>
+          <p className="mt-3 whitespace-pre-wrap text-sm th-muted">{article.text}</p>
+        </details>
       </section>
 
-      {!!research?.sources.length && (
-        <section className="th-stack" aria-labelledby="related-research">
-          <h2 id="related-research" className="!mb-0">Related research</h2>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {research.sources.map((source) => (
-              <a key={source.url} className="th-card th-card--interactive block no-underline" href={source.url} target="_blank" rel="noreferrer">
-                <p className="th-label th-muted">{source.publisher}</p>
-                <h3>{source.title} <Icon name="external-link" /></h3>
-                <p className="th-muted !mb-0">{source.detail}</p>
-              </a>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <details className="th-card th-card--soft">
-        <summary className="cursor-pointer font-bold">Captured article text</summary>
-        <p className="!mb-0 !mt-4 whitespace-pre-wrap break-words">{article.text}</p>
-      </details>
+      <section className="th-card" aria-labelledby="gemini-match-title">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div><p className="source-pill">Live Gemini catalog</p><h2 id="gemini-match-title" className="mt-2">Markets related to this article</h2></div>
+          <span className="text-xs th-muted">Prices are references, not certainty.</span>
+        </div>
+        {longArticle ? <p className="mt-3 rounded-lg border border-line bg-[#F7F8FF] p-3 text-sm">This article looks five years ahead. The listed Gemini contracts below settle sooner, so their horizon is shown separately.</p> : null}
+        {research?.markets.length ? <div className="mt-4 grid gap-3">
+          {research.markets.map((market) => <article key={market.slug} className="rounded-xl border border-line bg-white p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wide text-muted">Bitcoin · Gemini market</p><h3 className="mt-1 font-serif text-xl font-bold">{market.title}</h3></div>
+              <span className="status-pill">{market.freshness === "fresh" ? "Live quote" : "Quote status: " + market.freshness}</span>
+            </div>
+            <p className="mt-2 text-sm">{market.question}</p>
+            <p className="mt-2 text-sm th-muted">Settles {settlementTime(market.observationTime)}</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {market.contracts.map((contract) => <div key={contract.id} className="rounded-lg bg-[#F4F6FF] p-3">
+                <p className="text-sm font-semibold">{contract.label}</p>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                  <p>YES ask <strong className="ml-1">{marketPrice(contract.ask)}</strong></p>
+                  <p>NO ask <strong className="ml-1">{marketPrice(contract.noAsk)}</strong></p>
+                </div>
+              </div>)}
+            </div>
+            <p className="mt-3 border-t border-line pt-3 text-sm th-muted">{marketRelevance(article, market)}</p>
+            <button type="button" className="th-button th-button--primary mt-3 w-full" disabled={Boolean(opening)} onClick={() => void openMarket(market)}>
+              {opening === market.slug ? "Opening research…" : "Open this market in Research"} <Icon name="arrow-right" />
+            </button>
+          </article>)}
+        </div> : null}
+        {research && !research.markets.length ? <div className="mt-4 rounded-xl border border-line bg-[#F7F8FF] p-4">
+          <p>{research.marketUnavailable ? "Gemini’s live catalog could not be reached just now." : "No closely related live Gemini market was found for this article."}</p>
+          <a href="/explore" className="th-button mt-3">Search Explore</a>
+        </div> : null}
+        {openError ? <p role="alert" className="mt-3 text-sm text-bad">{openError}</p> : null}
+      </section>
     </div>
-  );
+  </main>;
 }

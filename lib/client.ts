@@ -1,4 +1,5 @@
 import type { MarketFamily, ThesisRevision } from "@/lib/domain/types";
+import type { ThesisArticleSource } from "@/lib/article-research";
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -19,10 +20,16 @@ export async function findRecordedRangeMarket(question: string, signal?: AbortSi
   return families.find((family) => family.predicates.length >= 2);
 }
 
-export async function createMarketResearchDraft(market: Pick<MarketFamily, "slug" | "id" | "version" | "title">, observation: string, mode: DataContext) {
+export async function createMarketResearchDraft(
+  market: Pick<MarketFamily, "slug" | "id" | "version" | "title">,
+  observation: string,
+  mode: DataContext,
+  articleSource?: ThesisArticleSource | null,
+  title?: string,
+) {
   const { thesis } = await api<{ thesis: ThesisRevision }>("/api/theses", {
     method: "POST",
-    body: JSON.stringify({ topicSlug: market.slug, familyId: market.id, familyVersion: market.version, mode, title: market.title.slice(0, 100), rationale: observation, evidenceIds: [] }),
+    body: JSON.stringify({ topicSlug: market.slug, familyId: market.id, familyVersion: market.version, mode, title: (title || market.title).slice(0, 100), rationale: observation, evidenceIds: [], ...(articleSource ? { articleSource } : {}) }),
   });
   return thesis;
 }
