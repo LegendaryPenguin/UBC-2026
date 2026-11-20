@@ -2,6 +2,7 @@ import type {
   AlertRule,
   NotificationItem,
   PositionRecord,
+  PositionResearchContext,
   SignedQuote,
   ThesisHistoryRecord,
   ThesisRevision,
@@ -205,7 +206,7 @@ export interface StoreShape {
   watchlists: Watchlist[];
   alerts: AlertRule[];
   notifications: NotificationItem[];
-  quotes: (SignedQuote & { thesisId?: string; accountId?: string; mode?: string; recordedScenarioIndex?: number })[];
+  quotes: (SignedQuote & { thesisId?: string; accountId?: string; mode?: string; recordedScenarioIndex?: number; sourceThesis?: PositionResearchContext })[];
   positions: PositionRecord[];
   transactions: TransactionRecord[];
   journals: JournalEntry[];

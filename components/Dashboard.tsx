@@ -9,6 +9,7 @@ import { formatTime } from "@/lib/format";
 import { Badge, Button, Card } from "@/components/ui";
 import { BrandMark, Icon } from "@/components/thesis";
 import { StartThesisDialog } from "@/components/StartThesisDialog";
+import { MarketDiscoveryComposer } from "@/components/MarketDiscoveryComposer";
 
 type Watchlist = { id: string; name: string; slugs: string[] };
 type DashboardData = {
@@ -229,17 +230,8 @@ export default function Dashboard() {
       {notice ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">{notice}</p> : null}
       {loading ? <p role="status" className="text-sm text-muted">Loading your dashboard…</p> : null}
 
-      {!loading && !prominent ? (
-        <Card className="th-empty">
-          <Icon name="research" size={36} />
-          <h2>Your first question starts here</h2>
-          <p className="th-muted">Explore a supported market, inspect its rules, and save a thesis when you are ready. Research does not require a wallet.</p>
-          <div className="mt-4 flex flex-wrap justify-center gap-2">
-            <Button icon="plus" onClick={() => setStartOpen(true)}>Start a thesis</Button>
-            <Button href="/explore" kind="ghost" icon="explore">Explore markets</Button>
-          </div>
-        </Card>
-      ) : null}
+      {!loading && !prominent ? <MarketDiscoveryComposer onStart={() => setStartOpen(true)} /> : null}
+      {prominent ? <details className="dashboard-discovery"><summary>Research a new observation</summary><MarketDiscoveryComposer onStart={() => setStartOpen(true)} /></details> : null}
 
       {draftHero ? <DashboardDraft thesis={draftHero} duplicating={duplicateBusy} duplicate={() => void duplicateThesis(draftHero)} /> : null}
 

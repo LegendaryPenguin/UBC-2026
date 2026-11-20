@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { SignedQuote } from "@/lib/domain/types";
 
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
@@ -52,6 +52,7 @@ beforeEach(() => {
   requests = [];
   navigation.push.mockClear();
   localStorage.clear();
+  sessionStorage.clear();
   localStorage.setItem("thesis_mode", "paper");
   fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -71,12 +72,13 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 describe("Paper quote review and acceptance", () => {
   it("disables repeated acceptance while position creation is pending", async () => {
     render(<QuotePage />);
-    expect(await screen.findByRole("heading", { name: "Quote quote-paper-1" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Simulated quote" })).toBeTruthy();
 
     holdAcceptance = true;
     fireEvent.click(screen.getByRole("button", { name: "Accept paper quote" }));
@@ -87,27 +89,29 @@ describe("Paper quote review and acceptance", () => {
     holdAcceptance = false;
     resolvePendingAcceptance?.(new Response(JSON.stringify({ error: { message: "Paper acceptance can be retried." } }), { status: 503 }));
     expect((await screen.findByRole("alert")).textContent).toContain("Paper acceptance can be retried.");
-    expect(screen.getByRole("button", { name: "Accept paper quote" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry same acceptance" })).toBeTruthy();
     expect(navigation.push).not.toHaveBeenCalled();
   });
 
   it("shows exact terms, requires explicit acceptance, and preserves a failed acceptance for retry", async () => {
     render(<QuotePage />);
-    expect(await screen.findByRole("heading", { name: "Quote quote-paper-1" })).toBeTruthy();
-    expect(screen.getByText("Pay 2 USDC premium plus 0.025 fee.")).toBeTruthy();
-    expect(screen.getByText("Simulation using recorded market data.")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Simulated quote" })).toBeTruthy();
+    expect(screen.getByText("2 USDC")).toBeTruthy();
+    expect(screen.getByText("0.025 USDC")).toBeTruthy();
+    expect(screen.getByText(/Recorded market data/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Accept paper quote" })).toBeTruthy();
     expect(requests.some(({ url, init }) => url === "/api/positions" && init?.method === "POST")).toBe(false);
 
     failAcceptance = true;
     fireEvent.click(screen.getByRole("button", { name: "Accept paper quote" }));
     expect((await screen.findByRole("alert")).textContent).toContain("Paper position service is temporarily unavailable.");
-    expect(screen.getByRole("button", { name: "Accept paper quote" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry same acceptance" })).toBeTruthy();
     expect(navigation.push).not.toHaveBeenCalled();
 
     failAcceptance = false;
-    fireEvent.click(screen.getByRole("button", { name: "Accept paper quote" }));
-    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/positions/paper-position-1"));
+    fireEvent.click(screen.getByRole("button", { name: "Retry same acceptance" }));
+    expect(await screen.findByRole("link", { name: "Open position" })).toHaveProperty("pathname", "/positions/paper-position-1");
+    expect(navigation.push).not.toHaveBeenCalled();
     const attempts = requests.filter(({ url, init }) => url === "/api/positions" && init?.method === "POST");
     expect(attempts).toHaveLength(2);
     expect(attempts.every(({ init }) => JSON.parse(String(init?.body)).quoteId === quote.id)).toBe(true);

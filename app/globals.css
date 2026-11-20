@@ -281,6 +281,12 @@ summary {
   background: radial-gradient(ellipse at 100% 0, #e7ebff 0, white 75%);
 }
 
+.market-discovery { max-width: 1040px; margin-inline: auto; }
+.market-discovery__matches { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; }
+.market-discovery__match { min-width: 0; border: 1px solid var(--th-border); border-radius: 10px; padding: 12px; }
+.dashboard-discovery > summary { cursor: pointer; color: var(--th-primary); font-weight: 650; }
+.dashboard-discovery[open] > .market-discovery { margin-top: 12px; }
+
 .dashboard-draft-heading {
   padding: clamp(8px, 1.4vw, 22px) 4px;
   align-items: center;

@@ -6,12 +6,14 @@ import { useCallback, useEffect, useState } from "react";
 import {
   api,
   announceModeChange,
+  dataContextFromStorage,
   executionEnvironmentFromStorage,
   MODE_CHANGE_EVENT,
   MODE_CHANGE_REQUEST_EVENT,
   setDataContext,
   setExecutionEnvironment,
   type ExecutionEnvironment,
+  type DataContext,
 } from "@/lib/client";
 import { ContextualAssistant } from "@/components/ContextualAssistant";
 import { AppDialog } from "@/components/AppDialog";
@@ -41,7 +43,7 @@ function isCurrent(label: string, href: string, path: string) {
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
-  const [, setCurrentDataContext] = useState<"live">("live");
+  const [dataContext, setCurrentDataContext] = useState<DataContext>("live");
   const [executionEnvironment, setCurrentExecutionEnvironment] = useState<ExecutionEnvironment>("none");
   const [pendingContext, setPendingContext] = useState<PendingContext | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -51,8 +53,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [signOutError, setSignOutError] = useState("");
 
   useEffect(() => {
-    setDataContext("live");
-    setCurrentDataContext("live");
+    setCurrentDataContext(dataContextFromStorage());
     setCurrentExecutionEnvironment(executionEnvironmentFromStorage());
   }, [path]);
 
@@ -68,7 +69,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         mode?: Mode;
         executionEnvironment?: ExecutionEnvironment;
       }>).detail;
-      setCurrentDataContext("live");
+      setCurrentDataContext(dataContextFromStorage());
       setCurrentExecutionEnvironment(detail?.executionEnvironment || executionEnvironmentFromStorage());
     };
     const requestMode = (event: Event) => {
@@ -138,12 +139,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
     } finally { setSigningOut(false); }
   }
 
-  const environmentLabel = executionEnvironment === "paper"
+  const environmentLabel = dataContext === "replay" ? "Recorded Gemini · Paper" : executionEnvironment === "paper"
     ? "Live data · Paper"
     : executionEnvironment === "gemini" ? "Live data · Gemini"
       : executionEnvironment === "arc" ? "Live data · Arc"
         : "Live market data";
-  const sourceLabel = "Live Gemini prediction markets";
+  const sourceLabel = dataContext === "replay" ? "Recorded Gemini market data" : "Live Gemini prediction markets";
   const executionLabel = executionEnvironment === "paper" ? "Paper simulation"
     : executionEnvironment === "gemini" ? "Gemini sandbox"
       : executionEnvironment === "arc" ? "Arc testnet" : "Research only";
@@ -176,7 +177,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 </button>
                 {modeOpen ? <div id="environment-menu" className="thesis-popover absolute right-0 top-11 z-40 w-[min(92vw,330px)] p-4" aria-label="Data and execution context">
                   <div className="grid gap-3 text-sm">
-                    <div><p className="th-label">Market data</p><p className="mt-1 font-medium">{sourceLabel}</p><p className="mt-1 text-xs th-muted">Thesis always uses live Gemini listings.</p></div>
+                    <div><p className="th-label">Market data</p><p className="mt-1 font-medium">{sourceLabel}</p>{dataContext === "replay" ? <Button className="mt-2" kind="secondary" onClick={() => {
+                      setDataContext("live");
+                      setExecutionEnvironment("none");
+                      setModeOpen(false);
+                      announceModeChange("live");
+                    }}>Return to live Gemini</Button> : null}</div>
                     <div><p className="th-label">Execution environment</p><p className="mt-1 font-medium">{executionLabel}</p><p className="mt-1 text-xs th-muted">Review always names the venue before any approval.</p></div>
                     <div className="grid gap-2 border-t border-line pt-3">
                       <p className="th-label">Choose execution</p>

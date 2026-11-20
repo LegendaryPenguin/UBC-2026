@@ -5,7 +5,7 @@ import { AppDialog } from "@/components/AppDialog";
 import { Icon } from "@/components/thesis";
 import { VoicePanel } from "@/components/VoicePanel";
 
-export function WorkspaceAssistant(props: ComponentProps<typeof VoicePanel>) {
+export function WorkspaceAssistant({ openRequest, ...props }: ComponentProps<typeof VoicePanel> & { openRequest?: number }) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
   const sheetId = useId();
@@ -13,6 +13,7 @@ export function WorkspaceAssistant(props: ComponentProps<typeof VoicePanel>) {
   useEffect(() => {
     if (props.prefillQuestion) setOpen(true);
   }, [props.prefillQuestion]);
+  useEffect(() => { if (openRequest) setOpen(true); }, [openRequest]);
 
   function close() {
     setOpen(false);

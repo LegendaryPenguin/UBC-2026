@@ -11,6 +11,7 @@ import { Button, Card, Field, inputCls } from "@/components/ui";
 import { WorkspaceAssistant } from "@/components/WorkspaceAssistant";
 import { evidenceForSlug } from "@/lib/evidence";
 import { PayoffChart } from "@/components/PayoffChart";
+import { rangeScenarioGroups } from "@/lib/payoffs/display";
 import { ThesisWorkspaceTabs } from "@/components/ThesisWorkspaceTabs";
 import { ThesisViewPanel } from "@/components/ThesisViewPanel";
 import { useModeChange } from "@/lib/use-mode-change";
@@ -69,6 +70,7 @@ export default function ComparePage() {
   const [basis, setBasis] = useState<ComparisonBasis>("equal-max-payout");
   const [comparisonSpend, setComparisonSpend] = useState("100");
   const [quoteCapability, setQuoteCapability] = useState(false);
+  const [showAllScenarios, setShowAllScenarios] = useState(false);
   const [geminiTradeState, setGeminiTradeState] = useState("unqualified");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -227,7 +229,7 @@ export default function ComparePage() {
   const selectedIndex = family.scenarios.findIndex((scenario) => scenario.id === selectedScenarioId);
   const selectedScenario = family.scenarios[selectedIndex];
   const arcUseful = thesis.template === "range" || thesis.template === "outside";
-  const showArc = arcUseful && quoteCapability;
+  const showArc = arcUseful && quoteCapability && (mode === "paper" ? family.mode === "replay" : family.quotesAvailable && family.freshness === "fresh");
   const ticket = calculations?.alternatives?.ticket;
   const ticketContract = ticket ? family.contracts.find((contract) => contract.id === ticket.sourceContractIds[0]) : null;
   const activeConstruction: ConstructionChoice = selected === "arc-custom" && !showArc || selected === "gemini-single" && !ticketContract ? "gemini-basket" : selected;
@@ -264,6 +266,15 @@ export default function ComparePage() {
     ...(ticketBasisRows && ticket ? [{ name: "Single Gemini ticket", values: ticketBasisRows, color: "#718394" }] : []),
     ...(showArc && arcBasisRows ? [{ name: "Arc custom", values: arcBasisRows, color: "#3559E0" }] : []),
   ] : [];
+  const compactGroups = rangeScenarioGroups(family, thesis, [
+    ...series.map(({ values }) => values),
+    ...(desiredBasisRows ? [desiredBasisRows] : []),
+  ]);
+  const scenarioGroups = showAllScenarios ? undefined : compactGroups;
+  const scenarioRows = scenarioGroups?.map((group) => ({ ...group, index: group.indexes[0] }))
+    || family.scenarios.map(({ id, label }, index) => ({ id, label, index, indexes: [index] }));
+  const chartIndex = scenarioRows.findIndex(({ indexes }) => indexes.includes(selectedIndex));
+  const displayedSeries = series.map((item) => ({ ...item, values: scenarioRows.map(({ index }) => item.values[index]) }));
   const basketShortfalls = belowCostLabels(basketValues, labels, calculations?.basketCost?.total ?? null);
   const singleShortfalls = belowCostLabels(ticket?.rows.map((row) => row.payout) || [], labels, calculations?.singleCost?.total ?? null);
   const arcShortfalls = belowCostLabels(calculations?.desired?.rows.map((row) => row.payout) || [], labels, null);
@@ -316,12 +327,13 @@ export default function ComparePage() {
             <Card>
               <h2 className="font-serif text-xl">Payout by settlement scenario</h2>
               <p className="mt-1 text-sm text-muted">{basis === "per-construction" ? "Each construction keeps its own payout size." : basis === "equal-max-payout" ? `Normalized to ${budget} USDC maximum gross payout.` : `Normalized to ${comparisonSpend} USDC reference spend when comparable costs are available.`} Payout is gross; reference costs exclude fees and are not executable quotes.</p>
-              <div className="mt-3">{series.length ? <PayoffChart labels={family.scenarios.map((scenario) => scenario.label)} series={series} selectedIndex={selectedIndex} /> : <p role="status" className="rounded-lg bg-[#F4F2ED] p-4 text-sm text-muted">No comparable cost basis is available for the selected constructions. Switch to Per construction or Equal maximum payout.</p>}</div>
+              <div className="mt-3">{series.length ? <PayoffChart labels={scenarioRows.map(({ label }) => label)} series={displayedSeries} selectedIndex={chartIndex} /> : <p role="status" className="rounded-lg bg-[#F4F2ED] p-4 text-sm text-muted">No comparable cost basis is available for the selected constructions. Switch to Per construction or Equal maximum payout.</p>}</div>
+              {compactGroups ? <Button kind="ghost" onClick={() => setShowAllScenarios((value) => !value)}>{showAllScenarios ? "Show three ranges" : `Show all ${family.scenarios.length} scenarios`}</Button> : null}
             </Card>
             <Card>
               <h2 className="font-serif text-xl">Scenario comparison</h2>
               <p className="mt-1 text-sm text-muted">Choose a settlement state to keep it selected in the view rail. A missing cost is shown as not comparable.</p>
-              <div className="table-scroll mt-3"><table className="min-w-[620px] text-left text-sm"><thead><tr><th>Settlement scenario</th>{basketBasisRows ? <th>Gemini basket</th> : <th>Gemini basket · unavailable</th>}{ticket ? <th>One Gemini position</th> : null}{showArc ? <th>Arc custom</th> : null}{basis !== "equal-budget" ? <th>Confirmed view</th> : null}</tr></thead><tbody>{family.scenarios.map((scenario, index) => <tr key={scenario.id} className={scenario.id === selectedScenarioId ? "bg-[#E9EEFF]" : ""}><td><button type="button" className="font-medium underline decoration-dotted" aria-pressed={scenario.id === selectedScenarioId} onClick={() => selectScenario(scenario.id)}>{scenario.label}</button></td><td className="tabular-nums">{basketBasisRows ? `${formatUsdcFixed(basketBasisRows[index] ?? 0n)} USDC` : "Not comparable"}</td>{ticket ? <td className="tabular-nums">{ticketBasisRows ? `${formatUsdcFixed(ticketBasisRows[index] ?? 0n)} USDC` : "Not comparable · cost unavailable"}</td> : null}{showArc ? <td className="tabular-nums">{arcBasisRows ? `${formatUsdcFixed(arcBasisRows[index] ?? 0n)} USDC` : "Not comparable · quote unavailable"}</td> : null}{basis !== "equal-budget" ? <td className="tabular-nums">{formatUsdcFixed(desiredBasisRows?.[index] ?? 0n)} USDC</td> : null}</tr>)}</tbody></table></div>
+              <div className="table-scroll mt-3"><table className="min-w-[620px] text-left text-sm"><thead><tr><th>Settlement scenario</th>{basketBasisRows ? <th>Gemini basket</th> : <th>Gemini basket · unavailable</th>}{ticket ? <th>One Gemini position</th> : null}{showArc ? <th>Arc custom</th> : null}{basis !== "equal-budget" ? <th>Confirmed view</th> : null}</tr></thead><tbody>{scenarioRows.map((scenario, rowIndex) => <tr key={scenario.id} className={rowIndex === chartIndex ? "bg-[#E9EEFF]" : ""}><td><button type="button" className="font-medium underline decoration-dotted" aria-pressed={rowIndex === chartIndex} onClick={() => selectScenario(scenario.id)}>{scenario.label}</button></td><td className="tabular-nums">{basketBasisRows ? `${formatUsdcFixed(basketBasisRows[scenario.index] ?? 0n)} USDC` : "Not comparable"}</td>{ticket ? <td className="tabular-nums">{ticketBasisRows ? `${formatUsdcFixed(ticketBasisRows[scenario.index] ?? 0n)} USDC` : "Not comparable · cost unavailable"}</td> : null}{showArc ? <td className="tabular-nums">{arcBasisRows ? `${formatUsdcFixed(arcBasisRows[scenario.index] ?? 0n)} USDC` : "Not comparable · quote unavailable"}</td> : null}{basis !== "equal-budget" ? <td className="tabular-nums">{formatUsdcFixed(desiredBasisRows?.[scenario.index] ?? 0n)} USDC</td> : null}</tr>)}</tbody></table></div>
               {basis === "equal-budget" && showArc ? <p className="mt-2 text-xs text-muted">Arc is omitted from equal-spend values until an actual quote provides a comparable cost.</p> : null}
             </Card>
             <Card>
@@ -342,7 +354,7 @@ export default function ComparePage() {
             <WorkspaceAssistant slug={family.slug} family={family} evidence={evidence.length ? evidence : evidenceForSlug(family.slug, family.mode)} thesis={thesis} context="compare" maxPayout={budget} title="Talk through the comparison" />
           </div>
           <aside className="view-rail">
-            <ThesisViewPanel thesis={thesis} family={family} selectedScenarioId={selectedScenarioId} onScenarioChange={selectScenario} scenarioOutcome={outcome} scenarioOutcomeLabel="Selected construction · scenario result" action={action} />
+            <ThesisViewPanel thesis={thesis} family={family} selectedScenarioId={selectedScenarioId} onScenarioChange={selectScenario} scenarioGroups={scenarioGroups} scenarioOutcome={outcome} scenarioOutcomeLabel="Selected construction · scenario result" action={action} />
             <Card>
               <h2 className="font-serif text-lg">Selected option</h2>
               <p className="mt-2 font-medium">{selectedName}</p>

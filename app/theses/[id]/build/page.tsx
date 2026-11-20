@@ -17,6 +17,7 @@ import { useModeChange } from "@/lib/use-mode-change";
 import { useResearchNotebook } from "@/lib/use-research-notebook";
 import { marketThesisTitle } from "@/lib/research-range";
 import { ResearchRangeNotice } from "@/components/ResearchBoard";
+import { rangeScenarioGroups } from "@/lib/payoffs/display";
 
 type BasketLegDraft = {
   contractId: string;
@@ -62,6 +63,7 @@ export default function BuildPage() {
   const [savedConstruction, setSavedConstruction] = useState<SavedConstruction | null>(null);
   const [constructionNotice, setConstructionNotice] = useState("");
   const [payoutBasis, setPayoutBasis] = useState<"gross" | "net">("gross");
+  const [showAllScenarios, setShowAllScenarios] = useState(false);
   const [savingConstruction, setSavingConstruction] = useState(false);
 
   useModeChange(() => window.location.reload());
@@ -226,6 +228,15 @@ export default function BuildPage() {
       { name: "Confirmed view", values: construction.desired.rows.map((row) => row.payout), color: "#3559E0" },
       { name: "Gemini basket", values: construction.basketRows.map((row) => row.payout), color: "#C57A36" },
     ] : [];
+  const compactGroups = rangeScenarioGroups(family, thesis, [
+    ...chartSeries.map(({ values }) => values),
+    ...(construction?.desired ? [construction.desired.rows.map(({ payout }) => payout)] : []),
+  ]);
+  const scenarioGroups = showAllScenarios ? undefined : compactGroups;
+  const scenarioRows = scenarioGroups?.map((group) => ({ ...group, index: group.indexes[0] }))
+    || family.scenarios.map((scenario, index) => ({ id: scenario.id, label: scenario.label, indexes: [index], index }));
+  const chartIndex = scenarioRows.findIndex((row) => row.indexes.includes(selectedIndex));
+  const displayedSeries = chartSeries.map((item) => ({ ...item, values: scenarioRows.map(({ index }) => item.values[index]) }));
   const basketMatchesView = construction?.desired?.rows.every((row, index) => row.payout === construction.basketRows[index]?.payout) || false;
   const legContractOptions = family.predicates.map((predicate) => family.contracts.find((contract) => contract.id === predicate.contractId)).filter((contract) => contract != null);
   const availableLegContracts = legContractOptions.filter((contract) => !basket.some((leg) => leg.contractId === contract!.id && leg.enabled));
@@ -257,15 +268,19 @@ export default function BuildPage() {
               </div>
             </div>
             {basket.length === 0 ? <p className="rounded-lg border border-line p-3 text-sm text-muted">Gemini contracts for this view do not create a direct basket. Compare the compiled view and available alternatives instead.</p> : null}
-            {basket.map((leg, index) => (
-              <div key={`${index}-${leg.contractId}`} className={`rounded-lg border p-3 ${leg.enabled ? "border-line" : "border-dashed border-line opacity-70"}`}>
+            {basket.map((leg, index) => {
+              const predicate = family.predicates.find((item) => item.contractId === leg.contractId);
+              const pays = leg.enabled && predicate && selectedScenario && (selectedScenario.predicateYes[predicate.id] ? "yes" : "no") === leg.side;
+              const style = pays ? "border-action bg-[#F2F5FF]" : leg.enabled ? "border-line" : "border-dashed border-line opacity-70";
+              return (
+              <div key={index} className={`rounded-lg border p-3 ${style}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="font-medium">Leg {index + 1} {leg.enabled ? "" : "· removed"}</h3>
+                  <h3 className="font-medium">{leg.side.toUpperCase()} · {legContractOptions.find((contract) => contract.id === leg.contractId)?.label || `Leg ${index + 1}`}{leg.enabled ? "" : " · removed"}</h3>
                   <button type="button" className="min-h-10 px-2 text-sm text-action" onClick={() => updateLeg(index, { enabled: !leg.enabled })}>
                     {leg.enabled ? "Remove leg" : "Restore leg"}
                   </button>
                 </div>
-                <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                <details className="mt-1"><summary className="cursor-pointer text-sm text-action">Edit leg {index + 1}</summary><div className="mt-2 grid gap-3 sm:grid-cols-3">
                   <Field label="Contract">
                     <select className={inputCls()} value={leg.contractId} disabled={!leg.enabled} onChange={(event) => updateLeg(index, { contractId: event.target.value })}>
                       {legContractOptions.map((contract) => <option key={contract!.id} value={contract!.id}>{contract!.label}</option>)}
@@ -279,10 +294,11 @@ export default function BuildPage() {
                   <Field label="Payout allocation (USDC)">
                     <input className={inputCls()} type="number" min="0" step="0.01" value={leg.payoutAmount} disabled={!leg.enabled} onChange={(event) => updateLeg(index, { payoutAmount: event.target.value })} />
                   </Field>
-                </div>
-                {leg.enabled ? <p className="mt-2 text-xs text-muted">This leg pays its allocation when {leg.side.toUpperCase()} resolves for {legContractOptions.find((contract) => contract!.id === leg.contractId)?.label}.</p> : null}
+                </div></details>
+                {leg.enabled ? <p className="mt-2 text-xs text-muted">Pays {leg.payoutAmount} USDC when this contract resolves {leg.side.toUpperCase()}.{pays ? " Pays in the selected scenario." : ""}</p> : null}
               </div>
-            ))}
+              );
+            })}
             <Button kind="ghost" onClick={addSupportedLeg} disabled={!availableLegContracts.length || basket.length >= 4}>Add supported leg</Button>
             <div className="grid gap-3 sm:grid-cols-[220px_1fr]">
               <Field label="Desired view maximum payout (USDC)" hint="Used to compare the basket against your confirmed view.">
@@ -298,10 +314,12 @@ export default function BuildPage() {
                 <div><h2 className="font-serif text-xl">{payoutBasis === "gross" ? "Gross payout" : "Estimated net result"} by settlement scenario</h2><p className="mt-1 text-sm text-muted">{payoutBasis === "gross" ? "Payout only; profit or loss requires subtracting the estimated cost." : `Reference cost of ${referenceCost === null ? "—" : `${formatUsdc(referenceCost)} USDC`} is subtracted from each payout. This is not an executable quote.`}</p></div>
                 <p className={`text-xs ${basketMatchesView ? "text-good" : "text-muted"}`}>{basketMatchesView ? "Matches the confirmed view in every listed scenario" : "This basket differs from your view in at least one scenario"}</p>
               </div>
+              <p className="th-alert mt-3 text-sm" role="status">{thesis.template === "range" && selectedScenario && selectedBasketPayout > 0n && selectedDesiredPayout === 0n ? "The Gemini basket still pays here, outside your intended range." : selectedBasketPayout === selectedDesiredPayout ? "The basket matches your view in this scenario." : "The basket pays a different amount from your view in this scenario."}</p>
               <div className="mt-3">
-                <PayoffChart labels={family.scenarios.map((scenario) => scenario.label)} series={chartSeries} selectedIndex={selectedIndex} />
+                <PayoffChart labels={scenarioRows.map(({ label }) => label)} series={displayedSeries} selectedIndex={chartIndex} />
               </div>
-              <div className="table-scroll mt-4"><table className="text-left text-sm"><thead><tr><th>Settlement scenario</th><th>Your basket · {payoutBasis}</th><th>Confirmed view · gross</th><th>Fit</th></tr></thead><tbody>{family.scenarios.map((scenario, index) => { const basketPayout = construction.basketRows[index]?.payout ?? 0n; const desiredPayout = construction.desired?.rows[index]?.payout ?? 0n; return <tr key={scenario.id} className={scenario.id === selectedScenarioId ? "bg-[#E9EEFF]" : ""}><td><button type="button" className="text-left font-medium underline decoration-dotted" aria-pressed={scenario.id === selectedScenarioId} onClick={() => setSelectedScenarioId(scenario.id)}>{scenario.label}</button></td><td className="tabular-nums">{formatUsdcFixed(displayedPayout(basketPayout))} USDC</td><td className="tabular-nums">{formatUsdcFixed(desiredPayout)} USDC</td><td>{payoutBasis === "gross" ? basketPayout === desiredPayout ? "Matches" : "Differs" : "Net estimate"}</td></tr>; })}</tbody></table></div>
+              {compactGroups ? <Button kind="ghost" onClick={() => setShowAllScenarios((value) => !value)}>{showAllScenarios ? "Show three ranges" : `Show all ${family.scenarios.length} scenarios`}</Button> : null}
+              <div className="table-scroll mt-4"><table className="text-left text-sm"><thead><tr><th>Settlement scenario</th><th>Your basket · {payoutBasis}</th><th>Confirmed view · gross</th><th>Fit</th></tr></thead><tbody>{scenarioRows.map((scenario, rowIndex) => { const index = scenario.index; const basketPayout = construction.basketRows[index]?.payout ?? 0n; const desiredPayout = construction.desired?.rows[index]?.payout ?? 0n; return <tr key={scenario.id} className={rowIndex === chartIndex ? "bg-[#E9EEFF]" : ""}><td><button type="button" className="text-left font-medium underline decoration-dotted" aria-pressed={rowIndex === chartIndex} onClick={() => setSelectedScenarioId(scenario.id)}>{scenario.label}</button></td><td className="tabular-nums">{formatUsdcFixed(displayedPayout(basketPayout))} USDC</td><td className="tabular-nums">{formatUsdcFixed(desiredPayout)} USDC</td><td>{payoutBasis === "gross" ? basketPayout === desiredPayout ? "Matches" : "Differs" : "Net estimate"}</td></tr>; })}</tbody></table></div>
             </Card>
           ) : null}
           <Card>
@@ -317,7 +335,7 @@ export default function BuildPage() {
           {construction?.desired ? <WorkspaceAssistant slug={family.slug} family={family} evidence={evidenceForSlug(family.slug, family.mode)} thesis={thesis} context="payoff" maxPayout={max} title="Ask about these scenario payouts" /> : null}
         </div>
         <aside className="view-rail">
-          <ThesisViewPanel thesis={thesis} family={family} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} scenarioOutcome={scenarioOutcome} scenarioOutcomeLabel="Basket · desired view payout" />
+          <ThesisViewPanel thesis={thesis} family={family} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} scenarioGroups={scenarioGroups} scenarioOutcome={scenarioOutcome} scenarioOutcomeLabel="Basket · desired view payout" />
           <Card className="space-y-2"><h2 className="font-serif text-xl font-bold">Next step</h2><p className="text-sm text-muted">Save a named construction, compare another payoff, or review this basket directly.</p><Button kind="ghost" onClick={() => void saveConstruction()} disabled={savingConstruction || !construction?.desired || Boolean(construction.error)}>{savingConstruction ? "Saving…" : "Save construction"}</Button>{savedConstruction ? <button type="button" className="min-h-10 text-sm font-semibold text-action underline" onClick={restoreConstruction}>Restore saved version · {formatTime(savedConstruction.savedAt)}</button> : null}<Button onClick={compareConstructions} disabled={!construction?.desired || Boolean(construction.error)}>Compare options</Button><Button href={`/theses/${id}/review?construction=gemini-basket&maxPayout=${encodeURIComponent(max)}&scenario=${encodeURIComponent(selectedScenarioId)}`} kind="secondary" disabled={!construction?.desired || Boolean(construction.error)}>Review construction</Button><p className="text-xs text-muted">Review shows the venue, environment, terms, and quote path. No financial action happens until explicit review and authorization.</p></Card>
           <Card>
             <h2 className="font-serif text-lg">Execution status</h2>

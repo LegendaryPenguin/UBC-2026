@@ -209,6 +209,16 @@ export type QuoteStatus =
   | "invalidated"
   | "unavailable";
 
+export interface PositionResearchContext {
+  title: string;
+  originalObservation?: string;
+  confirmedView: string;
+  observationTime: string | null;
+  rationale: string;
+  invalidation: string;
+  revision: number;
+}
+
 export interface SignedQuote {
   id: string;
   status: QuoteStatus;

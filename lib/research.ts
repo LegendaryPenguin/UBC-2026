@@ -47,7 +47,33 @@ const footballTeams = [
   ["kansas city chiefs", /\b(kansas city|chiefs)\b/],
 ] as const;
 
+const cryptoSubjects = [
+  { name: "Bitcoin", ticker: "BTC", pattern: /\b(?:bitcoin|btc)\b/i },
+  { name: "Ethereum", ticker: "ETH", pattern: /\b(?:ethereum|ether|eth)\b/i },
+  { name: "Solana", ticker: "SOL", pattern: /\b(?:solana|sol)\b/i },
+  { name: "XRP", ticker: "XRP", pattern: /\b(?:xrp|ripple)\b/i },
+];
+
+export function marketObservation(question: string) {
+  const asset = cryptoSubjects.find(({ pattern }) => pattern.test(question));
+  const horizon = question.match(/\b(?:this month|next month|this week|next week|by friday|tomorrow|today|tonight)\b/i)?.[0].toLowerCase();
+  const view = /\b(?:rise|higher|go up|upward)\b/i.test(question)
+    ? /\b(?:not expecting|don['’]?t expect|without|not a)\b[^.!?]*\bbreakout\b/i.test(question) ? "Rise with limited upside" : "Rise"
+    : /\b(?:fall|lower|go down|decline)\b/i.test(question) ? "Fall" : undefined;
+  return { asset, horizon, view };
+}
+
 export function marketDiscovery(question: string, turns: ResearchTurn[] = [], draft = "") {
+  const current = marketObservation(question);
+  const priorObservation = turns.slice(0, -1).findLast((turn) => turn.role === "user" && marketObservation(turn.content).view)?.content;
+  const combinesObservation = current.asset && !current.view && question.trim().split(/\s+/).length <= 5 && priorObservation && !marketObservation(priorObservation).asset;
+  const observationText = combinesObservation ? `${priorObservation} · ${question}` : question;
+  const subject = marketObservation(observationText);
+  const needsSubject = !subject.asset && Boolean(subject.view && subject.horizon && /\bit\b/i.test(question));
+  if (subject.asset) {
+    const { name, ticker } = subject.asset;
+    return { queries: [...new Set([ticker, name])], focusWords: [ticker.toLowerCase(), name.toLowerCase()], ambiguousGeorgia: false, sport: undefined, focus: name, team: undefined, generic: false, observationText, needsSubject, ...subject };
+  }
   const latest = extractMarketQuery(question);
   const qualifier = /^(college|today|tonight|tomorrow|game|next|week|season|any|saturday|sunday|playoffs|national|championship|winner|win|wins|matchup|bowl|spread|total)$/;
   const isGeneral = (value: string) => !value || value.split(" ").every((word) => broadSports.test(word) || qualifier.test(word) || /^\d+$/.test(word));
@@ -67,13 +93,20 @@ export function marketDiscovery(question: string, turns: ResearchTurn[] = [], dr
     ...(ambiguousGeorgia ? ["bulldogs", "yellow jackets", "georgia"] : focusWords.slice(0, 3)),
     broadSports.exec(context)?.[0],
   ].filter((query): query is string => Boolean(query)))].slice(0, 5);
-  return { queries, focusWords, ambiguousGeorgia, sport: broadSports.exec(context)?.[0], focus, team, generic };
+  return { queries, focusWords, ambiguousGeorgia, sport: broadSports.exec(context)?.[0], focus, team, generic, observationText, needsSubject, ...subject };
 }
 
 export function rankMarketMatches(families: MarketFamily[], discovery: ReturnType<typeof marketDiscovery>) {
   const seen = new Set<string>();
   const matchupCounts = new Map<string, number>();
   return families.map((family) => {
+    if (discovery.asset) {
+      const ticker = family.sourceEvent.ticker.toUpperCase();
+      const related = ticker.startsWith(discovery.asset.ticker) || discovery.asset.pattern.test(family.title);
+      if (!related || family.sourceEvent.category.toLowerCase() !== "crypto") return { family, score: 0 };
+      const shortWindow = /^\w{3}(?:05M|15M|1H)/.test(ticker) || /\b(?:5|15)\s*min/i.test(family.title);
+      return { family, score: 20 + (family.predicates.length >= 2 ? 8 : 0) - (shortWindow && discovery.horizon?.includes("month") ? 8 : 0) };
+    }
     const title = marketWords(`${family.title} ${family.sourceEvent.title} ${family.sourceEvent.ticker} ${family.slug}`);
     const selection = marketWords(family.contracts.map((contract) => contract.label).join(" "));
     const detail = [...marketWords(`${family.question} ${family.sourceEvent.category}`), ...selection];
@@ -112,7 +145,11 @@ function asksForView(question: string) {
 }
 
 function isTimeAmbiguousView(question: string) {
-  return /\b(not\s+(?:a\s+)?break(?:out)?|without\s+(?:a\s+)?break(?:out)?|touch(?:es|ed|ing)?|intraday|at any point|before then)\b/i.test(question);
+  return /\b(?:(?:not|without)\s+(?:(?:expecting|a|huge)\s+)*break(?:out)?|don['’]t expect (?:a )?(?:huge )?breakout|touch(?:es|ed|ing)?|intraday|at any point|before then)\b/i.test(question);
+}
+
+export function asksForCounterargument(question: string) {
+  return /\b(?:challeng\w*|counterargument|what could go wrong|what would make.{0,30}wrong|change my mind|downside risk)\b/i.test(question);
 }
 
 function mentionsSettlement(question: string) {
@@ -218,7 +255,7 @@ export function researchReply(input: {
   const userDialogue = conversation.filter((turn) => turn.role === "user").map((turn) => turn.content).join(" ");
   const assistantDialogue = conversation.filter((turn) => turn.role === "assistant").map((turn) => turn.content).join(" ");
   const latestUser = [...conversation].reverse().find((turn) => turn.role === "user")?.content ?? q;
-  const availableEvidence = input.evidence?.length ? input.evidence : FEATURED_EVIDENCE.slice(0, 2);
+  const availableEvidence = input.evidence ?? FEATURED_EVIDENCE.slice(0, 2);
   function withEvidenceCitations(answer: string) {
     const byId = new Map(availableEvidence.map((item) => [item.id, item]));
     const ids = [...new Set([...answer.matchAll(/\[(ev-[a-z0-9-]+)\]/gi)].map((match) => match[1]))];
@@ -229,6 +266,9 @@ export function researchReply(input: {
   if (!family) {
     const matches = input.marketMatches || [];
     const discovery = input.discovery || marketDiscovery(q, conversation);
+    if (discovery.needsSubject) {
+      return withEvidenceCitations("Which asset or event are you talking about? I’ll check Gemini for related contracts and their settlement dates.");
+    }
     const searchStatus = input.marketUnavailable ? "Gemini’s market search is unavailable right now. " : "";
     if (/\b(what (?:is|does|are)|how (?:does|do)|explain|mean(?:s)?)\b/i.test(q)) {
       if (/\b(?:point )?spread\b/i.test(q)) {
@@ -262,8 +302,18 @@ export function researchReply(input: {
     return withEvidenceCitations(`${searchStatus}What would you like to research? A team, event, or outcome is enough to start a Gemini search.`);
   }
 
-  const needsView = asksForView(userDialogue.toLowerCase());
-  const ambiguousTiming = needsView && isTimeAmbiguousView(userDialogue);
+  if (asksForCounterargument(q)) {
+    const reference = availableEvidence.find((item) => item.id === "ev-gemini-reference");
+    const challenge = reference || availableEvidence.find((item) => item.stance === "challenges");
+    const structure = family.predicates.length >= 2
+      ? "A small rise and a breakout are different outcomes at settlement. The lower-threshold YES contract can still resolve YES above your upper bound."
+      : `The listed proposition is “${family.contracts[0]?.label || family.question}.” A move before the observation can reverse by settlement.`;
+    return withEvidenceCitations(`${structure}${challenge ? ` ${challenge.excerpt} [${challenge.id}]` : ""} What settlement outcome would make you reconsider?`);
+  }
+
+  const priorView = input.thesis?.rationale || "";
+  const needsView = asksForView(userDialogue.toLowerCase()) || Boolean(priorView && mentionsSettlement(latestUser));
+  const ambiguousTiming = needsView && isTimeAmbiguousView(`${priorView} ${userDialogue}`);
   const settlementSpecified = mentionsSettlement(userDialogue);
   const selectingTouchExposure = /\b(touch(?:es|ed|ing)?|intraday|at any point)\b/i.test(latestUser) && !mentionsSettlement(latestUser);
   if (ambiguousTiming && selectingTouchExposure) {
@@ -287,12 +337,13 @@ export function researchReply(input: {
     };
   }
   if (ambiguousTiming && settlementSpecified && family.predicates.length >= 2 && !explicitRange(userDialogue)) {
-    const first = family.contracts.find((contract) => contract.id === family.predicates[0]?.contractId)?.label || family.predicates[0]?.label;
-    const second = family.contracts.find((contract) => contract.id === family.predicates[1]?.contractId)?.label || family.predicates[1]?.label;
+    const index = family.predicates.length > 5 ? Math.floor(family.predicates.length / 2) - 1 : 0;
+    const first = family.predicates[index]?.label;
+    const second = family.predicates[index + 1]?.label;
     const offeredRange = /\b(?:range\s+between\s+.+?\s+and\s+.+?|range\s+from\s+.+?\s+to\s+.+?)\b/i.test(assistantDialogue);
     const acceptedOfferedRange = offeredRange && /\b(yes|that works|use this range|looks right)\b/i.test(latestUser);
     if (!acceptedOfferedRange) {
-      const prompt = `At settlement, the selected family offers these first two listed boundaries. Would a range from “${first}” to “${second}” match your view? Reply “yes, use this range” or name a different pair of listed thresholds.`;
+      const prompt = `At settlement, the selected family offers these two listed boundaries. Would a range from “${first}” to “${second}” match your view? Reply “yes, use this range” or name a different pair of listed thresholds.`;
       return {
         ...withEvidenceCitations("Thanks. I will use the official settlement, not an earlier price touch."),
         clarificationPrompt: prompt,
@@ -302,7 +353,11 @@ export function researchReply(input: {
 
   const acceptedOfferedRange = /\b(?:range\s+between\s+.+?\s+and\s+.+?|range\s+from\s+.+?\s+to\s+.+?)\b/i.test(assistantDialogue) &&
     /\b(yes|that works|use this range|looks right)\b/i.test(latestUser);
-  const proposalQuestion = acceptedOfferedRange ? `${userDialogue} ${assistantDialogue}` : userDialogue;
+  const lastOffer = [...assistantDialogue.matchAll(/range from “([^”]+)” to “([^”]+)”/gi)].at(-1);
+  const offeredBounds = lastOffer?.slice(1).map((label) => label.match(/\$?\d[\d,]*(?:\.\d+)?/i)?.[0]);
+  const proposalQuestion = acceptedOfferedRange && offeredBounds?.every(Boolean)
+    ? `Use the range between ${offeredBounds[0]} and ${offeredBounds[1]}`
+    : acceptedOfferedRange ? `${userDialogue} ${assistantDialogue}` : explicitRange(userDialogue) ? userDialogue : `${userDialogue} ${priorView}`;
 
   if (family.predicates.length === 1 && family.contracts.length === 1) {
     const contract = family.contracts[0];
@@ -345,7 +400,10 @@ export function researchReply(input: {
       : availableEvidence.length
         ? " Review the evidence board for the available context before confirming."
         : " No current evidence feed is available for this market.";
-    return { ...withEvidenceCitations(`I drafted an editable settlement range between the two listed contract thresholds. Check the exact boundaries and compare every payout scenario before you save or confirm it.${evidenceNote}`), proposed: suggested };
+    return { ...withEvidenceCitations(`I drafted an editable settlement range between the two listed contract thresholds. Check the exact boundaries and compare every payout scenario before you save or confirm it.${evidenceNote}`), proposed: {
+      ...suggested,
+      invalidation: suggested.invalidation || `Reconsider the thesis if the settlement value is below ${suggested.lowerThreshold?.toLocaleString()} or at least ${suggested.upperThreshold?.toLocaleString()}.`,
+    } };
   }
   if (/wrong|lose|if i am wrong/i.test(q)) {
     return { ...withEvidenceCitations(`If the observed value settles outside your chosen payout scenarios, the custom payoff pays 0 and the premium is the maximum loss, plus any displayed fee. Settlement follows ${family.sourceEvent.sourceAgency || "the listed source"} at ${family.observationTime || "the listed observation time"}.`), proposed: suggested };

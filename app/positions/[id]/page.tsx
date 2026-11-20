@@ -3,14 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/client";
-import type { PositionRecord } from "@/lib/domain/types";
+import type { PositionRecord, PositionResearchContext } from "@/lib/domain/types";
 import { formatUsdc } from "@/lib/format";
 import { Button, Card, Empty } from "@/components/ui";
 import { escrowAbi } from "@/lib/escrow/abi";
 import { arcTestnet, publicEscrow } from "@/lib/chain";
 import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 
-type PositionResponse = { position: PositionRecord; walletAddress: string | null; syncWarning?: string };
+type PositionResponse = { position: PositionRecord; walletAddress: string | null; syncWarning?: string; sourceThesis?: PositionResearchContext };
 type Transaction = { id: string; type: string; status: string; hash: string | null; amount: string; unit: string; related: string | null; createdAt: string };
 const TABS = ["overview", "thesis", "rules", "transactions"] as const;
 
@@ -18,6 +18,7 @@ export default function PositionPage() {
   const { id } = useParams<{ id: string }>();
   const { address, chainId } = useAccount();
   const [position, setPosition] = useState<PositionRecord | null>(null);
+  const [sourceThesis, setSourceThesis] = useState<PositionResearchContext>();
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [syncWarning, setSyncWarning] = useState("");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -35,6 +36,7 @@ export default function PositionPage() {
   async function refreshPosition() {
     const result = await api<PositionResponse>(`/api/positions/${id}`);
     setPosition(result.position);
+    setSourceThesis(result.sourceThesis);
     setWalletAddress(result.walletAddress);
     setSyncWarning(result.syncWarning || "");
   }
@@ -159,9 +161,9 @@ export default function PositionPage() {
   return (
     <div className="screen-position space-y-4">
       <div className="workspace-header">
-        <p className="text-xs uppercase tracking-wide text-muted">{position.topicSlug} · {position.mode}</p>
-        <h1 className="workspace-title screen-heading">Position</h1>
-        <p className="text-sm text-muted">{position.status.replaceAll("_", " ")} · escrow #{position.chainPositionId || "paper"}</p>
+        <p className="text-xs uppercase tracking-wide text-muted">{position.mode === "live" ? "Arc testnet" : "Paper simulation"}</p>
+        <h1 className="workspace-title screen-heading">{sourceThesis?.title || "Position"}</h1>
+        <p className="text-sm capitalize text-muted">{position.status.replaceAll("_", " ")}{position.chainPositionId ? ` · Escrow #${position.chainPositionId}` : ""}</p>
       </div>
       {syncWarning ? <p role="status" className="rounded-lg border border-line bg-white p-3 text-sm text-muted">{syncWarning} Stored status is shown until Arc is reachable.</p> : null}
       {error ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{error}</p> : null}
@@ -176,14 +178,35 @@ export default function PositionPage() {
       </div>
 
       {tab === "overview" ? (
+        <div className="space-y-4">
+        <div className="grid gap-4 lg:grid-cols-2">
+          {sourceThesis ? (
+            <Card className="space-y-3">
+              <h2 className="font-serif text-xl">From observation to thesis</h2>
+              {sourceThesis.originalObservation ? <div><p className="text-xs font-semibold text-muted">Original observation</p><p className="mt-1 whitespace-pre-wrap text-sm">{sourceThesis.originalObservation}</p></div> : null}
+              <div className="rounded-lg bg-[#EDF1FF] p-3"><p className="text-xs font-semibold text-muted">Confirmed view · revision {sourceThesis.revision}</p><p className="mt-1 font-semibold">{sourceThesis.confirmedView}</p>{sourceThesis.observationTime ? <p className="mt-1 text-xs text-muted">Settlement <time dateTime={sourceThesis.observationTime}>{new Date(sourceThesis.observationTime).toLocaleString()}</time></p> : null}</div>
+              {sourceThesis.rationale && sourceThesis.rationale !== sourceThesis.originalObservation ? <div><p className="text-xs font-semibold text-muted">Rationale at entry</p><p className="mt-1 whitespace-pre-wrap text-sm">{sourceThesis.rationale}</p></div> : null}
+              {sourceThesis.invalidation ? <div><p className="text-xs font-semibold text-muted">What would change your mind</p><p className="mt-1 whitespace-pre-wrap text-sm">{sourceThesis.invalidation}</p></div> : null}
+              <Button href={`/theses/${position.thesisId}`} kind="ghost">Revisit thesis</Button>
+            </Card>
+          ) : null}
+          <Card className="space-y-3">
+            <h2 className="font-serif text-xl">Construction and receipt</h2>
+            <p className="font-semibold">{position.mode === "live" ? "Arc custom position" : "Custom payoff · Paper simulation"}</p>
+            {position.mode === "live" && position.txHash ? (
+              <div><p className="text-xs font-semibold text-muted">Arc acceptance receipt</p><a className="mt-1 inline-block break-all text-sm text-action underline" href={`${explorer}/tx/${position.txHash}`} target="_blank" rel="noreferrer">{position.txHash}</a></div>
+            ) : position.mode === "paper" ? <div><p className="text-xs font-semibold text-muted">Paper receipt</p><p className="mt-1 break-all font-mono text-sm">{position.id}</p></div> : null}
+            <dl className="grid grid-cols-2 gap-3 border-t border-line pt-3 text-sm">
+              <div><dt className="text-xs text-muted">Premium + fee</dt><dd>{formatUsdc(totalCost)} USDC</dd></div>
+              <div><dt className="text-xs text-muted">Maximum loss</dt><dd>{formatUsdc(totalCost)} USDC</dd></div>
+              <div><dt className="text-xs text-muted">Maximum payout</dt><dd>{formatUsdc(BigInt(position.maxPayout))} USDC</dd></div>
+              <div><dt className="text-xs text-muted">Accepted</dt><dd>{new Date(position.createdAt).toLocaleString()}</dd></div>
+            </dl>
+            {!sourceThesis ? <Button href={`/theses/${position.thesisId}`} kind="ghost">Open source thesis</Button> : null}
+          </Card>
+        </div>
         <Card>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <div><dt className="text-xs text-muted">Premium + fee</dt><dd>{formatUsdc(totalCost)} USDC</dd></div>
-            <div><dt className="text-xs text-muted">Maximum loss</dt><dd>{formatUsdc(totalCost)} USDC</dd></div>
-            <div><dt className="text-xs text-muted">Maximum payout</dt><dd>{formatUsdc(BigInt(position.maxPayout))} USDC</dd></div>
-            <div><dt className="text-xs text-muted">Accepted</dt><dd>{new Date(position.createdAt).toLocaleString()}</dd></div>
-          </dl>
-          <h2 className="mt-5 font-serif text-xl">Payout schedule</h2>
+          <h2 className="font-serif text-xl">Payout schedule</h2>
           <table className="mt-2 w-full text-left text-sm">
             <thead><tr><th className="border-b border-line py-2">Scenario</th><th className="border-b border-line py-2">Payout</th></tr></thead>
             <tbody>{position.labels.map((label, index) => (
@@ -191,6 +214,7 @@ export default function PositionPage() {
             ))}</tbody>
           </table>
         </Card>
+        </div>
       ) : null}
       {tab === "thesis" ? (
         <Card className="space-y-3">

@@ -1,3 +1,5 @@
+import type { MarketFamily, ThesisRevision } from "@/lib/domain/types";
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
@@ -12,22 +14,28 @@ export type DataContext = "live" | "replay";
 export type ExecutionEnvironment = "none" | "paper" | "gemini" | "arc";
 export type LegacyMode = "live" | "replay" | "paper";
 
+export async function findRecordedRangeMarket(question: string, signal?: AbortSignal) {
+  const { families } = await api<{ families: MarketFamily[] }>(`/api/topics?mode=replay&discovery=1&q=${encodeURIComponent(question)}`, { signal });
+  return families.find((family) => family.predicates.length >= 2);
+}
+
+export async function createMarketResearchDraft(market: Pick<MarketFamily, "slug" | "id" | "version" | "title">, observation: string, mode: DataContext) {
+  const { thesis } = await api<{ thesis: ThesisRevision }>("/api/theses", {
+    method: "POST",
+    body: JSON.stringify({ topicSlug: market.slug, familyId: market.id, familyVersion: market.version, mode, title: market.title.slice(0, 100), rationale: observation, evidenceIds: [] }),
+  });
+  return thesis;
+}
+
 function legacyMode(): LegacyMode {
   const value = localStorage.getItem("thesis_mode");
   return value === "live" || value === "paper" ? value : "live";
 }
 
-/** Live Gemini market data is the only user-facing data context. */
+/** Recorded markets are only available during an explicit paper rehearsal. */
 export function dataContextFromStorage(): DataContext {
   if (typeof window === "undefined") return "live";
-  const value = localStorage.getItem("thesis_data_context");
-  if (value === "replay") {
-    localStorage.setItem("thesis_data_context", "live");
-    if (localStorage.getItem("thesis_mode") === "replay") localStorage.setItem("thesis_mode", "live");
-    return "live";
-  }
-  if (value === "live") return value;
-  return legacyMode() === "live" ? "live" : "live";
+  return localStorage.getItem("thesis_data_context") === "replay" && executionEnvironmentFromStorage() === "paper" ? "replay" : "live";
 }
 
 export function executionEnvironmentFromStorage(): ExecutionEnvironment {
@@ -44,14 +52,21 @@ export function modeFromStorage(): LegacyMode {
 }
 
 export function setDataContext(context: DataContext) {
-  const next = context === "replay" ? "live" : context;
+  const next = context === "replay" && executionEnvironmentFromStorage() !== "paper" ? "live" : context;
   localStorage.setItem("thesis_data_context", next);
   localStorage.setItem("thesis_mode", executionEnvironmentFromStorage() === "paper" ? "paper" : next);
 }
 
 export function setExecutionEnvironment(environment: ExecutionEnvironment) {
   localStorage.setItem("thesis_execution_environment", environment);
+  if (environment !== "paper") localStorage.setItem("thesis_data_context", "live");
   localStorage.setItem("thesis_mode", environment === "paper" ? "paper" : dataContextFromStorage());
+}
+
+export function startRecordedRehearsal() {
+  setExecutionEnvironment("paper");
+  setDataContext("replay");
+  announceModeChange("paper", { dataContext: "replay", executionEnvironment: "paper" });
 }
 
 /** Backward-compatible setter for existing execution and tests. */

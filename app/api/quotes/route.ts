@@ -1,5 +1,6 @@
 import { getTopic } from "@/lib/gemini/catalog";
 import { compileView } from "@/lib/payoffs/compile";
+import { thesisViewLabel } from "@/lib/payoffs/display";
 import { parseUsdc } from "@/lib/format";
 import { quotePremium } from "@/lib/pricing";
 import { signQuote } from "@/lib/escrow/quote";
@@ -129,7 +130,17 @@ export async function POST(req: Request) {
       : undefined;
     const storedQuote = { ...quote, sourceTicker: family.sourceEvent.ticker, sourceContractIds: spec.sourceContractIds };
     mutate((s) => {
-      s.quotes.push({ ...storedQuote, thesisId: thesis.id, accountId: owner, mode: body.mode, recordedScenarioIndex: recordedScenario?.index });
+      const firstVersion = s.thesisHistory.find((version) => version.thesisId === thesis.id && version.accountId === owner);
+      const sourceThesis = {
+        title: thesis.title || family.title,
+        originalObservation: firstVersion?.snapshot.rationale || undefined,
+        confirmedView: thesisViewLabel(thesis, family, { exact: true }),
+        observationTime: family.observationTime,
+        rationale: thesis.rationale,
+        invalidation: thesis.invalidation,
+        revision: thesis.revision,
+      };
+      s.quotes.push({ ...storedQuote, thesisId: thesis.id, accountId: owner, mode: body.mode, recordedScenarioIndex: recordedScenario?.index, sourceThesis });
       thesis.status = "quoted";
     });
     if (ctx) {

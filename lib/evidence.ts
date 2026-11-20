@@ -48,10 +48,6 @@ export function evidenceForSlug(slug: string, mode: DataMode = "replay"): Eviden
 /** Build source cards from the live Gemini listing itself — never invent news headlines. */
 export function evidenceForFamily(family: MarketFamily | null | undefined): EvidenceItem[] {
   if (!family) return [];
-  if (family.mode === "replay") {
-    return evidenceForSlug(family.sourceEvent.ticker.toLowerCase() || family.slug, "replay");
-  }
-
   const retrievedAt = family.fetchedAt || new Date().toISOString();
   const publishedAt = family.sourceEvent.effectiveDate || family.observationTime || retrievedAt;
   const contract = family.contracts[0];
@@ -59,6 +55,23 @@ export function evidenceForFamily(family: MarketFamily | null | undefined): Evid
 
   const wording = contract?.description?.trim() || family.question?.trim();
   const rulesUrl = contract?.termsUrl || family.sourceEvent.sourceUrl || "https://www.gemini.com/predictions";
+  const reference = family.contracts.find((item) => item.ask != null && item.noAsk != null &&
+    [item.ask, item.noAsk].every((value) => Boolean(value?.trim()) && Number(value) >= 0 && Number(value) <= 1));
+  const cents = (value: string | null | undefined) => Number((Number(value) * 100).toFixed(2));
+  if (reference) items.push({
+    id: "ev-gemini-reference",
+    stance: "context",
+    url: reference.termsUrl || family.sourceEvent.sourceUrl || rulesUrl,
+    publisher: family.mode === "live" ? "Gemini API market snapshot" : "Recorded Gemini API snapshot",
+    title: `Both sides of ${reference.label}`,
+    publishedAt: retrievedAt,
+    retrievedAt,
+    excerpt: `Gemini listed ${cents(reference.ask)}¢ YES ask and ${cents(reference.noAsk)}¢ NO ask for “${reference.label}.” These are reference prices for that proposition at its listed observation, so a price move alone does not resolve the outcome.`,
+    mode: family.mode,
+  });
+  if (family.mode === "replay") {
+    return [...items, ...evidenceForSlug(family.sourceEvent.ticker.toLowerCase() || family.slug, "replay")];
+  }
   if (wording) {
     items.push({
       id: "ev-contract-wording",

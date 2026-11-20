@@ -1,9 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { evidenceForSlug } from "@/lib/evidence";
 import { listTopics } from "@/lib/gemini/catalog";
-import { proposeView, researchReply } from "@/lib/research";
+import { marketDiscovery, proposeView, researchReply } from "@/lib/research";
 
 describe("research and editable view proposals", () => {
+  it("asks for the subject and carries the original observation into the follow-up search", () => {
+    const observation = "I think it could rise this month, but I don’t expect a huge breakout.";
+    const reply = researchReply({ question: observation, family: null });
+    expect(reply.answer).toContain("Which asset or event");
+    const discovery = marketDiscovery("Bitcoin", [
+      { role: "user", content: observation }, { role: "assistant", content: reply.answer }, { role: "user", content: "Bitcoin" },
+    ]);
+    expect(discovery.queries).toContain("BTC");
+    expect(discovery.view).toBe("Rise with limited upside");
+    expect(discovery.horizon).toBe("this month");
+    expect(discovery.observationText).toContain(observation);
+  });
   it("only proposes boundaries that exist in the selected market family", async () => {
     const { families } = await listTopics("replay");
     const family = families.find((candidate) => candidate.predicates.length >= 2)!;
@@ -100,6 +112,10 @@ describe("research and editable view proposals", () => {
     turns.push({ role: "user", content: "At Friday's settlement." });
     const bounds = researchReply({ question: turns.at(-1)!.content, conversation: turns, family });
     expect(bounds.clarificationPrompt).toContain("Would a range from");
+    const offeredIndex = family.predicates.length > 5 ? Math.floor(family.predicates.length / 2) - 1 : 0;
+    const [lower, upper] = family.predicates.slice(offeredIndex, offeredIndex + 2);
+    expect(bounds.clarificationPrompt).toContain(lower.label);
+    expect(bounds.clarificationPrompt).toContain(upper.label);
     turns.push({ role: "assistant", content: bounds.clarificationPrompt! });
     turns.push({ role: "user", content: "Yes, use this range." });
 
@@ -107,8 +123,8 @@ describe("research and editable view proposals", () => {
     const result = researchReply({ question: turns.at(-1)!.content, conversation: turns, family, evidence });
     expect(result.proposed).toMatchObject({
       template: "range",
-      lowerThreshold: family.predicates[0].threshold,
-      upperThreshold: family.predicates[1].threshold,
+      lowerThreshold: lower.threshold,
+      upperThreshold: upper.threshold,
     });
     expect(result.answer).toContain("editable settlement range");
     expect(result.citations.some((citation) => evidence.find((item) => item.id === citation.id)?.stance === "challenges")).toBe(true);

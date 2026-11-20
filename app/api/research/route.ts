@@ -1,6 +1,6 @@
 import { discoverTopics, getTopic } from "@/lib/gemini/catalog";
 import { evidenceForFamily } from "@/lib/evidence";
-import { marketDiscovery, researchReply, type PayoffExplanation, type ResearchTurn } from "@/lib/research";
+import { asksForCounterargument, marketDiscovery, researchReply, type PayoffExplanation, type ResearchTurn } from "@/lib/research";
 import type { MarketFamily } from "@/lib/domain/types";
 import { buildComparisons } from "@/lib/payoffs/compare";
 import { compileView } from "@/lib/payoffs/compile";
@@ -113,7 +113,7 @@ export async function POST(req: Request) {
       if (explicitSlug) return fail("GEMINI_UNAVAILABLE", "Topic data could not be loaded. Retry the live Gemini request.", 503);
     }
   }
-  if (!family) {
+  if (!family && !discovery.needsSubject) {
     try {
       const found = await discoverTopics(mode, discovery);
       marketMatches = found.families;
@@ -179,8 +179,11 @@ export async function POST(req: Request) {
     contract: item.contracts[0]?.label,
     eventTicker: item.sourceEvent.ticker,
     predicates: item.predicates.length,
+    observationTime: item.observationTime,
+    fetchedAt: item.fetchedAt,
+    instrument: item.contracts[0]?.instrumentSymbol,
   }));
-  if (!family || localReply.clarificationPrompt) {
+  if (!family || localReply.clarificationPrompt || asksForCounterargument(question)) {
     return ok({ ...localReply, comparison, marketMatches: matchPayload, provider: "local" });
   }
   if (process.env.XAI_API_KEY) {

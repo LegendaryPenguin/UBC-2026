@@ -7,6 +7,7 @@ import { api, dataContextFromStorage, executionEnvironmentFromStorage } from "@/
 import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
 import { formatUsdc, formatUsdcFixed, parseUsdc } from "@/lib/format";
 import { compileView } from "@/lib/payoffs/compile";
+import { rangeScenarioGroups, thesisViewLabel } from "@/lib/payoffs/display";
 import { buildComparisons, estimateBasketCost, estimateSingleTicketCost } from "@/lib/payoffs/compare";
 import { evidenceForSlug } from "@/lib/evidence";
 import { Button, Card, Empty } from "@/components/ui";
@@ -16,6 +17,7 @@ import { VoicePanel } from "@/components/VoicePanel";
 import { useModeChange } from "@/lib/use-mode-change";
 import { useResearchNotebook } from "@/lib/use-research-notebook";
 import { ResearchRangeNotice } from "@/components/ResearchBoard";
+import { AppDrawer } from "@/components/AppDrawer";
 
 type ConstructionChoice = "gemini-basket" | "gemini-single" | "arc-custom";
 type Mode = "replay" | "paper" | "live";
@@ -212,7 +214,8 @@ export default function ReviewPage() {
     : choice === "gemini-single"
       ? calculations?.singleCost?.total ?? null
       : null;
-  const arcAvailable = (thesis.template === "range" || thesis.template === "outside") && quoteCapability && mode !== "replay";
+  const arcAvailable = (thesis.template === "range" || thesis.template === "outside") && quoteCapability &&
+    (mode === "paper" ? family.mode === "replay" : mode === "live" && family.quotesAvailable && family.freshness === "fresh");
   const selectedContracts = choice === "gemini-basket"
     ? activeLegs.map((leg) => ({ contract: family.contracts.find((item) => item.id === leg.contractId), side: leg.side, payout: leg.payoutAmount }))
     : choice === "gemini-single" && singleContract
@@ -220,14 +223,20 @@ export default function ReviewPage() {
       : [];
   const quoteAllowed = choice === "arc-custom" && arcAvailable;
   const geminiSingleAllowed = choice === "gemini-single" && mode === "live" && geminiTradeState === "available" && Boolean(singleContract);
-  const quoteAvailability = mode === "paper"
+  const quoteAvailability = mode === "paper" && arcAvailable
     ? "Paper quote path is available. Requesting it creates a quote only; accepting it is a separate explicit action."
-    : mode === "live" && quoteCapability
+    : mode === "live" && arcAvailable
       ? "A firm quote can be requested after connecting the wallet; the request does not accept or fund the offer."
       : "No qualified quote service is available in this mode. Return to Compare or switch to Paper.";
   const sourceIds = selectedContracts.flatMap(({ contract }) => contract ? [contract.id] : []);
   const quoteHref = `/theses/${id}/compare?maxPayout=${encodeURIComponent(budget)}&scenario=${encodeURIComponent(selectedScenarioId)}`;
   const evidenceItems = evidence.length ? evidence : evidenceForSlug(family.slug, family.mode);
+  const scenarioGroups = calculations?.desired ? rangeScenarioGroups(family, thesis, [
+    selectedRows.map(({ payout }) => payout), calculations.desired.rows.map(({ payout }) => payout),
+  ]) : undefined;
+  const scenarioRows = scenarioGroups?.map((group) => ({ ...group, index: group.indexes[0] }))
+    || family.scenarios.map(({ id, label }, index) => ({ id, label, index, indexes: [index] }));
+  const selectedRange = scenarioRows.find(({ indexes }) => indexes.includes(activeScenarioIndex));
 
   return (
     <div className="screen-workspace space-y-4">
@@ -236,14 +245,14 @@ export default function ReviewPage() {
       <p className="rounded-lg border border-line bg-white p-3 text-sm text-muted">Review is read-only. Opening it does not create a quote, order, or position. Cancel returns to the same comparison.</p>
       {calculations?.error ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{calculations.error}</p> : null}
       <div className="workspace-layout">
-        <div className="space-y-4">
+        <ReviewContent focused={choice === "arc-custom" && arcAvailable} onClose={() => { if (!pending) router.push(quoteHref); }}>
           <Card>
             <h2 className="font-serif text-xl">What you selected</h2>
             <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
               <div><dt className="text-xs text-muted">Construction</dt><dd>{labelFor(choice)}</dd></div>
               <div><dt className="text-xs text-muted">Venue</dt><dd>{choice === "arc-custom" ? "Arc custom position" : "Gemini contracts"}</dd></div>
-              <div><dt className="text-xs text-muted">Environment</dt><dd>{mode === "replay" ? "Illustrative replay · no execution" : mode === "paper" ? "Paper simulation" : "Live data"}</dd></div>
-              <div><dt className="text-xs text-muted">Confirmed view</dt><dd>{thesis.template} · revision {thesis.revision}</dd></div>
+              <div><dt className="text-xs text-muted">Environment</dt><dd>{mode === "replay" ? "Recorded Gemini data" : mode === "paper" ? "Paper simulation" : choice === "arc-custom" ? "Arc testnet" : "Live data"}</dd></div>
+              <div><dt className="text-xs text-muted">Confirmed view</dt><dd>{thesisViewLabel(thesis, family, { exact: true })} · revision {thesis.revision}</dd></div>
               <div><dt className="text-xs text-muted">Maximum gross payout</dt><dd>{formatUsdc(selectedMaximum)} USDC</dd></div>
               <div><dt className="text-xs text-muted">Maximum loss</dt><dd>{selectedCost == null ? "Unknown until valid quote" : `~${formatUsdc(selectedCost)} USDC before fees; reference estimate only`}</dd></div>
               <div><dt className="text-xs text-muted">Fees</dt><dd>{choice === "arc-custom" ? "Shown on exact quote before acceptance" : "Venue fees and slippage are not included in reference costs"}</dd></div>
@@ -278,20 +287,22 @@ export default function ReviewPage() {
             <h2 className="font-serif text-xl">Payout by settlement scenario</h2>
             <p className="mt-1 text-sm text-muted">Gross payout only. Compare it with the confirmed view; a reference price is not an executable cost.</p>
             <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[560px] text-left text-sm">
+              <table className="w-full text-left text-sm">
                 <thead><tr><th className="border-b border-line py-2 pr-3">Scenario</th><th className="border-b border-line py-2 pr-3">Selected payout</th><th className="border-b border-line py-2">Confirmed view</th></tr></thead>
-                <tbody>{family.scenarios.map((scenario, index) => {
+                <tbody>{scenarioRows.map((scenario) => {
+                  const { index } = scenario;
                   const payout = selectedRows[index]?.payout ?? 0n;
                   const target = calculations?.desired?.rows[index]?.payout ?? 0n;
-                  return <tr key={scenario.id} className={scenario.id === selectedScenarioId ? "bg-[#E9EEFF]" : ""}>
-                    <td className="border-b border-line py-2 pr-3"><button type="button" className="text-left underline decoration-dotted" aria-pressed={scenario.id === selectedScenarioId} onClick={() => setSelectedScenarioId(scenario.id)}>{scenario.label}</button></td>
+                  const selected = scenario.id === selectedRange?.id;
+                  return <tr key={scenario.id} className={selected ? "bg-[#E9EEFF]" : ""}>
+                    <td className="border-b border-line py-2 pr-3"><button type="button" className="text-left underline decoration-dotted" aria-pressed={selected} onClick={() => setSelectedScenarioId(scenario.id)}>{scenario.label}</button></td>
                     <td className="border-b border-line py-2 pr-3">{formatUsdcFixed(payout)} USDC</td>
                     <td className="border-b border-line py-2">{formatUsdcFixed(target)} USDC · {payout === target ? "matches" : "differs"}</td>
                   </tr>;
                 })}</tbody>
               </table>
             </div>
-            {selectedScenario ? <p className="mt-3 rounded-lg bg-[#F4F2ED] p-3 text-sm"><span className="text-xs text-muted">Selected scenario · {selectedScenario.label}</span><br />{formatUsdcFixed(selectedPayout)} USDC selected · {formatUsdcFixed(desiredPayout)} USDC confirmed view</p> : null}
+            {selectedRange ? <p className="mt-3 rounded-lg bg-[#F4F2ED] p-3 text-sm"><span className="text-xs text-muted">Selected scenario · {selectedRange.label}</span><br />{formatUsdcFixed(selectedPayout)} USDC selected · {formatUsdcFixed(desiredPayout)} USDC confirmed view</p> : null}
           </Card>
 
           {actionError ? <p role="alert" className="rounded-lg border border-bad/30 bg-white p-3 text-sm text-bad">{actionError}</p> : null}
@@ -325,13 +336,14 @@ export default function ReviewPage() {
             maxPayout={budget}
             title="Talk through this construction"
           />
-        </div>
+        </ReviewContent>
         <aside className="view-rail">
           <ThesisViewPanel
             thesis={thesis}
             family={family}
             selectedScenarioId={selectedScenario?.id}
             onScenarioChange={setSelectedScenarioId}
+            scenarioGroups={scenarioGroups}
             scenarioOutcome={`${formatUsdcFixed(selectedPayout)} USDC selected · ${payoutMatches(selectedPayout, desiredPayout) ? "matches" : "differs from"} your confirmed view`}
             scenarioOutcomeLabel="Reviewed construction · selected scenario"
           />
@@ -339,6 +351,21 @@ export default function ReviewPage() {
         </aside>
       </div>
     </div>
+  );
+}
+
+function ReviewContent({ focused, onClose, children }: { focused: boolean; onClose: () => void; children: React.ReactNode }) {
+  if (!focused) return <div className="space-y-4">{children}</div>;
+  return (
+    <AppDrawer open titleId="construction-review-title" onClose={onClose}>
+      <div className="space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div><h2 id="construction-review-title" className="font-serif text-2xl font-bold">Review custom construction</h2><p className="mt-1 text-sm text-muted">Check the settlement rules and payouts before requesting a quote.</p></div>
+          <button type="button" aria-label="Close review" className="min-h-10 px-3 text-2xl text-muted" onClick={onClose}>×</button>
+        </div>
+        {children}
+      </div>
+    </AppDrawer>
   );
 }
 

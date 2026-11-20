@@ -103,8 +103,9 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
   if (!accountId) return fail("AUTH", "Sign in required", 401);
   const position = ownedPosition(params.id, accountId);
   if (!position) return fail("NOT_FOUND", "Position not found", 404);
-  if (position.mode !== "live" || !position.chainPositionId) return ok({ position, walletAddress: null });
-  const quote = readStore().quotes.find((item) => item.id === position.quoteId && item.accountId === accountId) as StoredQuote | undefined;
+  const quote = readStore().quotes.find((item) => item.id === position.quoteId && item.accountId === accountId);
+  const sourceThesis = quote?.sourceThesis;
+  if (position.mode !== "live" || !position.chainPositionId) return ok({ position, walletAddress: null, sourceThesis });
   if (!quote) return ok({ position, walletAddress: null, syncWarning: "The signed quote record is unavailable; chain status was not changed." });
   try {
     const chain = await refreshOnchainStatus(position, quote);
@@ -128,9 +129,9 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
       }
       return record;
     });
-    return updated ? ok({ position: updated, walletAddress: quote.taker }) : fail("NOT_FOUND", "Position not found", 404);
+    return updated ? ok({ position: updated, walletAddress: quote.taker, sourceThesis }) : fail("NOT_FOUND", "Position not found", 404);
   } catch (error) {
-    return ok({ position, walletAddress: quote.taker, syncWarning: error instanceof Error ? error.message : "Arc position status could not be refreshed." });
+    return ok({ position, walletAddress: quote.taker, sourceThesis, syncWarning: error instanceof Error ? error.message : "Arc position status could not be refreshed." });
   }
 }
 

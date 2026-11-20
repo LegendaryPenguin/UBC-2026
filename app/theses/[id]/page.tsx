@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, dataContextFromStorage, OPEN_ASSISTANT_EVENT } from "@/lib/client";
+import { api, createMarketResearchDraft, dataContextFromStorage, findRecordedRangeMarket, OPEN_ASSISTANT_EVENT, startRecordedRehearsal } from "@/lib/client";
 import type { EvidenceItem, MarketFamily, ThesisRevision } from "@/lib/domain/types";
 import { WorkspaceAssistant } from "@/components/WorkspaceAssistant";
+import type { ResearchUpdate } from "@/components/VoicePanel";
 import { Icon } from "@/components/thesis";
 import { Button, Empty, Field, inputCls } from "@/components/ui";
 import { ThesisWorkspaceTabs } from "@/components/ThesisWorkspaceTabs";
@@ -22,6 +23,7 @@ import { AppDrawer } from "@/components/AppDrawer";
 import { AppDialog } from "@/components/AppDialog";
 import { useResearchNotebook } from "@/lib/use-research-notebook";
 import { marketThesisTitle, researchRangeLabel } from "@/lib/research-range";
+import { asksForCounterargument, marketObservation } from "@/lib/research";
 
 type ResearchMarket = { family: MarketFamily; evidence: EvidenceItem[]; relatedContracts?: RelatedContract[] };
 
@@ -47,6 +49,9 @@ export default function ThesisEditor() {
   const evidencePending = useRef(false);
   const notebook = useResearchNotebook(`thesis:${id}`);
   const [assistantPrompt, setAssistantPrompt] = useState("");
+  const [assistantRequest, setAssistantRequest] = useState(0);
+  const [researchUpdate, setResearchUpdate] = useState<ResearchUpdate | null>(null);
+  const [counterargument, setCounterargument] = useState<ResearchUpdate | null>(null);
   const [matchingMarkets, setMatchingMarkets] = useState<MarketFamily[]>([]);
   const [marketQuery, setMarketQuery] = useState("");
   const [marketSearching, setMarketSearching] = useState(false);
@@ -56,6 +61,7 @@ export default function ThesisEditor() {
   const [updatesOpen, setUpdatesOpen] = useState(false);
   const [marketFeedOpen, setMarketFeedOpen] = useState(false);
   const [refreshingMarket, setRefreshingMarket] = useState(false);
+  const [openingRehearsal, setOpeningRehearsal] = useState(false);
 
   const searchMarkets = useCallback(async (question: string, signal?: AbortSignal) => {
     setMarketSearching(true);
@@ -84,6 +90,8 @@ export default function ThesisEditor() {
     setFamily(null);
     setRelatedContracts([]);
     setSavedEvidence([]);
+    setResearchUpdate(null);
+    setCounterargument(null);
     setLoading(true);
     api<{ thesis: ThesisRevision }>(`/api/theses/${id}`)
       .then(async ({ thesis: current }) => {
@@ -218,6 +226,22 @@ export default function ThesisEditor() {
     }
   }
 
+  async function openRecordedRange(observation: string) {
+    setOpeningRehearsal(true);
+    setError("");
+    try {
+      const example = await findRecordedRangeMarket(observation);
+      if (!example) throw new Error("A recorded range for this observation is unavailable.");
+      const draft = await createMarketResearchDraft(example, observation, "replay");
+      startRecordedRehearsal();
+      router.push(`/theses/${draft.id}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The paper rehearsal could not be opened.");
+    } finally {
+      setOpeningRehearsal(false);
+    }
+  }
+
   async function save(action: "save" | "confirm" | "duplicate" = "save"): Promise<boolean> {
     if (!thesis || (action === "confirm" && notebook.targetRange)) return false;
     setSaving(action);
@@ -307,6 +331,9 @@ export default function ThesisEditor() {
   const shownEvidence = evidenceFilter === "all" ? evidence : evidence.filter((item) => item.stance === evidenceFilter);
   const chartContracts = selectedRuleContracts.length ? selectedRuleContracts : family?.contracts.slice(0, 2) || [];
   const observation = family?.observationTime ? new Date(family.observationTime) : null;
+  const naturalView = marketObservation(thesis.rationale);
+  const offerRehearsal = family?.mode === "live" && family.predicates.length === 1 && naturalView.asset && naturalView.view;
+  const counterargumentSources = evidence.filter((item) => counterargument?.sourceIds.includes(item.id));
   const chartSeries = chartContracts.map((contract, index) => ({
     label: contract!.label,
     color: index === 0 ? "#3559E0" : "#8D6CEB",
@@ -329,9 +356,12 @@ export default function ThesisEditor() {
         </>}
       </div>}
     >
-      <p className="research-view__question">{customRange ? `YES · ${researchRangeLabel(customRange)}` : thesisViewLabel(thesis, family)}</p>
+      <p className="research-view__question">{customRange ? `YES · ${researchRangeLabel(customRange)}` : thesisViewLabel(thesis, family, { exact: viewValid })}</p>
+      {viewValid && !customRange && family?.observationTime ? <p className="mt-2 text-xs th-muted">At Gemini settlement · {researchTime(family.observationTime)}</p> : null}
+      {viewValid && !customRange && thesis.template === "range" ? <p className="mt-2 text-xs th-muted">Below the lower bound or at or above the upper bound falls outside your view.</p> : null}
       {customRange ? <p className="research-tile__muted mt-3">An Arc quote needs a verified settlement source for both boundaries. You can inspect what matches this view in Settlement outcomes.</p> : null}
       {thesis.rationale ? <div className="research-view__rationale"><h3>Rationale</h3><p className="whitespace-pre-wrap text-sm th-muted">{thesis.rationale}</p></div> : null}
+      {thesis.invalidation ? <div className="research-view__rationale"><h3>What would change my mind</h3><p className="whitespace-pre-wrap text-sm th-muted">{thesis.invalidation}</p></div> : null}
       {!viewValid && thesis.status === "draft" ? <p className="research-tile__muted mt-3">Edit your view to select supported Gemini conditions.</p> : null}
     </ResearchTile>
   );
@@ -343,7 +373,7 @@ export default function ThesisEditor() {
             <h1 className="workspace-title screen-heading">{workspaceTitle}</h1>
             <p className="research-workspace__meta text-sm th-muted">
               {family ? <>
-                <span>{family.mode === "live" ? "Gemini market" : "Illustrative replay"}</span>
+                <span>{family.mode === "live" ? "Gemini market" : "Recorded Gemini · Paper rehearsal"}</span>
                 {observation && Number.isFinite(observation.getTime()) ? <span>Settlement <time dateTime={observation.toISOString()} title={observation.toISOString()}>{observation.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}</time></span> : null}
               </> : <span>{thesis.topicSlug ? "Market data unavailable" : "Question-first draft · No market linked"}</span>}
             </p>
@@ -363,6 +393,19 @@ export default function ThesisEditor() {
               <ResearchPrices family={family} hasHistory={hasHistory} footer={liveContract ? <Button kind="secondary" icon="bars" onClick={() => setMarketFeedOpen(true)}>View live market feed</Button> : null} />
               <ResearchRules family={family} contracts={selectedRuleContracts.length ? selectedRuleContracts : family.contracts} />
               {!hasHistory ? viewTile : null}
+              <ResearchTile title="Research focus" icon="research" detail={researchUpdate ? <span className="status-pill">{researchUpdate.clarification ? "Clarify" : researchUpdate.hasProposal ? "View ready" : "Latest question"}</span> : null}
+                footer={<div className="flex flex-wrap gap-2"><Button kind="secondary" icon="assistant" onClick={() => setAssistantRequest((value) => value + 1)}>{researchUpdate?.hasProposal && thesis.status === "draft" ? "Review suggested view" : "Open research assistant"}</Button>{offerRehearsal ? <Button kind="ghost" onClick={() => void openRecordedRange(thesis.rationale)} disabled={openingRehearsal || dirty}>{openingRehearsal ? "Opening rehearsal…" : "Rehearse a range in Paper"}</Button> : null}</div>}>
+                {researchUpdate ? <div className="space-y-3" aria-live="polite">
+                  <p className="research-rules__question">{researchUpdate.question}</p>
+                  <p className="whitespace-pre-wrap text-sm">{researchUpdate.answer}</p>
+                  {researchUpdate.clarification ? <p className="research-view__question">{researchUpdate.clarification}</p> : null}
+                  {[...new Set(researchUpdate.sourceIds)].map((sourceId) => evidence.find((item) => item.id === sourceId)).filter((item): item is EvidenceItem => Boolean(item)).map((item) => (
+                    <Button key={item.id} kind="ghost" icon="news" onClick={() => openSource(item)}>{item.title}</Button>
+                  ))}
+                  {counterargument && counterargument !== researchUpdate ? <details className="research-drawer__block"><summary className="cursor-pointer text-sm font-semibold">What challenges the view</summary><p className="mt-2 text-sm">{counterargument.answer}</p>{counterargumentSources.map((item) => <Button key={item.id} kind="ghost" icon="news" onClick={() => openSource(item)}>{item.title}</Button>)}</details> : null}
+                </div> : <><p className="research-rules__question">{family.question}</p><p className="mt-3 text-sm th-muted">Ask what would challenge your view, or clarify the exact outcome you expect at settlement.</p></>}
+                {offerRehearsal ? <p className="mt-3 text-xs th-muted">This listing is a single YES/NO outcome. A separate Paper draft can explore a bounded range using recorded Gemini thresholds.</p> : null}
+              </ResearchTile>
               <ResearchTile title="Evidence board" icon="news" detail={<span className="status-pill">{evidence.length} sources</span>} footer={
                 <div className="research-filters" role="group" aria-label="Filter evidence">
                   {([["all", "All"], ["supports", "Supports"], ["challenges", "Challenges"]] as const).map(([value, label]) => (
@@ -373,12 +416,13 @@ export default function ThesisEditor() {
                 {shownEvidence.length ? <ResearchEvidenceList items={shownEvidence} onSelect={openSource} /> : <p className="research-tile__muted">{evidence.length ? "No evidence matches this filter." : "No evidence has been returned for this market."}</p>}
               </ResearchTile>
               {relatedContracts.length ? <ResearchRelatedContracts ticker={family.sourceEvent.ticker} contracts={relatedContracts} /> : null}
-              <ResearchOutcomes family={family} range={customRange} />
-              <ResearchSavedTile usedColumns={5 + (hasHistory ? 2 : 0) + (relatedContracts.length ? 1 : 0)} sources={savedEvidence} replies={notebook.replies} onSelectSource={openSource} onRemoveReply={notebook.removeReply} />
+              <ResearchOutcomes family={family} range={customRange} listedRange={thesis.template === "range" && viewValid && thesis.lowerThreshold != null && thesis.upperThreshold != null ? [thesis.lowerThreshold, thesis.upperThreshold] : undefined} />
+              <ResearchSavedTile usedColumns={6 + (hasHistory ? 2 : 0) + (relatedContracts.length ? 1 : 0)} sources={savedEvidence} replies={notebook.replies} onSelectSource={openSource} onRemoveReply={notebook.removeReply} />
             </div>
           </div>
           <WorkspaceAssistant slug={family.slug} family={family} evidence={evidence} thesis={thesis} context="view" title="Talk through your view"
             onThesisChange={(updated) => { setThesis(updated); setDirty(false); setEditingView(false); setNotice(`Voice-assisted edit saved as draft revision ${updated.revision}.`); }}
+            openRequest={assistantRequest} onResearchUpdate={(update) => { setResearchUpdate(update); if (asksForCounterargument(update.question)) setCounterargument(update); }}
             prefillQuestion={assistantPrompt} onPrefillConsumed={() => setAssistantPrompt("")} onSaveReply={notebook.saveReply} targetRange={customRange} onSaveRange={notebook.setTargetRange} />
           <AppDrawer open={marketFeedOpen && Boolean(liveContract)} titleId="research-market-feed-title" onClose={() => setMarketFeedOpen(false)}>
             <header className="research-drawer__header"><h2 id="research-market-feed-title">Gemini live market</h2><button type="button" className="th-button th-button--ghost th-button--icon" aria-label="Close live market feed" onClick={() => setMarketFeedOpen(false)}><Icon name="close" /></button></header>
@@ -454,9 +498,11 @@ export default function ThesisEditor() {
       <AppDialog open={reviewingConfirmation} titleId="confirm-view-title" onClose={() => { if (!saving) setReviewingConfirmation(false); }} closeOnBackdrop={!saving}>
         <div className="space-y-4">
           <div className="flex items-start justify-between gap-3"><div><p className="source-pill">Review your view</p><h2 id="confirm-view-title" className="mt-3 font-serif text-2xl font-bold">Confirm this thesis view?</h2></div><button type="button" aria-label="Back to editing" className="min-h-10 px-3 text-2xl text-muted" onClick={() => setReviewingConfirmation(false)} disabled={saving !== null}>×</button></div>
-          <div className="rounded-xl border border-[#CCD6F5] bg-[#F7F8FF] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">{family?.question}</p><p className="mt-2 text-lg font-semibold">{thesisViewLabel(thesis, family)}</p><p className="mt-1 text-xs text-muted">Settlement {researchTime(family?.observationTime, "deadline not supplied")} · {family?.mode === "live" ? "Gemini live data" : "Illustrative replay"}</p></div>
+          <div className="rounded-xl border border-[#CCD6F5] bg-[#F7F8FF] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">{family?.question}</p><p className="mt-2 text-lg font-semibold">{thesisViewLabel(thesis, family, { exact: true })}</p><p className="mt-1 text-xs text-muted">Settlement {researchTime(family?.observationTime, "deadline not supplied")} · {family?.mode === "live" ? "Gemini live data" : "Recorded Gemini"}</p></div>
           {selectedRuleContracts.length ? <div className="research-drawer__block"><h3>Selected Gemini contracts</h3><ul className="mt-2 space-y-1 text-sm">{selectedRuleContracts.map((contract) => <li key={contract!.id}>{contract!.label}</li>)}</ul></div> : null}
           {thesis?.rationale ? <div><p className="text-sm font-semibold">Your rationale</p><p className="mt-1 whitespace-pre-wrap text-sm text-muted">{thesis.rationale}</p></div> : null}
+          {counterargument ? <details className="research-drawer__block"><summary className="cursor-pointer text-sm font-semibold">Counterargument and sources</summary><p className="mt-2 text-sm">{counterargument.answer}</p>{counterargumentSources.length ? <ul className="mt-2 list-inside list-disc text-xs text-muted">{counterargumentSources.map((item) => <li key={item.id}>{item.title}</li>)}</ul> : null}</details> : null}
+          {thesis.invalidation ? <div><p className="text-sm font-semibold">What would change your mind</p><p className="mt-1 whitespace-pre-wrap text-sm text-muted">{thesis.invalidation}</p></div> : null}
           {error ? <p role="alert" className="th-alert th-alert--warning text-sm">{error}</p> : null}
           {!viewValid ? <p role="alert" className="rounded-lg border border-bad/30 bg-[#FFF5F4] p-3 text-sm text-bad">Choose valid boundaries from the listed contracts before confirming.</p> : <p className="text-sm text-muted">Confirming saves this version and opens Build. It does not request a quote, connect a wallet, or submit a trade.</p>}
           <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-3"><Button onClick={() => setReviewingConfirmation(false)} kind="ghost" disabled={saving !== null}>Back to editing</Button><Button onClick={() => void save("confirm")} disabled={saving !== null || !viewValid}>{saving === "confirm" ? "Saving confirmed view…" : "Confirm view & build"}</Button></div>

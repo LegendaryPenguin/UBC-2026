@@ -25,6 +25,7 @@ type ViewProposal = {
   invalidation: string;
 };
 type ResearchTurn = { role: "user" | "assistant"; content: string };
+export type ResearchUpdate = { question: string; answer: string; sourceIds: string[]; clarification?: string; hasProposal: boolean };
 
 const STATUS_LABEL: Record<VoiceStatus, string> = {
   ready: "Ready",
@@ -68,6 +69,7 @@ export function VoicePanel({
   preparedEvidenceIds = [],
   targetRange,
   onSaveRange,
+  onResearchUpdate,
   visible = true,
 }: {
   slug: string;
@@ -85,6 +87,7 @@ export function VoicePanel({
   preparedEvidenceIds?: string[];
   targetRange?: ResearchRange | null;
   onSaveRange?: (range: ResearchRange | null) => void;
+  onResearchUpdate?: (update: ResearchUpdate) => void;
   visible?: boolean;
 }) {
   const router = useRouter();
@@ -459,6 +462,7 @@ export function VoicePanel({
       setClarificationPrompt(result.clarificationPrompt || "");
       if (result.clarificationPrompt || (compact && !spoken)) setTranscript("");
       setLatestReply(assistantReply ? { question: askedText, answer: assistantReply } : null);
+      onResearchUpdate?.({ question: askedText, answer: result.answer.replace(/\[ev-[a-z0-9-]+\]/gi, "").trim(), sourceIds: (result.citations || []).map(({ id }) => id), clarification: result.clarificationPrompt, hasProposal: Boolean(result.proposed || refinement) });
       setReplySaved(false);
       setProposal(result.proposed ? {
         template: result.proposed.template || thesis?.template || (family.predicates.length === 1 && family.contracts.length === 1 ? "binary" : family.predicates.length >= 2 ? "range" : "directional"),
@@ -798,7 +802,7 @@ export function VoicePanel({
         </div>
       ) : null}
       {proposal ? (
-        <details className="workspace-assistant__detail" open={compact ? undefined : true}>
+        <details className="workspace-assistant__detail" open>
           <summary>Suggested view preview</summary>
           <div className="mt-2 space-y-3">
           {thesis ? (

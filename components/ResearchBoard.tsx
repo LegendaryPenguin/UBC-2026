@@ -8,6 +8,7 @@ import { Icon, type IconName } from "@/components/thesis";
 import { Button, Card } from "@/components/ui";
 import type { EvidenceItem, MarketFamily, SourceContract } from "@/lib/domain/types";
 import { formatTime } from "@/lib/format";
+import { formatThreshold } from "@/lib/payoffs/compile";
 import type { ResearchReply } from "@/lib/use-research-notebook";
 import { researchRangeLabel, type ResearchRange } from "@/lib/research-range";
 
@@ -158,10 +159,16 @@ export function ResearchRelatedContracts({ ticker, contracts }: { ticker: string
   </ResearchTile>;
 }
 
-export function ResearchOutcomes({ family, range }: { family: MarketFamily; range?: ResearchRange | null }) {
+export function ResearchOutcomes({ family, range, listedRange }: { family: MarketFamily; range?: ResearchRange | null; listedRange?: [number, number] }) {
   const integerScore = range?.unit === "points" && /^(NFL|NCAAF|NBA|WNBA|NCAAB)-/i.test(family.sourceEvent.ticker);
   const minPoints = range && integerScore ? (range.lowerInclusive ? Math.ceil(range.lower) : Math.floor(range.lower) + 1) : null;
   const maxPoints = range && integerScore ? (range.upperInclusive ? Math.floor(range.upper) : Math.ceil(range.upper) - 1) : null;
+  const outcomes = <dl className="research-facts">
+    {family.scenarios.map((scenario) => <div key={scenario.id}><dt>{scenario.label}</dt><dd>{scenario.detail}</dd></div>)}
+  </dl>;
+  const unit = family.predicates[0]?.unit || "USD";
+  const lower = listedRange ? formatThreshold(listedRange[0], unit) : "";
+  const upper = listedRange ? formatThreshold(listedRange[1], unit) : "";
   return <ResearchTile title="Settlement outcomes" icon="compare">
     {range ? <>
       <p className="research-rules__question">{minPoints !== null && maxPoints !== null && minPoints <= maxPoints ? `${minPoints}–${maxPoints} total points matches your view.` : researchRangeLabel(range)}</p>
@@ -171,9 +178,15 @@ export function ResearchOutcomes({ family, range }: { family: MarketFamily; rang
         <div><dt>{maxPoints + 1} or more</dt><dd>Outside the view</dd></div>
       </dl> : null}
       <p className="research-tile__muted mt-3">Research scenarios for your exact range.</p>
-    </> : <dl className="research-facts">
-      {family.scenarios.map((scenario) => <div key={scenario.id}><dt>{scenario.label}</dt><dd>{scenario.detail}</dd></div>)}
-    </dl>}
+    </> : listedRange ? <>
+      <p className="research-tile__muted">How each settlement would line up with your view.</p>
+      <dl className="research-facts mt-3">
+        <div><dt>Below {lower}</dt><dd>Outside your view</dd></div>
+        <div className="rounded-md bg-[#EDF1FF] px-2"><dt>{lower} to below {upper}</dt><dd>Matches your view</dd></div>
+        <div><dt>At least {upper}</dt><dd>Outside your view</dd></div>
+      </dl>
+      <details className="mt-3"><summary className="cursor-pointer text-sm text-action">All listed settlement scenarios</summary>{outcomes}</details>
+    </> : outcomes}
   </ResearchTile>;
 }
 

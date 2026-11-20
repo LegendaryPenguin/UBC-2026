@@ -437,7 +437,7 @@ export default function QuotePage() {
           {quote.signature !== "0x" ? <li>A proposed result has a {Math.ceil(quote.finalizationDelay / 3600)} hour correction window. After the delay, anyone may finalize before the longstop; any still-open position is refundable at the longstop.</li> : null}
           {!paper ? <li className="break-all">Escrow {quote.escrow}</li> : null}
         </ul>
-        <div className="table-scroll mt-4">
+        <div className="table-scroll mt-4 max-h-60 overflow-y-auto overscroll-contain" tabIndex={0} aria-label="Full quoted payout schedule">
           <table className="quote-scenarios text-sm">
             <thead><tr><th>Settlement scenario</th><th>Gross payout</th><th>Net result</th></tr></thead>
             <tbody>{scenarioAmounts.map(({ label, payout }, index) => (

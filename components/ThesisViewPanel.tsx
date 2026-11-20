@@ -1,25 +1,11 @@
 "use client";
 
 import type { MarketFamily, ThesisRevision } from "@/lib/domain/types";
-import { formatThreshold } from "@/lib/payoffs/compile";
+import { thesisViewLabel } from "@/lib/payoffs/display";
 import { Button, Card } from "@/components/ui";
+import type { ScenarioGroup } from "@/lib/payoffs/display";
 
-export function thesisViewLabel(thesis: ThesisRevision, family?: MarketFamily | null) {
-  const unit = family?.predicates[0]?.unit || "USD";
-  if (thesis.template === "binary") {
-    const proposition = family?.contracts[0]?.label || "selected contract";
-    return thesis.direction ? `${thesis.direction.toUpperCase()} · ${proposition}` : `Choose YES or NO · ${proposition}`;
-  }
-  if (thesis.template === "directional") {
-    if (!thesis.direction) return "Choose a direction and threshold";
-    const threshold = thesis.lowerThreshold == null ? "a threshold" : formatThreshold(thesis.lowerThreshold, unit);
-    return thesis.direction === "no" ? `Below ${threshold}` : `At or above ${threshold}`;
-  }
-  const lower = thesis.lowerThreshold == null ? "a lower bound" : formatThreshold(thesis.lowerThreshold, unit);
-  const upper = thesis.upperThreshold == null ? "an upper bound" : formatThreshold(thesis.upperThreshold, unit);
-  if (thesis.template === "outside") return `Outside ${lower} to ${upper}`;
-  return `Between ${lower} and ${upper}`;
-}
+export { thesisViewLabel };
 
 export function ThesisViewPanel({
   thesis,
@@ -28,6 +14,7 @@ export function ThesisViewPanel({
   scenarioOutcome,
   scenarioOutcomeLabel = "Gross payout in this scenario",
   onScenarioChange,
+  scenarioGroups,
   action,
   editAction,
 }: {
@@ -37,10 +24,13 @@ export function ThesisViewPanel({
   scenarioOutcome?: string;
   scenarioOutcomeLabel?: string;
   onScenarioChange?: (scenarioId: string) => void;
+  scenarioGroups?: ScenarioGroup[];
   action?: { label: string; href?: string; onClick?: () => void; disabled?: boolean };
   editAction?: { label: string; href?: string; onClick?: () => void; disabled?: boolean };
 }) {
   const selectedScenario = family?.scenarios.find((scenario) => scenario.id === selectedScenarioId);
+  const selectedGroup = scenarioGroups?.find(({ indexes }) => indexes.some((index) => family?.scenarios[index]?.id === selectedScenarioId));
+  const selectedControlId = selectedGroup?.id || selectedScenarioId;
   const confirmed = thesis.status === "confirmed" || thesis.status === "quoted";
   return (
     <Card className="view-summary">
@@ -56,13 +46,13 @@ export function ThesisViewPanel({
           <h3 className="text-sm font-medium">What if I’m wrong?</h3>
           <p className="mt-1 text-xs text-muted">Choose a settlement scenario to inspect this construction.</p>
           <div className="mt-2 grid gap-2">
-            {family.scenarios.map((scenario) => (
+            {(scenarioGroups || family.scenarios).map((scenario) => (
               <button
                 key={scenario.id}
                 type="button"
-                aria-pressed={scenario.id === selectedScenarioId}
+                aria-pressed={scenario.id === selectedControlId}
                 onClick={() => onScenarioChange(scenario.id)}
-                className={`scenario-button text-xs ${scenario.id === selectedScenarioId ? "font-semibold text-action" : "text-muted hover:text-ink"}`}
+                className={`scenario-button text-xs ${scenario.id === selectedControlId ? "font-semibold text-action" : "text-muted hover:text-ink"}`}
               >
                 {scenario.label}
               </button>
